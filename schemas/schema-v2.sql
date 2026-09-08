@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_mission_costs_cost ON mission_costs (total_cost_u
 -- ============================================================
 CREATE TABLE IF NOT EXISTS cost_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  mission_id TEXT NOT NULL,
+  mission_id TEXT,
   user_id TEXT NOT NULL,
   agent TEXT NOT NULL,
   provider TEXT NOT NULL,
@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS memory_snapshots (
 CREATE TRIGGER IF NOT EXISTS trg_cost_events_rollup
 AFTER INSERT ON cost_events
 FOR EACH ROW
+WHEN NEW.mission_id IS NOT NULL
 BEGIN
   INSERT INTO mission_costs (mission_id, user_id, total_cost_usd, total_tokens_in, total_tokens_out, ai_calls, tts_calls, stt_calls, tool_calls, updated_at)
   VALUES (NEW.mission_id, NEW.user_id, NEW.cost_usd, NEW.tokens_in, NEW.tokens_out,

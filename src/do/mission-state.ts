@@ -4,7 +4,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env, MissionStatus } from "../types";
-import { recordCop } from "../cop/cop";
+import { recordCop, recordCostEvent } from "../cop/cop";
 
 export class MissionStateDO extends DurableObject<Env> {
   private currentMissionId = "unknown";
@@ -101,7 +101,9 @@ export class MissionStateDO extends DurableObject<Env> {
       await this.logEvent("voice_session_ended", "system", { report: true });
     } catch {}
     this.ctx.storage.deleteAlarm();
-    recordCop(this.env, { userId: await this.getUserId(), missionId: this.missionId, agent: "mission-state", provider: "workers-ai", model: "mission-lifecycle", eventType: "tool", tokensIn: 0, tokensOut: 0 });
+    const userId = await this.getUserId();
+    recordCop(this.env, { userId, missionId: this.missionId, agent: "mission-state", provider: "workers-ai", model: "mission-lifecycle", eventType: "tool", tokensIn: 0, tokensOut: 0 });
+    await recordCostEvent(this.env, { userId, missionId: this.missionId, agent: "mission-state", provider: "workers-ai", model: "mission-lifecycle", eventType: "tool" });
     return Response.json({ status: "completed", gate: gateResult, voiceReport: !!voiceReport });
   }
 

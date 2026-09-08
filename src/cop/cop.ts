@@ -50,7 +50,7 @@ export function recordCop(
 export async function recordCostEvent(
   env: Env,
   data: {
-    missionId: string;
+    missionId?: string | null;
     userId: string;
     agent: string;
     provider: string;
@@ -66,7 +66,7 @@ export async function recordCostEvent(
     `INSERT INTO cost_events (mission_id, user_id, agent, provider, model, event_type, tokens_in, tokens_out, cost_usd, duration_ms)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
-    data.missionId, data.userId, data.agent, data.provider, data.model, data.eventType,
+    data.missionId ?? null, data.userId, data.agent, data.provider, data.model, data.eventType,
     data.tokensIn ?? 0, data.tokensOut ?? 0, cost, data.durationMs ?? 0
   ).run();
 }

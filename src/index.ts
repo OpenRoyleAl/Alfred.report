@@ -12,8 +12,7 @@ import { createMission, getMission, listMissions, getUserPreferences } from "./d
 import { handleAgentCard } from "./a2a/agent-card";
 import { handleTaskSend, handleTaskGet, handleTaskCancel } from "./a2a/tasks";
 import { handleMcp } from "./mcp/server";
-import copApp from "./cop/cop";
-import { recordCop } from "./cop/cop";
+import copApp, { recordCop, recordCostEvent } from "./cop/cop";
 
 export { MissionStateDO } from "./do/mission-state";
 export { VoiceSessionDO } from "./do/voice-session";
@@ -44,12 +43,13 @@ app.all("/ws/:sessionId", async (c) => {
   if (c.req.header("Upgrade") !== "websocket") return c.text("Expected WebSocket", 426);
   const sessionId = c.req.param("sessionId");
   const userId = c.req.query("user_id") || "anonymous";
+  const missionId = c.req.query("mission_id") || null;
   const doId = c.env.VOICE_SESSION.idFromName(sessionId);
   const doStub = c.env.VOICE_SESSION.get(doId);
   await c.env.DB.prepare(
-    `INSERT INTO voice_sessions (id, user_id, do_id, status, tts_provider, stt_provider, voice_model, language)
-     VALUES (?, ?, ?, 'active', ?, ?, ?, 'en')`
-  ).bind(sessionId, userId, doId.toString(), c.env.TTS_PROVIDER, c.env.STT_PROVIDER, c.env.VOICE_MODEL).run();
+    `INSERT INTO voice_sessions (id, user_id, mission_id, do_id, status, tts_provider, stt_provider, voice_model, language)
+     VALUES (?, ?, ?, ?, 'active', ?, ?, ?, 'en')`
+  ).bind(sessionId, userId, missionId, doId.toString(), c.env.TTS_PROVIDER, c.env.STT_PROVIDER, c.env.VOICE_MODEL).run();
   return doStub.fetch(c.req.raw);
 });
 
@@ -58,7 +58,7 @@ app.all("/ws/:sessionId", async (c) => {
 // ============================================================
 app.post("/api/tts", async (c) => {
   const start = Date.now();
-  const body = await c.req.json<{ text: string; voice?: string; provider?: string; user_id?: string }>();
+  const body = await c.req.json<{ text: string; voice?: string; provider?: string; user_id?: string; mission_id?: string }>();
   if (!body.text) return c.json({ error: "text is required" }, 400);
   let provider = body.provider || c.env.TTS_PROVIDER;
   if (!body.provider && body.user_id) {
@@ -67,12 +67,25 @@ app.post("/api/tts", async (c) => {
   }
   const tts = createTTSProvider(c.env, provider);
   const audio = await tts.synthesize(body.text, { voice: body.voice || c.env.VOICE_MODEL });
+  const model = provider === "workers-ai"
+    ? ((body.voice || c.env.VOICE_MODEL).startsWith("aura-2") ? "@cf/deepgram/aura-2-en" : "@cf/deepgram/aura-1")
+    : provider === "mimo" ? "mimo-v2.5-tts" : body.voice || "tts-1";
   recordCop(c.env, {
     userId: body.user_id || "anonymous",
     missionId: "voice",
     agent: "voice",
     provider,
-    model: body.voice || c.env.VOICE_MODEL,
+    model,
+    eventType: "tts",
+    tokensOut: Math.ceil(body.text.length / 4),
+    durationMs: Date.now() - start,
+  });
+  await recordCostEvent(c.env, {
+    missionId: body.mission_id || null,
+    userId: body.user_id || "anonymous",
+    agent: "voice",
+    provider,
+    model,
     eventType: "tts",
     tokensOut: Math.ceil(body.text.length / 4),
     durationMs: Date.now() - start,
@@ -89,12 +102,23 @@ app.post("/api/stt", async (c) => {
   const audioFile = formData.get("audio") as File;
   const provider = (formData.get("provider") as string) || c.env.STT_PROVIDER;
   const userId = (formData.get("user_id") as string) || "anonymous";
+  const missionId = (formData.get("mission_id") as string) || null;
   if (!audioFile) return c.json({ error: "audio file is required" }, 400);
   const stt = createSTTProvider(c.env, provider);
   const transcript = await stt.transcribe(await audioFile.arrayBuffer());
   recordCop(c.env, {
     userId,
     missionId: "voice",
+    agent: "voice",
+    provider,
+    model: provider === "deepgram" ? "@cf/deepgram/nova-3" : "@cf/openai/whisper-large-v3-turbo",
+    eventType: "stt",
+    tokensOut: Math.ceil(transcript.length / 4),
+    durationMs: Date.now() - start,
+  });
+  await recordCostEvent(c.env, {
+    missionId,
+    userId,
     agent: "voice",
     provider,
     model: provider === "deepgram" ? "@cf/deepgram/nova-3" : "@cf/openai/whisper-large-v3-turbo",

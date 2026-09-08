@@ -1,5 +1,6 @@
 // src/mcp/server.ts — MCP 2026-07-28 stateless endpoint (WebMCP-style)
 import type { Env } from "../types";
+import { recordCop, recordCostEvent } from "../cop/cop";
 
 export async function handleMcp(request: Request, env: Env): Promise<Response> {
   const body = await request.json<{ jsonrpc: string; method: string; params?: any; id?: string | number }>();
@@ -41,7 +42,30 @@ async function handleToolCall(body: any, env: Env): Promise<Response> {
       return Response.json({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
     }
     case "speak": {
+      const start = Date.now();
       await env.AI.run("@cf/deepgram/aura-2-en", { text: args.text });
+      const durationMs = Date.now() - start;
+      const tokensOut = Math.ceil(args.text.length / 4);
+      recordCop(env, {
+        userId: "mcp",
+        missionId: "mcp",
+        agent: "mcp",
+        provider: "workers-ai",
+        model: "@cf/deepgram/aura-2-en",
+        eventType: "tts",
+        tokensOut,
+        durationMs,
+      });
+      await recordCostEvent(env, {
+        missionId: null,
+        userId: "mcp",
+        agent: "mcp",
+        provider: "workers-ai",
+        model: "@cf/deepgram/aura-2-en",
+        eventType: "tts",
+        tokensOut,
+        durationMs,
+      });
       return Response.json({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: "Speech synthesized" }] } });
     }
     default:

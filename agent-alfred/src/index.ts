@@ -5,7 +5,7 @@
 
 import { Hono } from "hono";
 import { DurableObject } from "cloudflare:workers";
-import { recordCop, estimateCost } from "../../src/cop/cop";
+import { recordCop, recordCostEvent } from "../../src/cop/cop";
 import { ingestMemories, recall, getMemorySummary, buildMemoryContext } from "../../src/memory/agent-memory";
 import type { SecretStoreSecret } from "../../src/types";
 
@@ -77,12 +77,17 @@ app.post("/internal/process", async (c) => {
     tokensOut,
     durationMs: Date.now() - start,
   });
-  if (missionId) {
-    await c.env.DB.prepare(
-      `INSERT INTO cost_events (mission_id, user_id, agent, provider, model, event_type, tokens_in, tokens_out, cost_usd, duration_ms)
-       VALUES (?, ?, 'oral', ?, ?, 'llm', ?, ?, ?, ?)`
-    ).bind(missionId, uid, provider, model, tokensIn, tokensOut, estimateCost(model, tokensIn, tokensOut), Date.now() - start).run();
-  }
+  await recordCostEvent(c.env as any, {
+    missionId: missionId || null,
+    userId: uid,
+    agent: "oral",
+    provider,
+    model,
+    eventType: "llm",
+    tokensIn,
+    tokensOut,
+    durationMs: Date.now() - start,
+  });
 
   // 5. Store conversation in Agent Memory (ingest — batched, non-blocking)
   await ingestMemories(c.env, [

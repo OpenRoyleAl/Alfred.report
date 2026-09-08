@@ -43,6 +43,9 @@ export interface Env {
   XAI_API_KEY: SecretStoreSecret;
   CF_API_TOKEN: SecretStoreSecret;
   SIRI_BRIEFING_TOKEN: SecretStoreSecret;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  SESSION_SECRET?: string;
 
   EMAIL?: {
     send(message: {

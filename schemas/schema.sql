@@ -87,6 +87,19 @@ CREATE INDEX IF NOT EXISTS idx_mission_events_type ON mission_events (event_type
 CREATE INDEX IF NOT EXISTS idx_mission_events_created_at ON mission_events (created_at DESC);
 
 -- ============================================================
+-- Siri tokens: per-user briefing tokens for Hey Siri, Alfred report
+-- ============================================================
+CREATE TABLE IF NOT EXISTS siri_tokens (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_used_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_siri_tokens_user_id ON siri_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_siri_tokens_email ON siri_tokens (email);
+
+-- ============================================================
 -- User Preferences: per-user TTS/STT provider selection
 -- ============================================================
 CREATE TABLE IF NOT EXISTS user_preferences (

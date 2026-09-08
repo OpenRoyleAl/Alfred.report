@@ -9,7 +9,35 @@ let audioContext = null;
 let currentUserId = "user-" + (localStorage.getItem("alfred-user-id") || crypto.randomUUID());
 localStorage.setItem("alfred-user-id", currentUserId);
 
-// --- Navigation ---
+async function ensureAccess() {
+  const gate = document.getElementById("access-gate");
+  const app = document.getElementById("app");
+  const banner = document.getElementById("siri-banner");
+  const siriBtn = document.getElementById("btn-siri");
+  try {
+    const res = await fetch(`${API}/me`, { credentials: "include", headers: { Accept: "application/json" } });
+    if (res.ok) {
+      const me = await res.json();
+      currentUserId = me.user_id || me.email || currentUserId;
+      localStorage.setItem("alfred-user-id", currentUserId);
+      if (siriBtn && me.shortcuts_url) siriBtn.href = me.shortcuts_url;
+      if (banner) banner.hidden = false;
+      gate.hidden = true;
+      app.hidden = false;
+      return true;
+    }
+  } catch {}
+  const hosted = location.hostname.endsWith("alfred.report") || location.hostname.includes("command-os-review");
+  if (!hosted) {
+    gate.hidden = true;
+    app.hidden = false;
+    return true;
+  }
+  gate.hidden = false;
+  app.hidden = true;
+  return false;
+}
+
 document.querySelectorAll(".nav-item").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
@@ -25,45 +53,65 @@ document.querySelectorAll(".nav-item").forEach(btn => {
   });
 });
 
-// --- Health Check ---
 async function checkHealth() {
   const el = document.getElementById("health-status");
   try {
     const res = await fetch(`${API}/health`);
     const data = await res.json();
-    el.textContent = `● ${data.status} — ${data.tts_provider}`;
+    el.textContent = `${data.status} — ${data.tts_provider}`;
     el.className = "health-status ok";
   } catch {
-    el.textContent = "● Offline";
+    el.textContent = "Offline";
     el.className = "health-status error";
   }
 }
 
-// --- Dashboard ---
+function copCell(title, meta, status) {
+  return `<div class="cop-cell status-${status || "idle"}"><h4>${escapeHtml(title)}</h4><p>${escapeHtml(meta)}</p></div>`;
+}
+
 async function loadDashboard() {
+  const stats = document.getElementById("stats-grid");
+  stats.innerHTML = `
+    <div class="stat-card"><div class="stat-value">0</div><div class="stat-label">Missions</div></div>
+    <div class="stat-card"><div class="stat-value">0</div><div class="stat-label">Voice sessions</div></div>
+    <div class="stat-card"><div class="stat-value">$0.00</div><div class="stat-label">Cost today</div></div>
+    <div class="stat-card"><div class="stat-value">0/0/0</div><div class="stat-label">Active / done / failed</div></div>
+  `;
   try {
-    const [missionsRes, memoryRes] = await Promise.all([
+    const [missionsRes, memoryRes, overview] = await Promise.all([
       fetch(`${API}/missions?user_id=${currentUserId}`),
       fetch(`${API}/memory/summary`),
+      jsonOrEmpty(`${API}/cop/overview`),
     ]);
     const missions = await missionsRes.json();
     const memory = await memoryRes.json();
+    const agents = asArray(await jsonOrEmpty(`${API}/cop/agents`));
 
     const active = missions.filter(m => m.status === "active").length;
     const completed = missions.filter(m => m.status === "completed").length;
     const failed = missions.filter(m => m.status === "failed").length;
 
     document.getElementById("stats-grid").innerHTML = `
-      <div class="stat-card"><div class="stat-value">${missions.length}</div><div class="stat-label">Total Missions</div></div>
-      <div class="stat-card"><div class="stat-value">${active}</div><div class="stat-label">Active</div></div>
-      <div class="stat-card"><div class="stat-value">${completed}</div><div class="stat-label">Completed</div></div>
-      <div class="stat-card"><div class="stat-value">${failed}</div><div class="stat-label">Failed</div></div>
+      <div class="stat-card"><div class="stat-value">${missions.length}</div><div class="stat-label">Missions</div></div>
+      <div class="stat-card"><div class="stat-value">${overview.active_voice_sessions ?? 0}</div><div class="stat-label">Voice sessions</div></div>
+      <div class="stat-card"><div class="stat-value">$${(overview.cost_today_usd ?? 0).toFixed(2)}</div><div class="stat-label">Cost today</div></div>
+      <div class="stat-card"><div class="stat-value">${active}/${completed}/${failed}</div><div class="stat-label">Active / done / failed</div></div>
     `;
 
     const recent = missions.slice(0, 5);
     document.getElementById("recent-missions").innerHTML = recent.length
-      ? recent.map(m => renderMission(m)).join("")
+      ? recent.map(m => renderMissionRow(m)).join("")
       : '<div class="empty-state">No missions yet</div>';
+
+    const mini = [];
+    mini.push(copCell("Active missions", String(overview.active_missions ?? active), (overview.active_missions || active) ? "live" : "idle"));
+    mini.push(copCell("Voice", `${overview.active_voice_sessions ?? 0} sessions`, overview.active_voice_sessions ? "ok" : "idle"));
+    mini.push(copCell("Spend", `$${(overview.cost_today_usd ?? 0).toFixed(4)}`, (overview.cost_today_usd || 0) > 0 ? "warn" : "idle"));
+    agents.slice(0, 4).forEach(a => {
+      mini.push(copCell(a.agent, `${a.calls} calls · $${(a.cost_usd ?? 0).toFixed(4)}`, a.calls > 0 ? "ok" : "idle"));
+    });
+    document.getElementById("cop-mini").innerHTML = mini.join("") || '<div class="empty-state">No COP data</div>';
 
     document.getElementById("memory-summary").innerHTML =
       memory.summary ? `<div>${escapeHtml(memory.summary)}</div>` : '<div class="muted">No memories stored yet</div>';
@@ -72,27 +120,29 @@ async function loadDashboard() {
   }
 }
 
-// --- Missions ---
 async function loadMissions() {
   try {
     const res = await fetch(`${API}/missions?user_id=${currentUserId}`);
     const missions = await res.json();
     document.getElementById("missions-list").innerHTML = missions.length
-      ? missions.map(m => renderMission(m)).join("")
+      ? renderMissionTable(missions)
       : '<div class="empty-state">No missions yet. Create one to get started.</div>';
   } catch (err) {
     console.error("Missions error:", err);
   }
 }
 
-function renderMission(m) {
-  const actions = m.status === "pending" || m.status === "paused"
+function missionActions(m) {
+  return m.status === "pending" || m.status === "paused"
     ? `<button class="btn btn-primary btn-small" data-action="execute" data-id="${m.id}">Execute</button>`
     : m.status === "active"
       ? `<button class="btn btn-primary btn-small" data-action="execute" data-id="${m.id}">Finish</button>`
       : m.status === "completed"
         ? `<button class="btn btn-secondary btn-small" data-action="status" data-id="${m.id}">Status</button>`
         : "";
+}
+
+function renderMissionRow(m) {
   return `
     <div class="mission-item">
       <div class="mission-info">
@@ -101,13 +151,45 @@ function renderMission(m) {
       </div>
       <div class="mission-meta">
         <div class="mission-status ${m.status}">${m.status}</div>
-        ${actions}
+        ${missionActions(m)}
       </div>
     </div>
   `;
 }
 
-// New Mission Modal
+function renderMissionTable(missions) {
+  const rows = missions.map(m => `
+    <tr>
+      <td>
+        <div class="cell-title">${escapeHtml(m.title)}</div>
+        <div class="cell-meta">${m.description ? escapeHtml(m.description) : "No description"}</div>
+      </td>
+      <td class="cell-data">${m.priority}</td>
+      <td class="cell-data">${m.budget_usd ? `$${m.budget_usd}` : "—"}</td>
+      <td><div class="mission-status ${m.status}">${m.status}</div></td>
+      <td>${missionActions(m)}</td>
+    </tr>
+  `).join("");
+  return `
+    <table class="mission-table">
+      <thead>
+        <tr>
+          <th>Mission</th>
+          <th>Priority</th>
+          <th>Budget</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderMission(m) {
+  return renderMissionRow(m);
+}
+
 document.getElementById("btn-new-mission").addEventListener("click", () => {
   document.getElementById("modal-new-mission").classList.remove("hidden");
 });
@@ -173,7 +255,6 @@ async function handleMissionAction(event) {
   }
 }
 
-// --- Voice ---
 const btnConnect = document.getElementById("btn-connect-voice");
 const btnMic = document.getElementById("btn-mic");
 const indicator = document.getElementById("voice-indicator");
@@ -181,6 +262,7 @@ const statusText = document.getElementById("voice-status-text");
 const transcriptEl = document.getElementById("transcript");
 const textInput = document.getElementById("text-input");
 const btnSendText = document.getElementById("btn-send-text");
+const voicePlayer = document.getElementById("voice-player");
 
 btnConnect.addEventListener("click", toggleVoiceConnection);
 btnMic.addEventListener("click", toggleMic);
@@ -258,7 +340,7 @@ function toggleVoiceConnection() {
 async function toggleMic() {
   if (mediaRecorder && mediaRecorder.state === "recording") {
     mediaRecorder.stop();
-    btnMic.textContent = "🎤 Start Speaking";
+    btnMic.textContent = "Start speaking";
     indicator.className = "voice-indicator connected";
     return;
   }
@@ -274,7 +356,7 @@ async function toggleMic() {
     };
 
     mediaRecorder.start(100);
-    btnMic.textContent = "⏹ Stop Speaking";
+    btnMic.textContent = "Stop speaking";
     indicator.className = "voice-indicator speaking";
   } catch (err) {
     console.error("Mic error:", err);
@@ -299,6 +381,14 @@ function addTranscript(speaker, text) {
 }
 
 async function playAudio(buffer) {
+  if (voicePlayer) {
+    const blob = new Blob([buffer], { type: "audio/mpeg" });
+    voicePlayer.src = URL.createObjectURL(blob);
+    try {
+      await voicePlayer.play();
+      return;
+    } catch {}
+  }
   if (!audioContext) audioContext = new AudioContext();
   const audioBuffer = await audioContext.decodeAudioData(buffer);
   const source = audioContext.createBufferSource();
@@ -307,7 +397,6 @@ async function playAudio(buffer) {
   source.start();
 }
 
-// --- Reports ---
 document.getElementById("btn-refresh-reports").addEventListener("click", loadReports);
 
 async function loadReports() {
@@ -329,7 +418,6 @@ async function loadReports() {
   }
 }
 
-// --- COP Map ---
 document.getElementById("btn-refresh-cop").addEventListener("click", loadCopMap);
 
 async function loadCopMap() {
@@ -350,36 +438,35 @@ async function loadCopMap() {
     `;
 
     document.getElementById("cop-burn-rate").innerHTML = burn.length
-      ? burn.map(b => `<div class="report-item"><h4>${escapeHtml(b.agent)}</h4><p>${b.tokens} tokens · ${b.burn_per_min?.toFixed(1)} tokens/min</p></div>`).join("")
+      ? burn.map(b => copCell(b.agent, `${b.tokens} tokens · ${b.burn_per_min?.toFixed(1)} tokens/min`, b.burn_per_min > 0 ? "live" : "idle")).join("")
       : '<div class="empty-state">No burn data in last hour</div>';
 
     document.getElementById("cop-missions").innerHTML = missions.length
-      ? missions.map(m => `<div class="report-item"><h4>${escapeHtml(m.mission_id)}</h4><p>$${m.total_cost_usd?.toFixed(4)} · ${m.total_tokens_in + m.total_tokens_out} tokens · ${m.ai_calls} AI calls</p></div>`).join("")
+      ? missions.map(m => copCell(m.mission_id, `$${(m.total_cost_usd ?? 0).toFixed(4)} · ${(m.total_tokens_in || 0) + (m.total_tokens_out || 0)} tokens · ${m.ai_calls} AI calls`, m.ai_calls > 0 ? "ok" : "idle")).join("")
       : '<div class="empty-state">No mission cost data</div>';
 
     document.getElementById("cop-agents").innerHTML = agents.length
-      ? agents.map(a => `<div class="report-item"><h4>${escapeHtml(a.agent)}</h4><p>${a.calls} calls · $${a.cost_usd?.toFixed(4)}</p></div>`).join("")
+      ? agents.map(a => copCell(a.agent, `${a.calls} calls · $${(a.cost_usd ?? 0).toFixed(4)}`, a.calls > 0 ? "ok" : "idle")).join("")
       : '<div class="empty-state">No agent activity in last 24h</div>';
 
     document.getElementById("cop-voice").innerHTML = voice.length
-      ? voice.map(v => `<div class="report-item"><h4>${escapeHtml(v.status)}</h4><p>${v.n} sessions · ${v.total_seconds}s total</p></div>`).join("")
+      ? voice.map(v => copCell(v.status, `${v.n} sessions · ${v.total_seconds}s total`, v.status === "active" ? "live" : "idle")).join("")
       : '<div class="empty-state">No voice sessions</div>';
 
     document.getElementById("cop-gateway").innerHTML = gateway.length
-      ? gateway.map(g => `<div class="report-item"><h4>${escapeHtml(g.provider)} / ${escapeHtml(g.model)}</h4><p>${g.calls} calls · $${g.cost_usd?.toFixed(4)}</p></div>`).join("")
+      ? gateway.map(g => copCell(`${g.provider} / ${g.model}`, `${g.calls} calls · $${(g.cost_usd ?? 0).toFixed(4)}`, g.calls > 0 ? "warn" : "idle")).join("")
       : '<div class="empty-state">No gateway usage in last 24h</div>';
 
     document.getElementById("cop-memory").innerHTML = `
-      <div class="report-item"><h4>KV (alfred-command)</h4><p>${memory.kv_keys} keys</p></div>
-      <div class="report-item"><h4>D1 (alfred-db)</h4><p>${memory.d1_rows} rows</p></div>
-      <div class="report-item"><h4>Agent Memory (alfred)</h4><p>Managed by Cloudflare Agent Memory</p></div>
+      ${copCell("KV (alfred-command)", `${memory.kv_keys} keys`, "ok")}
+      ${copCell("D1 (alfred-db)", `${memory.d1_rows} rows`, "ok")}
+      ${copCell("Agent Memory (alfred)", "Managed by Cloudflare Agent Memory", "idle")}
     `;
   } catch (err) {
     console.error("COP Map error:", err);
   }
 }
 
-// --- Settings ---
 async function loadSettings() {
   try {
     const res = await fetch(`${API}/oral/preferences?user_id=${currentUserId}`);
@@ -447,7 +534,6 @@ document.getElementById("btn-upload-voice").addEventListener("click", async () =
   }
 });
 
-// --- Utility ---
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = String(str);
@@ -468,7 +554,10 @@ async function jsonOrEmpty(url) {
   }
 }
 
-// --- Init ---
-checkHealth();
-loadDashboard();
-setInterval(checkHealth, 30000);
+(async function init() {
+  const ok = await ensureAccess();
+  if (!ok) return;
+  checkHealth();
+  loadDashboard();
+  setInterval(checkHealth, 30000);
+})();

@@ -5,16 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Alfred — ORAL operator command center with COP Map" />
   <title>Alfred — Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤵</text></svg>" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
 </head>
 <body>
-  <div id="app">
-    <!-- Sidebar -->
+  <div id="access-gate" class="access-gate" hidden>
+    <div class="access-panel">
+      <img src="/logo.svg" alt="Alfred" width="48" height="48" />
+      <h1>Alfred</h1>
+      <p>Sign in with Google to open the board and add Alfred to Siri.</p>
+      <a id="access-login" class="btn btn-primary" href="/auth/google">Sign in with Google</a>
+    </div>
+  </div>
+
+  <div id="app" hidden>
     <aside class="sidebar">
       <div class="sidebar-header">
-        <span class="logo">🤵</span>
-        <h1>Alfred</h1>
+        <img class="logo" src="/logo.svg" alt="Alfred" width="36" height="36" />
+        <div>
+          <h1>Alfred</h1>
+          <span class="sidebar-tag">Command OS</span>
+        </div>
       </div>
       <nav class="nav">
         <button class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -29,15 +43,29 @@
       </div>
     </aside>
 
-    <!-- Main content -->
     <main class="main">
-      <!-- Dashboard View -->
+      <div id="siri-banner" class="siri-banner" hidden>
+        <div>
+          <h3>Add Alfred to Siri</h3>
+          <p>One tap. Pre-filled GET to your briefing. Name: Alfred report.</p>
+        </div>
+        <a id="btn-siri" class="btn btn-primary" href="#">Add Alfred to Siri</a>
+      </div>
       <section id="view-dashboard" class="view active">
-        <h2>Dashboard</h2>
+        <header class="page-header">
+          <h2>Dashboard</h2>
+          <p class="page-sub">Operational picture for the current board.</p>
+        </header>
         <div class="stats-grid" id="stats-grid"></div>
-        <div class="card">
-          <h3>Recent Missions</h3>
-          <div id="recent-missions" class="mission-list"></div>
+        <div class="dash-grid">
+          <div class="card">
+            <h3>Recent Missions</h3>
+            <div id="recent-missions" class="mission-list"></div>
+          </div>
+          <div class="card">
+            <h3>COP Map</h3>
+            <div id="cop-mini" class="cop-grid"></div>
+          </div>
         </div>
         <div class="card">
           <h3>Alfred Memory Summary</h3>
@@ -45,28 +73,35 @@
         </div>
       </section>
 
-      <!-- Missions View -->
       <section id="view-missions" class="view">
         <div class="view-header">
-          <h2>Missions</h2>
-          <button class="btn btn-primary" id="btn-new-mission">+ New Mission</button>
+          <div>
+            <h2>Missions</h2>
+            <p class="page-sub">Lifecycle, gate, and execution.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-new-mission">New Mission</button>
         </div>
-        <div id="missions-list" class="mission-list"></div>
+        <div class="card table-wrap">
+          <div id="missions-list" class="mission-list"></div>
+        </div>
       </section>
 
-      <!-- Voice View -->
       <section id="view-voice" class="view">
-        <h2>Voice Interaction</h2>
+        <header class="page-header">
+          <h2>Voice</h2>
+          <p class="page-sub">Live session, transcript, and briefing audio.</p>
+        </header>
         <div class="voice-container">
           <div class="voice-status" id="voice-status">
             <span class="voice-indicator" id="voice-indicator"></span>
             <span id="voice-status-text">Disconnected</span>
           </div>
           <div class="voice-controls">
+            <button class="btn btn-mic" id="btn-mic" disabled>Start speaking</button>
             <button class="btn btn-primary btn-large" id="btn-connect-voice">Connect</button>
-            <button class="btn btn-secondary btn-large" id="btn-mic" disabled>🎤 Start Speaking</button>
             <button class="btn btn-secondary btn-large" id="btn-briefing">Play briefing</button>
           </div>
+          <audio id="voice-player" class="voice-player" controls></audio>
           <div class="transcript" id="transcript"></div>
           <div class="voice-input">
             <input type="text" id="text-input" placeholder="Type to Alfred..." />
@@ -75,90 +110,99 @@
         </div>
       </section>
 
-      <!-- Reports View -->
       <section id="view-reports" class="view">
         <div class="view-header">
-          <h2>Reports</h2>
+          <div>
+            <h2>Reports</h2>
+            <p class="page-sub">AI summaries from completed work.</p>
+          </div>
           <button class="btn btn-primary" id="btn-refresh-reports">Refresh</button>
         </div>
         <div id="reports-list" class="report-list"></div>
       </section>
 
-      <!-- COP Map View -->
       <section id="view-cop" class="view">
         <div class="view-header">
-          <h2>COP Map — Common Operational Picture</h2>
+          <div>
+            <h2>COP Map</h2>
+            <p class="page-sub">Common operational picture.</p>
+          </div>
           <button class="btn btn-primary" id="btn-refresh-cop">Refresh</button>
         </div>
         <div class="stats-grid" id="cop-stats"></div>
-        <div class="card">
-          <h3>Token Burn Rate per Agent</h3>
-          <div id="cop-burn-rate"></div>
-        </div>
-        <div class="card">
-          <h3>Cost per Mission</h3>
-          <div id="cop-missions"></div>
-        </div>
-        <div class="card">
-          <h3>Active Agents & Status</h3>
-          <div id="cop-agents"></div>
-        </div>
-        <div class="card">
-          <h3>Voice Session Activity</h3>
-          <div id="cop-voice"></div>
-        </div>
-        <div class="card">
-          <h3>AI Gateway Usage</h3>
-          <div id="cop-gateway"></div>
-        </div>
-        <div class="card">
-          <h3>Memory Usage</h3>
-          <div id="cop-memory"></div>
+        <div class="cop-layout">
+          <div class="card">
+            <h3>Token Burn Rate per Agent</h3>
+            <div id="cop-burn-rate" class="cop-grid"></div>
+          </div>
+          <div class="card">
+            <h3>Cost per Mission</h3>
+            <div id="cop-missions" class="cop-grid"></div>
+          </div>
+          <div class="card">
+            <h3>Active Agents &amp; Status</h3>
+            <div id="cop-agents" class="cop-grid"></div>
+          </div>
+          <div class="card">
+            <h3>Voice Session Activity</h3>
+            <div id="cop-voice" class="cop-grid"></div>
+          </div>
+          <div class="card">
+            <h3>AI Gateway Usage</h3>
+            <div id="cop-gateway" class="cop-grid"></div>
+          </div>
+          <div class="card">
+            <h3>Memory Usage</h3>
+            <div id="cop-memory" class="cop-grid"></div>
+          </div>
         </div>
       </section>
 
-      <!-- Settings View -->
       <section id="view-settings" class="view">
-        <h2>Settings</h2>
-        <div class="card">
-          <h3>TTS Provider</h3>
-          <select id="tts-provider-select" class="select">
-            <option value="workers-ai">Workers AI (Aura-2) — Free, no API key</option>
-            <option value="mimo">MiMo — Custom provider</option>
-            <option value="openai">OpenAI TTS</option>
-            <option value="xai">xAI</option>
-          </select>
-        </div>
-        <div class="card">
-          <h3>STT Provider</h3>
-          <select id="stt-provider-select" class="select">
-            <option value="workers-ai">Workers AI (Whisper) — Free</option>
-            <option value="deepgram">Deepgram Nova-3</option>
-            <option value="openai">OpenAI Whisper</option>
-          </select>
-        </div>
-        <div class="card">
-          <h3>Voice Model</h3>
-          <select id="voice-model-select" class="select">
-            <option value="aura-2-en">Aura-2 English</option>
-            <option value="aura-1">Aura-1</option>
-            <option value="melotts">MeloTTS (multi-language)</option>
-          </select>
-        </div>
-        <div class="card">
-          <h3>Custom Voice Sample</h3>
-          <p class="muted">Upload a voice sample to customize Alfred's voice.</p>
-          <input type="file" id="voice-sample-upload" accept="audio/wav,audio/mpeg,audio/mp3,audio/ogg,audio/webm" />
-          <button class="btn btn-primary" id="btn-upload-voice">Upload</button>
-          <div id="upload-status" class="upload-status"></div>
-          <p class="muted" id="settings-status"></p>
+        <header class="page-header">
+          <h2>Settings</h2>
+          <p class="page-sub">TTS and STT providers for this operator.</p>
+        </header>
+        <div class="settings-grid">
+          <div class="card">
+            <h3>TTS Provider</h3>
+            <select id="tts-provider-select" class="select">
+              <option value="workers-ai">Workers AI (Aura-2) — Free, no API key</option>
+              <option value="mimo">MiMo — Custom provider</option>
+              <option value="openai">OpenAI TTS</option>
+              <option value="xai">xAI</option>
+            </select>
+          </div>
+          <div class="card">
+            <h3>STT Provider</h3>
+            <select id="stt-provider-select" class="select">
+              <option value="workers-ai">Workers AI (Whisper) — Free</option>
+              <option value="deepgram">Deepgram Nova-3</option>
+              <option value="openai">OpenAI Whisper</option>
+            </select>
+          </div>
+          <div class="card">
+            <h3>Voice Model</h3>
+            <select id="voice-model-select" class="select">
+              <option value="aura-2-en">Aura-2 English</option>
+              <option value="aura-1">Aura-1</option>
+              <option value="melotts">MeloTTS (multi-language)</option>
+            </select>
+          </div>
+          <div class="card">
+            <h3>Custom Voice Sample</h3>
+            <p class="muted">Upload a voice sample to customize Alfred's voice.</p>
+            <input type="file" id="voice-sample-upload" accept="audio/wav,audio/mpeg,audio/mp3,audio/ogg,audio/webm" />
+            <button class="btn btn-primary" id="btn-upload-voice">Upload</button>
+            <div id="upload-status" class="upload-status"></div>
+            <p class="muted" id="settings-status"></p>
+          </div>
         </div>
         <button class="btn btn-primary" id="btn-save-settings">Save Settings</button>
       </section>
     </main>
   </div>
 
-  <!-- New Mission Modal -->
   <div id="modal-new-mission" class="modal hidden">
     <div class="modal-content">
       <h3>Create New Mission</h3>

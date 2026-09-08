@@ -13,6 +13,10 @@ import { handleAgentCard } from "./a2a/agent-card";
 import { handleTaskSend, handleTaskGet, handleTaskCancel } from "./a2a/tasks";
 import { handleMcp } from "./mcp/server";
 import copApp, { recordCop, recordCostEvent } from "./cop/cop";
+import { googleCallback, googleStart } from "./auth/google";
+import { getSession, hasAccessServiceToken, clearSessionCookie } from "./auth/session";
+import { briefingUrl, findSiriToken, issueSiriToken, shortcutsImportUrl } from "./siri/tokens";
+import { buildAlfredReportShortcut } from "./siri/shortcut";
 
 export { MissionStateDO } from "./do/mission-state";
 export { VoiceSessionDO } from "./do/voice-session";
@@ -29,13 +33,22 @@ app.all("*", async (c, next) => {
     path.startsWith("/a2a") || path === "/mcp" ||
     path.startsWith("/agents") || path.startsWith("/voice") ||
     path === "/.well-known/agent.json" || path === "/llms.txt" ||
-    path === "/robots.txt"
+    path === "/robots.txt" || path === "/shortcut.download" ||
+    path.startsWith("/auth") || path.startsWith("/siri")
   ) {
     return next();
   }
   const response = await c.env.ASSETS.fetch(c.req.raw);
   if (response.status !== 404) return response;
   return c.env.ASSETS.fetch(new Request(new URL("/index.html", c.req.url)));
+});
+
+app.use("/api/*", async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (path === "/api/health" || path === "/api/me") return next();
+  if (hasAccessServiceToken(c)) return next();
+  if (await getSession(c.env, c)) return next();
+  return c.json({ error: "unauthorized" }, 401);
 });
 
 // ============================================================
@@ -348,6 +361,9 @@ https://alfred.report/agents/oral-operator-agent/default
 # Voice briefing (Access)
 https://voice.alfred.report/voice/briefing
 
+# Siri shortcut
+https://voice.alfred.report/shortcut.download
+
 # API
 https://command-os-review.icebergmedia.co.uk/api/health
 https://speak.alfred.report/api/tts
@@ -397,6 +413,13 @@ async function authorizeBriefing(c: { req: { header: (name: string) => string | 
   const presented = c.req.query("token") || "";
   if (!presented) return false;
   try {
+    const row = await c.env.DB.prepare(`SELECT token FROM siri_tokens WHERE token = ?`).bind(presented).first<{ token: string }>();
+    if (row?.token && tokensEqual(presented, row.token)) {
+      await c.env.DB.prepare(`UPDATE siri_tokens SET last_used_at = datetime('now') WHERE token = ?`).bind(presented).run().catch(() => {});
+      return true;
+    }
+  } catch {}
+  try {
     const expected = await c.env.SIRI_BRIEFING_TOKEN.get();
     return tokensEqual(presented, expected);
   } catch {
@@ -415,6 +438,54 @@ async function toArrayBuffer(value: unknown): Promise<ArrayBuffer> {
   }
   return new TextEncoder().encode(String(value)).buffer as ArrayBuffer;
 }
+
+app.get("/auth/google", (c) => googleStart(c.env, c.req.url));
+app.get("/auth/google/callback", (c) => googleCallback(c.env, c.req.raw));
+app.get("/auth/logout", (c) => {
+  return new Response(null, { status: 302, headers: { Location: "/", "Set-Cookie": clearSessionCookie() } });
+});
+
+app.get("/api/me", async (c) => {
+  const session = await getSession(c.env, c);
+  if (!session) return c.json({ authenticated: false }, 401);
+  const issued = await issueSiriToken(c.env, session.email);
+  return c.json({
+    authenticated: true,
+    email: session.email,
+    user_id: session.userId,
+    token: issued.token,
+    briefing_url: briefingUrl(issued.token),
+    shortcuts_url: shortcutsImportUrl(issued.token),
+    shortcut_name: "Alfred report",
+    method: "GET",
+  });
+});
+
+app.get("/siri/alfred-report.shortcut", async (c) => {
+  const token = c.req.query("token") || "";
+  const row = await findSiriToken(c.env, token);
+  if (!row) return c.text("Not found", 404);
+  const body = buildAlfredReportShortcut(token);
+  return new Response(body, {
+    headers: {
+      "Content-Type": "application/x-apple-shortcut",
+      "Content-Disposition": 'attachment; filename="Alfred report.shortcut"',
+      "Cache-Control": "no-store",
+    },
+  });
+});
+
+app.get("/shortcut.download", async (c) => {
+  const asset = await c.env.ASSETS.fetch(new Request(new URL("/Alfred-Briefing.shortcut", c.req.url)));
+  if (!asset.ok) return c.text("Shortcut not found", 404);
+  return new Response(asset.body, {
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": 'attachment; filename="Alfred-Briefing.shortcut"',
+      "Cache-Control": "public, max-age=300",
+    },
+  });
+});
 
 app.get("/voice/briefing", async (c) => {
   const authorized = await authorizeBriefing(c);

@@ -192,7 +192,7 @@ a:hover { text-decoration: underline; }
 .mono { font-family: var(--mono); color: var(--gold); }
 
 @media (max-width: 800px) {
-  .top nav a:not(.top-cta) { display: none; }
+  .top nav a:not(.top-cta):not(.icon-link) { display: none; }
   .grid3, .facts { grid-template-columns: 1fr; }
   .facts li:nth-child(odd) { border-right: 0; }
   .foot { flex-direction: column; gap: 12px; }

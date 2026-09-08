@@ -27,9 +27,9 @@ a:hover { text-decoration: underline; }
 
 .top {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
-  padding: 20px 32px;
+  padding: 16px 28px;
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -37,9 +37,9 @@ a:hover { text-decoration: underline; }
   z-index: 5;
 }
 .brand {
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
   color: var(--ink);
   font-family: "Outfit", var(--sans);
   font-size: 18px;
@@ -47,6 +47,25 @@ a:hover { text-decoration: underline; }
   letter-spacing: -0.04em;
   text-decoration: none;
   text-transform: none;
+  isolation: isolate;
+  padding-right: 0.65em;
+}
+.brand .word { position: relative; z-index: 1; }
+.al-back {
+  position: absolute;
+  right: -0.22em;
+  top: 50%;
+  transform: translateY(-52%);
+  font-family: "Outfit", var(--sans);
+  font-weight: 700;
+  font-size: 2.35em;
+  color: var(--gold);
+  opacity: 0.28;
+  letter-spacing: -0.1em;
+  line-height: 1;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
 }
 .brand .al, h2 .al, .foot .al, .go-max .al {
   font-family: "Outfit", var(--sans);
@@ -64,14 +83,6 @@ a:hover { text-decoration: underline; }
   text-decoration: none;
 }
 .icon-link:hover { color: var(--gold); text-decoration: none; }
-.al-mark {
-  font-family: "Outfit", var(--sans);
-  font-weight: 700;
-  font-size: 22px;
-  color: var(--gold);
-  letter-spacing: -0.08em;
-  line-height: 1;
-}
 .go-max .ex {
   margin-left: 0.38em;
   letter-spacing: 0;
@@ -215,6 +226,17 @@ a:hover { text-decoration: underline; }
 .links { list-style: none; }
 .links li { padding: 10px 0; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 14px; }
 
+.foot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 20px 40px;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
 .foot .brand:hover { text-decoration: none; }
 .mono { font-family: var(--mono); color: var(--gold); }
 
@@ -250,5 +272,5 @@ a:hover { text-decoration: underline; }
   .btn-ghost { display: none; }
   .grid3, .facts { grid-template-columns: 1fr; }
   .facts li:nth-child(odd) { border-right: 0; }
-  .foot { flex-direction: column; gap: 12px; }
+  .foot { flex-direction: row; gap: 14px; padding: 22px 16px 32px; }
 }

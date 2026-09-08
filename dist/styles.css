@@ -128,6 +128,25 @@ button, input, select, textarea { font-family: inherit; border-radius: 0; }
   text-decoration: none;
 }
 .gh-link:hover { color: var(--gold); }
+.go-max-link {
+  display: inline-flex;
+  align-items: center;
+  font-family: "Outfit", var(--font);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.04em;
+  color: var(--gold);
+  text-decoration: none;
+}
+.go-max-link span { font-weight: 700; }
+.go-max-link:hover { color: var(--gold-hover); }
+.lfgo {
+  font-family: "Outfit", var(--font);
+  text-transform: none;
+  letter-spacing: -0.04em;
+  font-size: 18px;
+  font-weight: 600;
+}
 
 .health-status { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
 .health-status.ok { color: var(--success); }

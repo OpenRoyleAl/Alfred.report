@@ -1,0 +1,85 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "command-os-review",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+
+  "services": [
+    { "binding": "AGENT_ALFRED", "service": "agent-alfred" },
+    { "binding": "ALFRED_REPORT", "service": "alfred-report" }
+  ],
+
+  "agent_memory": [
+    {
+      "binding": "ALFRED_MEMORY",
+      "namespace": "alfred"
+    }
+  ],
+
+  "kv_namespaces": [
+    { "binding": "ALFRED_COMMAND", "id": "<NAMESPACE_ID>" }
+  ],
+
+  "d1_databases": [
+    { "binding": "DB", "database_name": "alfred-db", "database_id": "<DATABASE_ID>" }
+  ],
+
+  "r2_buckets": [
+    { "binding": "ALFRED_DATA", "bucket_name": "alfred-data" },
+    { "binding": "ALFRED_SNAPSHOTS", "bucket_name": "alfred-snapshots" }
+  ],
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "MISSION_STATE", "class_name": "MissionStateDO" },
+      { "name": "VOICE_SESSION", "class_name": "VoiceSessionDO" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["MissionStateDO", "VoiceSessionDO"] }
+  ],
+
+  "ai": { "binding": "AI" },
+
+  "ai_search": [
+    { "binding": "AI_SEARCH" }
+  ],
+
+  "browser": {
+    "binding": "BROWSER"
+  },
+
+  "analytics_engine_datasets": [
+    { "binding": "ALFRED_COP", "dataset": "alfred_cop" }
+  ],
+
+  "secrets_store_secrets": [
+    { "binding": "OPENAI_API_KEY", "store": "alfred-secrets", "name": "OPENAI_API_KEY" },
+    { "binding": "MIMO_API_KEY", "store": "alfred-secrets", "name": "MIMO_API_KEY" },
+    { "binding": "XAI_API_KEY", "store": "alfred-secrets", "name": "XAI_API_KEY" },
+    { "binding": "CF_API_TOKEN", "store": "alfred-secrets", "name": "CF_API_TOKEN" }
+  ],
+
+  "vars": {
+    "ENVIRONMENT": "production",
+    "CF_ACCOUNT_ID": "0870b0bdbc14bcd31f43fe5e82c3ee8e",
+    "AI_GATEWAY_ID": "alfred-gateway",
+    "AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/0870b0bdbc14bcd31f43fe5e82c3ee8e/alfred-gateway",
+    "TTS_PROVIDER": "workers-ai",
+    "STT_PROVIDER": "workers-ai",
+    "VOICE_MODEL": "aura-2-en",
+    "ALFRED_PERSONALITY": "warm-british-male-authoritative-concise-dry-wit"
+  },
+
+  "routes": [
+    { "pattern": "command-os-review.icebergmedia.co.uk/*", "custom_domain": true },
+    { "pattern": "voice.alfred.report/*", "custom_domain": true },
+    { "pattern": "speak.alfred.report/*", "custom_domain": true },
+    { "pattern": "mcp.alfred.report/*", "custom_domain": true }
+  ]
+}

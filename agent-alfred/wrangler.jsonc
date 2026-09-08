@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "agent-alfred",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "ai": { "binding": "AI" },
+
+  "agent_memory": [
+    {
+      "binding": "ALFRED_MEMORY",
+      "namespace": "alfred"
+    }
+  ],
+
+  "ai_search": [
+    { "binding": "AI_SEARCH" }
+  ],
+
+  "browser": {
+    "binding": "BROWSER"
+  },
+
+  "d1_databases": [
+    { "binding": "DB", "database_name": "alfred-db", "database_id": "<DATABASE_ID>" }
+  ],
+
+  "r2_buckets": [
+    { "binding": "ALFRED_DATA", "bucket_name": "alfred-data" }
+  ],
+
+  "analytics_engine_datasets": [
+    { "binding": "ALFRED_COP", "dataset": "alfred_cop" }
+  ],
+
+  "secrets_store_secrets": [
+    { "binding": "OPENAI_API_KEY", "store": "alfred-secrets", "name": "OPENAI_API_KEY" },
+    { "binding": "MIMO_API_KEY", "store": "alfred-secrets", "name": "MIMO_API_KEY" },
+    { "binding": "XAI_API_KEY", "store": "alfred-secrets", "name": "XAI_API_KEY" }
+  ],
+
+  "vars": {
+    "CF_ACCOUNT_ID": "0870b0bdbc14bcd31f43fe5e82c3ee8e",
+    "AI_GATEWAY_ID": "alfred-gateway",
+    "AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/0870b0bdbc14bcd31f43fe5e82c3ee8e/alfred-gateway",
+    "ALFRED_PERSONALITY": "warm-british-male-authoritative-concise-dry-wit"
+  }
+}

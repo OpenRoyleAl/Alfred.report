@@ -5,7 +5,7 @@ import type { Env } from "../types";
 export const copApp = new Hono<{ Bindings: Env }>();
 
 // --- Model pricing table ($ per 1M tokens) ---
-const MODEL_PRICES: Record<string, { in: number; out: number }> = {
+export const MODEL_PRICES: Record<string, { in: number; out: number }> = {
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast": { in: 0.15, out: 0.60 },
   "@cf/zai-org/glm-5.3": { in: 0.15, out: 0.60 },
   "@cf/zai-org/glm-5.3-flash": { in: 0.05, out: 0.20 },
@@ -15,6 +15,10 @@ const MODEL_PRICES: Record<string, { in: number; out: number }> = {
   "gpt-4o": { in: 2.50, out: 10.00 },
   "grok-3": { in: 3.00, out: 15.00 },
   "mimo-v2.5-pro": { in: 1.00, out: 4.00 },
+  "markdown": { in: 0, out: 0 },
+  "browser-run": { in: 0, out: 0 },
+  "mission-lifecycle": { in: 0, out: 0 },
+  "voice-session": { in: 0, out: 0 },
 };
 
 export function estimateCost(model: string, tokensIn: number, tokensOut: number): number {
@@ -138,6 +142,21 @@ copApp.get("/memory", async (c) => {
     `INSERT INTO memory_snapshots (kv_key_count, vectorize_count, d1_row_count) VALUES (?, ?, ?)`
   ).bind(kvKeys, 0, rows?.n ?? 0).run();
   return c.json({ kv_keys: kvKeys, vectorize_count: 0, d1_rows: rows?.n ?? 0, captured_at: new Date().toISOString() });
+});
+
+copApp.get("/events", async (c) => {
+  const limit = Math.min(Number(c.req.query("limit") || "50"), 200);
+  const since = (c.req.query("since") || "").replace("T", " ").replace("Z", "");
+  if (since && !/^\d{4}-\d{2}-\d{2}([ T][\d:.+-]+)?$/.test(since)) {
+    return c.json({ error: "invalid since" }, 400);
+  }
+  const sql = since
+    ? `SELECT id, mission_id, user_id, agent, provider, model, event_type, tokens_in, tokens_out, cost_usd, duration_ms, created_at FROM cost_events WHERE created_at >= ? ORDER BY id DESC LIMIT ?`
+    : `SELECT id, mission_id, user_id, agent, provider, model, event_type, tokens_in, tokens_out, cost_usd, duration_ms, created_at FROM cost_events ORDER BY id DESC LIMIT ?`;
+  const results = since
+    ? await c.env.DB.prepare(sql).bind(since, limit).all()
+    : await c.env.DB.prepare(sql).bind(limit).all();
+  return c.json(results.results);
 });
 
 copApp.get("/burn-rate", async (c) => {

@@ -42,6 +42,17 @@ export interface Env {
   MIMO_API_KEY: SecretStoreSecret;
   XAI_API_KEY: SecretStoreSecret;
   CF_API_TOKEN: SecretStoreSecret;
+  SIRI_BRIEFING_TOKEN: SecretStoreSecret;
+
+  EMAIL?: {
+    send(message: {
+      to: string;
+      from: string;
+      subject: string;
+      text?: string;
+      html?: string;
+    }): Promise<{ messageId?: string }>;
+  };
 
   WALLET_HANDLE?: string;
 

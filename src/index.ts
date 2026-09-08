@@ -147,12 +147,14 @@ app.get("/api/voice-samples/:id", async (c) => {
 // Missions
 // ============================================================
 app.post("/api/missions", async (c) => {
-  const body = await c.req.json<{
-    user_id: string; title: string; description?: string;
-    priority?: number; oral_directives?: string; budget_usd?: number;
-  }>();
+  let body: { user_id?: string; title?: string; description?: string; priority?: number; oral_directives?: string; budget_usd?: number };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid JSON" }, 400);
+  }
   if (!body.user_id || !body.title) return c.json({ error: "user_id and title are required" }, 400);
-  const mission = await createMission(c.env, body);
+  const mission = await createMission(c.env, body as { user_id: string; title: string; description?: string; priority?: number; oral_directives?: string; budget_usd?: number });
   return c.json(mission, 201);
 });
 
@@ -219,8 +221,14 @@ app.post("/api/missions/:id/execute", async (c) => {
   const completeRes = await missionDo(c.env, id, "complete", {
     result: { executed: true, scrape: scrape ? { ok: true, url: urlMatch?.[0] } : null },
   });
-  const completed = await completeRes.json().catch(() => ({ error: "complete failed" }));
-  return c.json({ missionId: id, start: startRes.status, completed });
+  const completeText = await completeRes.text();
+  let completed: unknown;
+  try {
+    completed = JSON.parse(completeText);
+  } catch {
+    completed = { error: "complete failed", status: completeRes.status, body: completeText.slice(0, 500) };
+  }
+  return c.json({ missionId: id, start: startRes.status, completed }, completeRes.ok ? 200 : 502);
 });
 
 app.post("/api/missions/:id/gate", async (c) => {
@@ -234,6 +242,23 @@ app.post("/api/missions/:id/evidence", async (c) => {
 
 app.get("/api/missions/:id/status", async (c) => {
   return missionDo(c.env, c.req.param("id"), "status");
+});
+
+app.get("/api/missions/:id/debrief", async (c) => {
+  const id = c.req.param("id");
+  const event = await c.env.DB.prepare(
+    `SELECT event_data, created_at FROM mission_events
+     WHERE mission_id = ? AND actor = 'alfred' AND event_data LIKE '%"debrief":true%'
+     ORDER BY created_at DESC LIMIT 1`
+  ).bind(id).first<{ event_data: string; created_at: string }>();
+  if (!event) return c.json({ error: "No debrief" }, 404);
+  const stored = await c.env.ALFRED_DATA.get(`debriefs/${id}.txt`);
+  return c.json({
+    missionId: id,
+    created_at: event.created_at,
+    ...(event.event_data ? JSON.parse(event.event_data) : {}),
+    body: stored ? await stored.text() : null,
+  });
 });
 
 app.get("/api/missions/:id/events", async (c) => {
@@ -354,6 +379,31 @@ User-agent: CCBot
 Allow: /
 `));
 
+function tokensEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const left = enc.encode(a);
+  const right = enc.encode(b);
+  if (left.length !== right.length) return false;
+  let out = 0;
+  for (let i = 0; i < left.length; i++) out |= left[i] ^ right[i];
+  return out === 0;
+}
+
+async function authorizeBriefing(c: { req: { header: (name: string) => string | undefined; query: (name: string) => string | undefined }; env: Env }): Promise<boolean> {
+  const clientId = c.req.header("CF-Access-Client-Id");
+  const clientSecret = c.req.header("CF-Access-Client-Secret");
+  if (clientId && clientSecret) return true;
+  if (c.req.header("Cookie")?.includes("CF_Authorization=")) return true;
+  const presented = c.req.query("token") || "";
+  if (!presented) return false;
+  try {
+    const expected = await c.env.SIRI_BRIEFING_TOKEN.get();
+    return tokensEqual(presented, expected);
+  } catch {
+    return false;
+  }
+}
+
 async function toArrayBuffer(value: unknown): Promise<ArrayBuffer> {
   if (value instanceof ArrayBuffer) return value;
   if (ArrayBuffer.isView(value)) {
@@ -367,6 +417,9 @@ async function toArrayBuffer(value: unknown): Promise<ArrayBuffer> {
 }
 
 app.get("/voice/briefing", async (c) => {
+  const authorized = await authorizeBriefing(c);
+  if (!authorized) return c.json({ error: "unauthorized" }, 401);
+
   const start = Date.now();
   const userId = c.req.query("user_id") || "hans";
   const missions = await listMissions(c.env, undefined);

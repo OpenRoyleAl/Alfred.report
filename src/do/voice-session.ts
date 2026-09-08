@@ -16,6 +16,10 @@ export class VoiceSessionDO extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get("Upgrade") !== "websocket") return new Response("Expected WebSocket", { status: 426 });
+    const existing = (await this.ctx.storage.get("status")) as string | undefined;
+    if (existing === "ended") {
+      return Response.json({ error: "Session expired" }, { status: 410 });
+    }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
@@ -39,6 +43,12 @@ export class VoiceSessionDO extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    const status = (await this.ctx.storage.get("status")) as string | undefined;
+    if (status === "ended") {
+      wsSend(ws, JSON.stringify({ type: "error", message: "Session expired" }));
+      ws.close(4401, "Session expired");
+      return;
+    }
     if (typeof message === "string") await this.processTextInput(ws, message);
     else await this.processAudioChunk(ws, message);
   }
@@ -48,6 +58,7 @@ export class VoiceSessionDO extends DurableObject<Env> {
     const startedAt = (await this.ctx.storage.get("startedAt")) as string;
     const duration = startedAt ? Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000) : 0;
     const transcript = (await this.ctx.storage.get("transcript")) as any[];
+    await this.ctx.storage.put("status", "ended");
     await this.env.DB.prepare(`UPDATE voice_sessions SET status = 'ended', ended_at = ?, duration_seconds = ?, transcript = ? WHERE do_id = ?`).bind(new Date().toISOString(), duration, transcript ? JSON.stringify(transcript) : null, this.ctx.id.toString()).run();
     const userId = await this.getUserId();
     const missionId = await this.getMissionId();

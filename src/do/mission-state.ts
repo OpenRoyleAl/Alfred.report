@@ -5,6 +5,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env, MissionStatus } from "../types";
 import { recordCop, recordCostEvent } from "../cop/cop";
+import { sendMissionDebrief } from "../email/debrief";
 
 export class MissionStateDO extends DurableObject<Env> {
   private currentMissionId = "unknown";
@@ -92,6 +93,7 @@ export class MissionStateDO extends DurableObject<Env> {
     await this.ctx.storage.put("phase", "durable_state");
     await this.env.DB.prepare(`UPDATE missions SET status = 'completed', result = ?, completed_at = ? WHERE id = ?`).bind(JSON.stringify(result), new Date().toISOString(), this.missionId).run();
     await this.logEvent("completed", "system", { gate: gateResult });
+    const userId = await this.getUserId();
     let voiceReport = null;
     try {
       const summary = `Mission ${this.missionId} completed successfully. ${gateResult.summary || ""}`;
@@ -99,12 +101,23 @@ export class MissionStateDO extends DurableObject<Env> {
       await this.ctx.storage.put("voiceReport", true);
       await this.ctx.storage.put("phase", "voice_report");
       await this.logEvent("voice_session_ended", "system", { report: true });
+      recordCop(this.env, { userId, missionId: this.missionId, agent: "voice", provider: "workers-ai", model: "@cf/deepgram/aura-2-en", eventType: "tts", tokensOut: Math.ceil(summary.length / 4) });
+      await recordCostEvent(this.env, { userId, missionId: this.missionId, agent: "voice", provider: "workers-ai", model: "@cf/deepgram/aura-2-en", eventType: "tts", tokensOut: Math.ceil(summary.length / 4) });
     } catch {}
+    let debrief = { sent: false, stored: false, to: "hans@icebergmedia.co.uk" as string, error: "not attempted" };
+    try {
+      const missionRow = await this.env.DB.prepare(`SELECT id, title, status, user_id, result FROM missions WHERE id = ?`).bind(this.missionId).first<{ id: string; title: string; status: string; user_id: string; result: string | null }>();
+      if (missionRow) {
+        debrief = await sendMissionDebrief(this.env, this.ctx, missionRow, gateResult);
+      }
+    } catch (err) {
+      debrief = { sent: false, stored: false, to: "hans@icebergmedia.co.uk", error: String(err) };
+      await this.logEvent("result_updated", "alfred", { debrief: true, sent: false, error: String(err) }).catch(() => {});
+    }
     this.ctx.storage.deleteAlarm();
-    const userId = await this.getUserId();
     recordCop(this.env, { userId, missionId: this.missionId, agent: "mission-state", provider: "workers-ai", model: "mission-lifecycle", eventType: "tool", tokensIn: 0, tokensOut: 0 });
     await recordCostEvent(this.env, { userId, missionId: this.missionId, agent: "mission-state", provider: "workers-ai", model: "mission-lifecycle", eventType: "tool" });
-    return Response.json({ status: "completed", gate: gateResult, voiceReport: !!voiceReport });
+    return Response.json({ status: "completed", gate: gateResult, voiceReport: !!voiceReport, debrief });
   }
 
   async cancelMission(): Promise<Response> {

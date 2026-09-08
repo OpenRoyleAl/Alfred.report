@@ -72,7 +72,16 @@
     { "binding": "OPENAI_API_KEY", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "OPENAI_API_KEY" },
     { "binding": "MIMO_API_KEY", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "MIMO_API_KEY" },
     { "binding": "XAI_API_KEY", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "XAI_API_KEY" },
-    { "binding": "CF_API_TOKEN", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "CF_API_TOKEN" }
+    { "binding": "CF_API_TOKEN", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "CF_API_TOKEN" },
+    { "binding": "SIRI_BRIEFING_TOKEN", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "SIRI_BRIEFING_TOKEN" }
+  ],
+
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "destination_address": "hans@icebergmedia.co.uk",
+      "allowed_sender_addresses": ["alfred@alfred.report"]
+    }
   ],
 
   "vars": {

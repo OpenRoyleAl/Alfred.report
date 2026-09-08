@@ -9,7 +9,7 @@
   --mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; overflow-x: clip; }
 body {
   background: var(--bg);
@@ -73,17 +73,18 @@ a:hover { text-decoration: underline; }
 }
 .icon-link:hover { color: var(--gold); text-decoration: none; }
 .go-max .ex {
-  margin-left: 0.38em;
+  margin-left: 0.18em;
   letter-spacing: 0;
 }
 .top-cta {
   color: #070708 !important;
   background: var(--gold);
-  padding: 8px 14px;
+  padding: 8px 16px;
   font-weight: 600;
   font-family: "Outfit", var(--sans);
   letter-spacing: -0.04em;
   text-transform: none;
+  border-radius: 999px;
 }
 .top-cta.go-max .al { color: #070708; font-weight: 700; }
 .top-cta.go-max .ex { color: #070708; }
@@ -154,18 +155,20 @@ a:hover { text-decoration: underline; }
   text-transform: uppercase;
   cursor: pointer;
   text-decoration: none;
+  border-radius: 999px;
 }
 .ghost:hover, .btn:hover { background: var(--gold); color: #070708; text-decoration: none; }
 .btn { background: var(--gold); color: #070708; }
 .btn-ghost { background: transparent; color: var(--gold); margin-left: 8px; }
 .go-max {
   font-family: "Outfit", var(--sans);
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.04em;
   text-transform: none;
-  padding: 16px 28px;
+  padding: 10px 18px;
   margin-left: 0;
+  border-radius: 999px;
 }
 .go-max .al { color: #070708; font-weight: 700; }
 .go-max:hover .al { color: var(--gold); }
@@ -211,6 +214,11 @@ a:hover { text-decoration: underline; }
   grid-template-columns: 1fr 1fr;
   gap: 0;
   border: 1px solid var(--line);
+  border-radius: 20px;
+  overflow: hidden;
+  text-align: left;
+  max-width: 720px;
+  margin: 0 auto;
 }
 .facts li {
   display: flex;
@@ -245,8 +253,8 @@ a:hover { text-decoration: underline; }
   .top { padding: 10px 14px; }
   .top nav a:not(.top-cta):not(.icon-link) { display: none; }
   .top-cta {
-    font-size: 15px;
-    padding: 8px 12px;
+    font-size: 13px;
+    padding: 7px 12px;
   }
   .hero {
     padding: 16px 16px 28px;
@@ -260,19 +268,9 @@ a:hover { text-decoration: underline; }
   }
   .hint { margin-top: 12px; font-size: 16px; }
   .listen { margin-top: 8px; }
-  .hero-cta {
-    margin-top: 18px;
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    text-align: center;
-    font-size: clamp(20px, 6.5vw, 28px);
-    padding: 16px 16px;
-  }
   .band { padding: 40px 20px; }
   .band h2 { font-size: clamp(32px, 10vw, 48px); }
   .lede { font-size: 18px; margin-bottom: 24px; }
-  .btn-ghost { display: none; }
   .grid3, .facts { grid-template-columns: 1fr; }
   .facts li:nth-child(odd) { border-right: 0; }
   .foot { flex-direction: row; gap: 14px; padding: 22px 16px 32px; }

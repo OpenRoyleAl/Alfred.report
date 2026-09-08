@@ -135,13 +135,7 @@ button, input, select, textarea { font-family: inherit; border-radius: 0; }
   font-size: 18px;
   font-weight: 600;
 }
-.go-max {
-  font-family: "Outfit", var(--font);
-  text-transform: none;
-  letter-spacing: -0.04em;
-  font-size: 18px;
-  font-weight: 600;
-}
+.go-max .ex { margin-left: 0.38em; }
 
 .health-status { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
 .health-status.ok { color: var(--success); }

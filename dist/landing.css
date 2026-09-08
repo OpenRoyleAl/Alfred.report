@@ -26,7 +26,7 @@ a:hover { text-decoration: underline; }
 
 .top {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   padding: 20px 32px;
   border-bottom: 1px solid var(--line);
@@ -63,7 +63,18 @@ a:hover { text-decoration: underline; }
   text-decoration: none;
 }
 .icon-link:hover { color: var(--gold); text-decoration: none; }
-.foot-links { color: var(--muted); }
+.al-mark {
+  font-family: "Outfit", var(--sans);
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--gold);
+  letter-spacing: -0.08em;
+  line-height: 1;
+}
+.go-max .ex {
+  margin-left: 0.38em;
+  letter-spacing: 0;
+}
 .top-cta {
   color: #070708 !important;
   background: var(--gold);
@@ -74,6 +85,7 @@ a:hover { text-decoration: underline; }
   text-transform: none;
 }
 .top-cta.go-max .al { color: #070708; font-weight: 700; }
+.top-cta.go-max .ex { color: #070708; }
 .top-cta:hover { filter: brightness(1.08); text-decoration: none; }
 
 .hero {
@@ -152,6 +164,7 @@ a:hover { text-decoration: underline; }
 }
 .go-max .al { color: #070708; font-weight: 700; }
 .go-max:hover .al { color: var(--gold); }
+.go-max:hover .ex { color: var(--gold); }
 
 .band { padding: 88px 6vw; max-width: 1200px; margin: 0 auto; }
 .band-alt {
@@ -197,14 +210,7 @@ a:hover { text-decoration: underline; }
 .links { list-style: none; }
 .links li { padding: 10px 0; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 14px; }
 
-.foot {
-  padding: 40px 32px 64px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  justify-content: space-between;
-  color: var(--muted);
-  font-size: 13px;
-}
+.foot .brand:hover { text-decoration: none; }
 .mono { font-family: var(--mono); color: var(--gold); }
 
 @media (max-width: 800px) {

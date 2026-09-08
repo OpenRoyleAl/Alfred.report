@@ -349,38 +349,31 @@ app.all("/mcp", (c) => handleMcp(c.req.raw, c.env));
 
 // llms.txt for agent discovery
 app.get("/llms.txt", (c) => c.text(`# alfred.report
-# OpenRoyleAl — Alfred, the oral operator
+# OpenRoyleAl
 
-> Wake word: Alfred, report!
+> Alfred, report!
 
-Alfred is the OpenRoyleAl operator. Humans speak. Agents call. Runtime: Cloudflare Workers.
+ORAL operator. Brief. Not a companion.
 
-# Product
+# Now
 https://alfred.report/
 https://alfred.report/board
+https://alfred.report/for-agents
 https://alfred.report/voice/hello
 
-# Humans
-Say or click "Alfred, report!" for voice.
-Sign in to add Siri: Hey Siri, Alfred report.
-Board: missions, COP Map, voice, reports.
-
 # Agents
-A2A card: https://alfred.report/.well-known/agent.json
+A2A: https://alfred.report/.well-known/agent.json
 MCP: https://mcp.alfred.report/mcp
 Agents SDK: https://alfred.report/agents/oral-operator-agent/default
-Briefing: https://voice.alfred.report/voice/briefing?token=
+Briefing: GET https://voice.alfred.report/voice/briefing?token=
 
-# Capabilities
-Mission execution with evidence gates.
-Workers AI voice (Aura-2 TTS, Whisper/Flux STT).
-Browser scrape, AI Search, Agent Memory.
-ORAL: Operator Response and Action Logic.
+# ORAL
+Evidence gates. Bounded missions. Report out.
 
 # Auth
-Google sign-in for the human board.
-Service tokens / MCP for write APIs.
-llms.txt, agent card, /voice/hello, and this file are public.
+Google for the board.
+Service token / MCP for writes.
+llms.txt, agent card, /voice/hello are public.
 `));
 
 app.get("/robots.txt", (c) => c.text(`# Bot Preference Sync — alfred.report
@@ -500,10 +493,10 @@ app.get("/shortcut.download", async (c) => {
 
 app.get("/voice/hello", async (c) => {
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/voice/hello?v=3", c.req.url).toString(), { method: "GET" });
+  const cacheKey = new Request(new URL("/voice/hello?v=4", c.req.url).toString(), { method: "GET" });
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-  const text = "Alfred, reporting. This is Alfred.report, from OpenRoyleAl. Say Alfred, report — and I will.";
+  const text = "Alfred, report.";
   const audio = await toArrayBuffer(await c.env.AI.run("@cf/deepgram/aura-2-en", { text }));
   const response = new Response(audio, {
     headers: {

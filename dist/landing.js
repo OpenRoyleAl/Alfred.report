@@ -5,7 +5,7 @@ const listen = document.getElementById("listen");
 
 async function report() {
   wake.classList.add("playing");
-  hint.textContent = "Alfred is speaking.";
+  hint.textContent = "…";
   player.src = "/voice/hello";
   try {
     await player.play();
@@ -16,7 +16,7 @@ async function report() {
 
 player.addEventListener("ended", () => {
   wake.classList.remove("playing");
-  hint.textContent = "Click the words. Or say them. He answers.";
+  hint.textContent = "Click. Say it.";
 });
 
 wake.addEventListener("click", report);

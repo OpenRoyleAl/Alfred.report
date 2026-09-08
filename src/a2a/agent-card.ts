@@ -4,7 +4,7 @@ import type { Env } from "../types";
 export function handleAgentCard(env: Env): Response {
   return Response.json({
     name: "Alfred",
-    description: "OpenRoyleAl oral operator. Product: Alfred.report. Wake word: Alfred, report!",
+    description: "ORAL operator. Alfred.report.",
     url: "https://alfred.report",
     provider: { organization: "OpenRoyleAl" },
     version: "2.0.0",

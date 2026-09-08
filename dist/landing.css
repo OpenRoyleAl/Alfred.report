@@ -84,7 +84,7 @@ a:hover { text-decoration: underline; }
   font-family: "Outfit", var(--sans);
   letter-spacing: -0.04em;
   text-transform: none;
-  border-radius: 999px;
+  border-radius: 8px;
 }
 .top-cta.go-max .al { color: #070708; font-weight: 700; }
 .top-cta.go-max .ex { color: #070708; }
@@ -96,20 +96,31 @@ a:hover { text-decoration: underline; }
   justify-content: flex-start;
   align-items: center;
   text-align: center;
-  padding: 32px 24px 40px;
+  padding: 36px 3vw 40px;
   gap: 0;
+}
+.rule {
+  display: block;
+  width: min(72px, 22vw);
+  height: 1px;
+  background: var(--gold);
+  margin: 0 auto 22px;
+  flex-shrink: 0;
+}
+.wake + .rule {
+  margin: 22px auto 18px;
 }
 .wake {
   background: none;
   border: 0;
   color: var(--ink);
   font-family: var(--serif);
-  font-size: min(9vw, 88px);
-  line-height: 1;
-  letter-spacing: -0.05em;
+  font-size: clamp(48px, calc((100vw - 6vw) / 11.4), 176px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
   text-align: center;
   cursor: pointer;
-  padding: 0;
+  padding: 0 2vw;
   width: 100%;
   max-width: 100%;
   white-space: nowrap;
@@ -146,19 +157,20 @@ a:hover { text-decoration: underline; }
 .listen:hover { text-decoration: underline; }
 .ghost, .btn {
   display: inline-block;
-  border: 1px solid var(--gold);
+  border: 0;
+  border-bottom: 1px solid var(--gold);
   background: transparent;
   color: var(--gold);
-  padding: 12px 18px;
+  padding: 6px 0;
   font: 600 13px var(--sans);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
   text-decoration: none;
-  border-radius: 999px;
+  border-radius: 0;
 }
-.ghost:hover, .btn:hover { background: var(--gold); color: #070708; text-decoration: none; }
-.btn { background: var(--gold); color: #070708; }
+.ghost:hover, .btn:hover { background: transparent; color: var(--ink); border-bottom-color: var(--ink); text-decoration: none; }
+.btn { background: transparent; color: var(--gold); }
 .btn-ghost { background: transparent; color: var(--gold); margin-left: 8px; }
 .go-max {
   font-family: "Outfit", var(--sans);
@@ -168,7 +180,10 @@ a:hover { text-decoration: underline; }
   text-transform: none;
   padding: 10px 18px;
   margin-left: 0;
-  border-radius: 999px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--gold);
+  color: #070708;
 }
 .go-max .al { color: #070708; font-weight: 700; }
 .go-max:hover .al { color: var(--gold); }
@@ -186,7 +201,17 @@ a:hover { text-decoration: underline; }
   max-width: 34em;
   margin: 0 auto 40px;
 }
-.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; text-align: left; }
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  text-align: center;
+}
+.grid3 article {
+  padding: 8px 24px;
+  border-left: 1px solid var(--gold);
+}
+.grid3 article:first-child { border-left: 0; }
 .humans-cta .btn-ghost { margin-left: 0; }
 .band-alt {
   background: #0c0c0e;
@@ -204,7 +229,6 @@ a:hover { text-decoration: underline; }
   margin-bottom: 16px;
 }
 .lede em { color: var(--ink); font-style: italic; font-family: var(--serif); }
-.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
 .grid3 h3 { font-size: 15px; margin-bottom: 8px; color: var(--gold); letter-spacing: 0.04em; text-transform: uppercase; }
 .grid3 p { color: var(--muted); font-size: 15px; }
 
@@ -213,8 +237,8 @@ a:hover { text-decoration: underline; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
-  border: 1px solid var(--line);
-  border-radius: 20px;
+  border: 1px solid var(--gold);
+  border-radius: 0;
   overflow: hidden;
   text-align: left;
   max-width: 720px;
@@ -257,15 +281,24 @@ a:hover { text-decoration: underline; }
     padding: 7px 12px;
   }
   .hero {
-    padding: 16px 16px 28px;
+    padding: 20px 10px 28px;
   }
   .wake {
-    font-size: calc((100vw - 24px) / 7.8);
+    font-size: calc((100vw - 20px) / 6.55);
     white-space: nowrap;
     line-height: 1.05;
-    letter-spacing: -0.06em;
+    letter-spacing: -0.025em;
+    padding: 0;
     overflow: hidden;
   }
+  .rule { margin-bottom: 16px; }
+  .wake + .rule { margin: 16px auto 14px; }
+  .grid3 article {
+    border-left: 0;
+    border-top: 1px solid var(--gold);
+    padding: 20px 8px;
+  }
+  .grid3 article:first-child { border-top: 0; }
   .hint { margin-top: 12px; font-size: 16px; }
   .listen { margin-top: 8px; }
   .band { padding: 40px 20px; }

@@ -1,0 +1,9 @@
+# SPA routing for command-os-review
+# Reference: https://developers.cloudflare.com/pages/configuration/redirects/
+#
+# All non-file, non-asset routes fall back to index.html so client-side
+# routing (React Router, Vue Router, etc.) can handle them.
+# Cloudflare Pages automatically skips the rewrite for requests that
+# match a real static file, so assets are served directly.
+
+/*  /index.html  200

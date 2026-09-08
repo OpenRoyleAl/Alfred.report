@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "alfred-report",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "ai": { "binding": "AI" },
+
+  "agent_memory": [
+    {
+      "binding": "ALFRED_MEMORY",
+      "namespace": "alfred"
+    }
+  ],
+
+  "ai_search_namespaces": [
+    { "binding": "AI_SEARCH", "namespace": "default" }
+  ],
+
+  "d1_databases": [
+    { "binding": "DB", "database_name": "alfred-db", "database_id": "4e8eda20-5b52-4823-8aed-60df9a7cb474" }
+  ],
+
+  "r2_buckets": [
+    { "binding": "ALFRED_DATA", "bucket_name": "alfred-data" }
+  ],
+
+  "analytics_engine_datasets": [
+    { "binding": "ALFRED_COP", "dataset": "alfred_cop" }
+  ],
+
+  "vars": {
+    "CF_ACCOUNT_ID": "0870b0bdbc14bcd31f43fe5e82c3ee8e"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "command-os-review",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "node -e \"for (const file of ['dist/index.html','dist/app.js','dist/styles.css']) require('fs').accessSync(file); console.log('Static assets ready')\"",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute alfred-db --local --file=./schemas/schema.sql",
+    "db:remote": "wrangler d1 execute alfred-db --remote --file=./schemas/schema.sql",
+    "db:v2:remote": "wrangler d1 execute alfred-db --remote --file=./schemas/schema-v2.sql",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "@cloudflare/computer": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "wrangler": "^4.0.0"
+  }
+}

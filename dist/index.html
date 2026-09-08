@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Alfred — ORAL operator command center with COP Map" />
+  <title>Alfred — Command Center</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤵</text></svg>" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo">🤵</span>
+        <h1>Alfred</h1>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="missions">Missions</button>
+        <button class="nav-item" data-view="voice">Voice</button>
+        <button class="nav-item" data-view="reports">Reports</button>
+        <button class="nav-item" data-view="cop">COP Map</button>
+        <button class="nav-item" data-view="settings">Settings</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="health-status" class="health-status">Checking...</div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <!-- Dashboard View -->
+      <section id="view-dashboard" class="view active">
+        <h2>Dashboard</h2>
+        <div class="stats-grid" id="stats-grid"></div>
+        <div class="card">
+          <h3>Recent Missions</h3>
+          <div id="recent-missions" class="mission-list"></div>
+        </div>
+        <div class="card">
+          <h3>Alfred Memory Summary</h3>
+          <div id="memory-summary" class="profile-info"></div>
+        </div>
+      </section>
+
+      <!-- Missions View -->
+      <section id="view-missions" class="view">
+        <div class="view-header">
+          <h2>Missions</h2>
+          <button class="btn btn-primary" id="btn-new-mission">+ New Mission</button>
+        </div>
+        <div id="missions-list" class="mission-list"></div>
+      </section>
+
+      <!-- Voice View -->
+      <section id="view-voice" class="view">
+        <h2>Voice Interaction</h2>
+        <div class="voice-container">
+          <div class="voice-status" id="voice-status">
+            <span class="voice-indicator" id="voice-indicator"></span>
+            <span id="voice-status-text">Disconnected</span>
+          </div>
+          <div class="voice-controls">
+            <button class="btn btn-primary btn-large" id="btn-connect-voice">Connect</button>
+            <button class="btn btn-secondary btn-large" id="btn-mic" disabled>🎤 Start Speaking</button>
+          </div>
+          <div class="transcript" id="transcript"></div>
+          <div class="voice-input">
+            <input type="text" id="text-input" placeholder="Type to Alfred..." />
+            <button class="btn btn-primary" id="btn-send-text">Send</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Reports View -->
+      <section id="view-reports" class="view">
+        <div class="view-header">
+          <h2>Reports</h2>
+          <button class="btn btn-primary" id="btn-refresh-reports">Refresh</button>
+        </div>
+        <div id="reports-list" class="report-list"></div>
+      </section>
+
+      <!-- COP Map View -->
+      <section id="view-cop" class="view">
+        <div class="view-header">
+          <h2>COP Map — Common Operational Picture</h2>
+          <button class="btn btn-primary" id="btn-refresh-cop">Refresh</button>
+        </div>
+        <div class="stats-grid" id="cop-stats"></div>
+        <div class="card">
+          <h3>Token Burn Rate per Agent</h3>
+          <div id="cop-burn-rate"></div>
+        </div>
+        <div class="card">
+          <h3>Cost per Mission</h3>
+          <div id="cop-missions"></div>
+        </div>
+        <div class="card">
+          <h3>Active Agents & Status</h3>
+          <div id="cop-agents"></div>
+        </div>
+        <div class="card">
+          <h3>Voice Session Activity</h3>
+          <div id="cop-voice"></div>
+        </div>
+        <div class="card">
+          <h3>AI Gateway Usage</h3>
+          <div id="cop-gateway"></div>
+        </div>
+        <div class="card">
+          <h3>Memory Usage</h3>
+          <div id="cop-memory"></div>
+        </div>
+      </section>
+
+      <!-- Settings View -->
+      <section id="view-settings" class="view">
+        <h2>Settings</h2>
+        <div class="card">
+          <h3>TTS Provider</h3>
+          <select id="tts-provider-select" class="select">
+            <option value="workers-ai">Workers AI (Aura-2) — Free, no API key</option>
+            <option value="mimo">MiMo — Custom provider</option>
+            <option value="openai">OpenAI TTS</option>
+            <option value="xai">xAI</option>
+          </select>
+        </div>
+        <div class="card">
+          <h3>STT Provider</h3>
+          <select id="stt-provider-select" class="select">
+            <option value="workers-ai">Workers AI (Whisper) — Free</option>
+            <option value="deepgram">Deepgram Nova-3</option>
+            <option value="openai">OpenAI Whisper</option>
+          </select>
+        </div>
+        <div class="card">
+          <h3>Voice Model</h3>
+          <select id="voice-model-select" class="select">
+            <option value="aura-2-en">Aura-2 English</option>
+            <option value="aura-1">Aura-1</option>
+            <option value="melotts">MeloTTS (multi-language)</option>
+          </select>
+        </div>
+        <div class="card">
+          <h3>Custom Voice Sample</h3>
+          <p class="muted">Upload a voice sample to customize Alfred's voice.</p>
+          <input type="file" id="voice-sample-upload" accept="audio/wav,audio/mpeg,audio/mp3,audio/ogg,audio/webm" />
+          <button class="btn btn-primary" id="btn-upload-voice">Upload</button>
+          <div id="upload-status" class="upload-status"></div>
+        </div>
+        <button class="btn btn-primary" id="btn-save-settings">Save Settings</button>
+      </section>
+    </main>
+  </div>
+
+  <!-- New Mission Modal -->
+  <div id="modal-new-mission" class="modal hidden">
+    <div class="modal-content">
+      <h3>Create New Mission</h3>
+      <input type="text" id="mission-title" placeholder="Mission title" class="input" />
+      <textarea id="mission-description" placeholder="Description (optional)" class="input textarea"></textarea>
+      <label>Priority (1-10): <input type="number" id="mission-priority" value="5" min="1" max="10" class="input small" /></label>
+      <label>Budget (USD, optional): <input type="number" id="mission-budget" value="" min="0" step="0.01" class="input small" /></label>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-mission">Cancel</button>
+        <button class="btn btn-primary" id="btn-create-mission">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

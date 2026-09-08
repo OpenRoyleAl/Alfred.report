@@ -21,6 +21,25 @@ player.addEventListener("ended", () => {
 
 wake.addEventListener("click", report);
 
+function fitWake() {
+  if (!wake) return;
+  const maxW = Math.max(120, document.documentElement.clientWidth - 12);
+  let lo = 18;
+  let hi = Math.max(40, window.innerWidth * 0.32);
+  for (let i = 0; i < 26; i++) {
+    const mid = (lo + hi) / 2;
+    wake.style.fontSize = mid + "px";
+    if (wake.scrollWidth <= maxW) lo = mid;
+    else hi = mid;
+  }
+  wake.style.fontSize = Math.floor(lo * 100) / 100 + "px";
+}
+
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitWake);
+else fitWake();
+window.addEventListener("resize", fitWake);
+fitWake();
+
 function transcriptIsWake(text) {
   const t = text.toLowerCase().replace(/[!.?,]/g, " ");
   return t.includes("alfred") && t.includes("report");

@@ -93,22 +93,24 @@ a:hover { text-decoration: underline; }
 .hero {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   text-align: center;
-  padding: 4vh 0 5vh;
+  padding: 5vh 12px 6vh;
 }
 .wake {
+  display: inline-block;
   background: none;
   border: 0;
   color: var(--ink);
   font-family: var(--serif);
-  font-size: 12vw;
-  line-height: 1;
-  letter-spacing: 0;
+  font-size: clamp(36px, 7.2vw, 104px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
   text-align: center;
   cursor: pointer;
-  padding: 0 1.2vw;
-  width: 100%;
+  padding: 0;
+  width: auto;
+  max-width: 100%;
   white-space: nowrap;
 }
 .kicker {
@@ -267,12 +269,11 @@ a:hover { text-decoration: underline; }
     padding: 7px 12px;
   }
   .hero {
-    padding: 3vh 0 4vh;
+    padding: 4vh 10px 5vh;
   }
   .wake {
-    font-size: 11.5vw;
-    padding: 0 1vw;
-    letter-spacing: 0;
+    font-size: clamp(32px, 8vw, 72px);
+    letter-spacing: -0.03em;
   }
   .grid3 article {
     border-left: 0;

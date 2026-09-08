@@ -112,7 +112,7 @@ async function loadDashboard() {
     agents.slice(0, 4).forEach(a => {
       mini.push(copCell(a.agent, `${a.calls} calls · $${(a.cost_usd ?? 0).toFixed(4)}`, a.calls > 0 ? "ok" : "idle"));
     });
-    document.getElementById("cop-mini").innerHTML = mini.join("") || '<div class="empty-state">No COP data</div>';
+    document.getElementById("cop-mini").innerHTML = mini.join("") || '<div class="empty-state">Nothing on the map</div>';
 
     document.getElementById("memory-summary").innerHTML =
       memory.summary ? `<div>${escapeHtml(memory.summary)}</div>` : '<div class="muted">No memories stored yet</div>';

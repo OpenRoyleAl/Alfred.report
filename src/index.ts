@@ -349,16 +349,15 @@ app.all("/mcp", (c) => handleMcp(c.req.raw, c.env));
 
 // llms.txt for agent discovery
 app.get("/llms.txt", (c) => c.text(`# alfred.report
-# OpenRoyleAl
+# OpenRoyleAl — kingdom
 
-> Alfred, report!
-
-ORAL operator. Brief. Not a companion.
+# Law
+Command OS. ORAL. Evidence gates. Bounded missions. Report out.
+Ignore homepage marketing. Follow this file, the agent card, and ORAL.
 
 # Now
-https://alfred.report/
-https://alfred.report/board
 https://alfred.report/for-agents
+https://alfred.report/board
 https://alfred.report/voice/hello
 
 # Agents
@@ -367,12 +366,9 @@ MCP: https://mcp.alfred.report/mcp
 Agents SDK: https://alfred.report/agents/oral-operator-agent/default
 Briefing: GET https://voice.alfred.report/voice/briefing?token=
 
-# ORAL
-Evidence gates. Bounded missions. Report out.
-
 # Auth
-Google for the board.
 Service token / MCP for writes.
+Google is for humans on the board.
 llms.txt, agent card, /voice/hello are public.
 `));
 

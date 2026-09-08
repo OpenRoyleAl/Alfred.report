@@ -47,7 +47,7 @@ a:hover { text-decoration: underline; }
   text-decoration: none;
   text-transform: none;
 }
-.brand .al, h2 .al, .foot .al, .go-max .al, .lfgo .al {
+.brand .al, h2 .al, .foot .al, .lfg-max .al {
   font-family: "Outfit", var(--sans);
   font-weight: 600;
   color: var(--gold);
@@ -73,7 +73,7 @@ a:hover { text-decoration: underline; }
   letter-spacing: -0.04em;
   text-transform: none;
 }
-.top-cta.go-max .al { color: #070708; font-weight: 700; }
+.top-cta.lfg-max .al { color: #070708; font-weight: 700; }
 .top-cta:hover { filter: brightness(1.08); text-decoration: none; }
 
 .hero {
@@ -141,7 +141,7 @@ a:hover { text-decoration: underline; }
 .ghost:hover, .btn:hover { background: var(--gold); color: #070708; text-decoration: none; }
 .btn { background: var(--gold); color: #070708; }
 .btn-ghost { background: transparent; color: var(--gold); margin-left: 8px; }
-.lfgo {
+.lfg-max {
   font-family: "Outfit", var(--sans);
   font-size: 22px;
   font-weight: 600;
@@ -150,8 +150,8 @@ a:hover { text-decoration: underline; }
   padding: 16px 28px;
   margin-left: 0;
 }
-.lfgo .al { color: #070708; font-weight: 700; }
-.lfgo:hover .al { color: var(--gold); }
+.lfg-max .al { color: #070708; font-weight: 700; }
+.lfg-max:hover .al { color: var(--gold); }
 
 .band { padding: 88px 6vw; max-width: 1200px; margin: 0 auto; }
 .band-alt {

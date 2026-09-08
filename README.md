@@ -1,18 +1,22 @@
 # Alfred.report
 
-OpenRoyleAl lab. This repo is the live operator.
+Live operator. Kingdom: **OpenRoyleAl**. Law: **Command OS** / **ORAL**.
 
 https://alfred.report
+
+## Humans
+
+The sell. Agents: skip this.
 
 ```
 Alfred, report!
 ```
 
-ORAL. Evidence in. Report out. Brief.
+**LFG Max Al!** — all in. Who’s carrying the boats.
 
-Go Max Al! — all in. LFGo Al! — then go.
+## Law
 
-## Agents
+Agents follow this, not the homepage.
 
 - https://alfred.report/llms.txt
 - https://alfred.report/.well-known/agent.json

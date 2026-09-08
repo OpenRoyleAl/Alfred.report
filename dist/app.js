@@ -40,6 +40,7 @@ async function ensureAccess() {
 
 document.querySelectorAll(".nav-item").forEach(btn => {
   btn.addEventListener("click", () => {
+    if (!btn.dataset.view) return;
     document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     btn.classList.add("active");
@@ -460,7 +461,7 @@ async function loadCopMap() {
     document.getElementById("cop-memory").innerHTML = `
       ${copCell("KV (alfred-command)", `${memory.kv_keys} keys`, "ok")}
       ${copCell("D1 (alfred-db)", `${memory.d1_rows} rows`, "ok")}
-      ${copCell("Agent Memory (alfred)", "Managed by Cloudflare Agent Memory", "idle")}
+      ${copCell("Agent Memory (alfred)", "Managed memory", "idle")}
     `;
   } catch (err) {
     console.error("COP Map error:", err);

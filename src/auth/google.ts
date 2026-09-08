@@ -84,7 +84,7 @@ export async function googleCallback(env: Env, request: Request): Promise<Respon
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
   });
   const headers = new Headers();
-  headers.append("Location", "/");
+  headers.append("Location", "/board");
   headers.append("Set-Cookie", setSessionCookie(signed));
   headers.append("Set-Cookie", "alfred_oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
   return new Response(null, { status: 302, headers });

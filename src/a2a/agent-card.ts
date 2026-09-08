@@ -4,7 +4,9 @@ import type { Env } from "../types";
 export function handleAgentCard(env: Env): Response {
   return Response.json({
     name: "Alfred",
-    description: "ORAL operator — mission execution, voice interaction, report generation",
+    description: "OpenRoyleAl oral operator. Product: Alfred.report. Wake word: Alfred, report!",
+    url: "https://alfred.report",
+    provider: { organization: "OpenRoyleAl" },
     version: "2.0.0",
     capabilities: { streaming: true, pushNotifications: false },
     defaultInputModes: ["text", "voice"],

@@ -38,6 +38,12 @@ app.all("*", async (c, next) => {
   ) {
     return next();
   }
+  if (path === "/board" || path === "/board/") {
+    return c.env.ASSETS.fetch(new Request(new URL("/board.html", c.req.url)));
+  }
+  if (path === "/for-agents" || path === "/for-agents/") {
+    return c.env.ASSETS.fetch(new Request(new URL("/for-agents.html", c.req.url)));
+  }
   const response = await c.env.ASSETS.fetch(c.req.raw);
   if (response.status !== 404) return response;
   return c.env.ASSETS.fetch(new Request(new URL("/index.html", c.req.url)));
@@ -343,42 +349,47 @@ app.all("/mcp", (c) => handleMcp(c.req.raw, c.env));
 
 // llms.txt for agent discovery
 app.get("/llms.txt", (c) => c.text(`# alfred.report
-# AI agent-readable site index
+# OpenRoyleAl — Alfred, the oral operator
 
-# About
-Alfred is an ORAL (Operator Response and Action Logic) operator running on Cloudflare Workers.
-Capabilities: mission execution, voice interaction, report generation, browser scrape, AI Search.
+> Wake word: Alfred, report!
 
-# MCP Endpoint
-https://mcp.alfred.report/mcp
+Alfred is the OpenRoyleAl operator. Humans speak. Agents call. Runtime: Cloudflare Workers.
 
-# A2A Agent Card
-https://alfred.report/.well-known/agent.json
+# Product
+https://alfred.report/
+https://alfred.report/board
+https://alfred.report/voice/hello
 
-# Agents SDK
-https://alfred.report/agents/oral-operator-agent/default
+# Humans
+Say or click "Alfred, report!" for voice.
+Sign in to add Siri: Hey Siri, Alfred report.
+Board: missions, COP Map, voice, reports.
 
-# Voice briefing (Access)
-https://voice.alfred.report/voice/briefing
+# Agents
+A2A card: https://alfred.report/.well-known/agent.json
+MCP: https://mcp.alfred.report/mcp
+Agents SDK: https://alfred.report/agents/oral-operator-agent/default
+Briefing: https://voice.alfred.report/voice/briefing?token=
 
-# Siri shortcut
-https://voice.alfred.report/shortcut.download
+# Capabilities
+Mission execution with evidence gates.
+Workers AI voice (Aura-2 TTS, Whisper/Flux STT).
+Browser scrape, AI Search, Agent Memory.
+ORAL: Operator Response and Action Logic.
 
-# API
-https://command-os-review.icebergmedia.co.uk/api/health
-https://speak.alfred.report/api/tts
-https://voice.alfred.report/ws
-
-# Authentication
-Cloudflare Access service token required for write endpoints.
-Read endpoints (health, agent card, llms.txt) are public.
+# Auth
+Google sign-in for the human board.
+Service tokens / MCP for write APIs.
+llms.txt, agent card, /voice/hello, and this file are public.
 `));
 
 app.get("/robots.txt", (c) => c.text(`# Bot Preference Sync — alfred.report
 User-agent: *
 Allow: /
 Allow: /llms.txt
+Allow: /for-agents
 Allow: /.well-known/agent.json
+Allow: /voice/hello
 
 # Search engines
 User-agent: Googlebot
@@ -485,6 +496,24 @@ app.get("/shortcut.download", async (c) => {
       "Cache-Control": "public, max-age=300",
     },
   });
+});
+
+app.get("/voice/hello", async (c) => {
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/voice/hello?v=3", c.req.url).toString(), { method: "GET" });
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const text = "Alfred, reporting. This is Alfred.report, from OpenRoyleAl. Say Alfred, report — and I will.";
+  const audio = await toArrayBuffer(await c.env.AI.run("@cf/deepgram/aura-2-en", { text }));
+  const response = new Response(audio, {
+    headers: {
+      "Content-Type": "audio/mpeg",
+      "Cache-Control": "public, max-age=3600",
+      "Content-Disposition": 'inline; filename="alfred-report.mp3"',
+    },
+  });
+  c.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
 });
 
 app.get("/voice/briefing", async (c) => {

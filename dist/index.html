@@ -3,220 +3,106 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Alfred — ORAL operator command center with COP Map" />
-  <title>Alfred — Command Center</title>
+  <title>Alfred, report! — Alfred.report by OpenRoyleAl</title>
+  <meta name="description" content="Alfred.report is OpenRoyleAl’s oral operator. Wake word: Alfred, report! Click it. Say it. He answers." />
+  <link rel="canonical" href="https://alfred.report/" />
+  <meta property="og:title" content="Alfred, report! — Alfred.report" />
+  <meta property="og:description" content="OpenRoyleAl’s oral operator. Say the name. Hear the report." />
+  <meta property="og:url" content="https://alfred.report/" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/landing.css?v=5" />
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "name": "OpenRoyleAl",
+        "url": "https://alfred.report"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "Alfred.report",
+        "alternateName": "Alfred, report!",
+        "applicationCategory": "BusinessApplication",
+        "url": "https://alfred.report",
+        "description": "Oral operator from OpenRoyleAl. Wake word: Alfred, report!",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
-  <div id="access-gate" class="access-gate" hidden>
-    <div class="access-panel">
-      <img src="/logo.svg" alt="Alfred" width="48" height="48" />
-      <h1>Alfred</h1>
-      <p>Sign in with Google to open the board and add Alfred to Siri.</p>
-      <a id="access-login" class="btn btn-primary" href="/auth/google">Sign in with Google</a>
+  <a class="skip" href="#product">Skip to product</a>
+  <header class="top">
+    <a class="brand" href="/">
+      <img src="/logo.svg" width="28" height="28" alt="" />
+      <span>OpenRoyle<span class="al">Al</span></span>
+    </a>
+    <nav>
+      <a href="#product">Product</a>
+      <a href="/board">Board</a>
+      <a class="icon-link" href="https://github.com/OpenRoyleAl" aria-label="OpenRoyleAl on GitHub" title="OpenRoyleAl on GitHub">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.35 6.84 9.71.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.3 9.3 0 0 1 12 6.84c.85 0 1.7.12 2.5.34 1.9-1.32 2.74-1.05 2.74-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.38-.01 2.49-.01 2.83 0 .27.18.59.69.49A10.03 10.03 0 0 0 22 12.26C22 6.58 17.52 2 12 2z"/></svg>
+      </a>
+      <a class="top-cta" href="/auth/google">Sign in</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <p class="kicker">Alfred.report</p>
+    <button type="button" id="wake" class="wake" aria-label="Play Alfred, report">
+      Alfred, report<span class="bang">!</span>
+    </button>
+    <p class="hint" id="hint">The wake word is the product. Click it. Say it.</p>
+    <button type="button" id="listen" class="listen">Listen</button>
+    <audio id="player" preload="none"></audio>
+  </section>
+
+  <section id="product" class="band">
+    <h2>You don’t open an app.<br />You call the house.</h2>
+    <p class="lede">Everyone else built another dashboard. We named a butler. <em>Alfred, report!</em> and he speaks.</p>
+    <div class="grid3">
+      <article>
+        <h3>He talks</h3>
+        <p>Not a transcript. A voice. Yours, on demand.</p>
+      </article>
+      <article>
+        <h3>He runs the board</h3>
+        <p>Missions in. Evidence out. You hear when it’s done.</p>
+      </article>
+      <article>
+        <h3>He lives in Siri</h3>
+        <p>Sign in once. Add Alfred to Siri. Then just say it.</p>
+      </article>
     </div>
-  </div>
+  </section>
 
-  <div id="app" hidden>
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <img class="logo" src="/logo.svg" alt="Alfred" width="36" height="36" />
-        <div>
-          <h1>Alfred</h1>
-          <span class="sidebar-tag">Command OS</span>
-        </div>
-      </div>
-      <nav class="nav">
-        <button class="nav-item active" data-view="dashboard">Dashboard</button>
-        <button class="nav-item" data-view="missions">Missions</button>
-        <button class="nav-item" data-view="voice">Voice</button>
-        <button class="nav-item" data-view="reports">Reports</button>
-        <button class="nav-item" data-view="cop">COP Map</button>
-        <button class="nav-item" data-view="settings">Settings</button>
-      </nav>
-      <div class="sidebar-footer">
-        <div id="health-status" class="health-status">Checking...</div>
-      </div>
-    </aside>
+  <section class="band band-alt">
+    <h2>OpenRoyle<span class="al">Al</span></h2>
+    <p class="lede">The lab. The product is the sentence you already said.</p>
+  </section>
 
-    <main class="main">
-      <div id="siri-banner" class="siri-banner" hidden>
-        <div>
-          <h3>Add Alfred to Siri</h3>
-          <p>One tap. Pre-filled GET to your briefing. Name: Alfred report.</p>
-        </div>
-        <a id="btn-siri" class="btn btn-primary" href="#">Add Alfred to Siri</a>
-      </div>
-      <section id="view-dashboard" class="view active">
-        <header class="page-header">
-          <h2>Dashboard</h2>
-          <p class="page-sub">Operational picture for the current board.</p>
-        </header>
-        <div class="stats-grid" id="stats-grid"></div>
-        <div class="dash-grid">
-          <div class="card">
-            <h3>Recent Missions</h3>
-            <div id="recent-missions" class="mission-list"></div>
-          </div>
-          <div class="card">
-            <h3>COP Map</h3>
-            <div id="cop-mini" class="cop-grid"></div>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Alfred Memory Summary</h3>
-          <div id="memory-summary" class="profile-info"></div>
-        </div>
-      </section>
+  <section class="band" id="humans">
+    <h2>Take the board.</h2>
+    <p class="lede">Google in. One tap into Siri. Then the sentence is yours.</p>
+    <p><a class="btn" href="/auth/google">Sign in with Google</a> <a class="btn btn-ghost" href="/board">Open the board</a></p>
+  </section>
 
-      <section id="view-missions" class="view">
-        <div class="view-header">
-          <div>
-            <h2>Missions</h2>
-            <p class="page-sub">Lifecycle, gate, and execution.</p>
-          </div>
-          <button class="btn btn-primary" id="btn-new-mission">New Mission</button>
-        </div>
-        <div class="card table-wrap">
-          <div id="missions-list" class="mission-list"></div>
-        </div>
-      </section>
-
-      <section id="view-voice" class="view">
-        <header class="page-header">
-          <h2>Voice</h2>
-          <p class="page-sub">Live session, transcript, and briefing audio.</p>
-        </header>
-        <div class="voice-container">
-          <div class="voice-status" id="voice-status">
-            <span class="voice-indicator" id="voice-indicator"></span>
-            <span id="voice-status-text">Disconnected</span>
-          </div>
-          <div class="voice-controls">
-            <button class="btn btn-mic" id="btn-mic" disabled>Start speaking</button>
-            <button class="btn btn-primary btn-large" id="btn-connect-voice">Connect</button>
-            <button class="btn btn-secondary btn-large" id="btn-briefing">Play briefing</button>
-          </div>
-          <audio id="voice-player" class="voice-player" controls></audio>
-          <div class="transcript" id="transcript"></div>
-          <div class="voice-input">
-            <input type="text" id="text-input" placeholder="Type to Alfred..." />
-            <button class="btn btn-primary" id="btn-send-text">Send</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="view-reports" class="view">
-        <div class="view-header">
-          <div>
-            <h2>Reports</h2>
-            <p class="page-sub">AI summaries from completed work.</p>
-          </div>
-          <button class="btn btn-primary" id="btn-refresh-reports">Refresh</button>
-        </div>
-        <div id="reports-list" class="report-list"></div>
-      </section>
-
-      <section id="view-cop" class="view">
-        <div class="view-header">
-          <div>
-            <h2>COP Map</h2>
-            <p class="page-sub">Common operational picture.</p>
-          </div>
-          <button class="btn btn-primary" id="btn-refresh-cop">Refresh</button>
-        </div>
-        <div class="stats-grid" id="cop-stats"></div>
-        <div class="cop-layout">
-          <div class="card">
-            <h3>Token Burn Rate per Agent</h3>
-            <div id="cop-burn-rate" class="cop-grid"></div>
-          </div>
-          <div class="card">
-            <h3>Cost per Mission</h3>
-            <div id="cop-missions" class="cop-grid"></div>
-          </div>
-          <div class="card">
-            <h3>Active Agents &amp; Status</h3>
-            <div id="cop-agents" class="cop-grid"></div>
-          </div>
-          <div class="card">
-            <h3>Voice Session Activity</h3>
-            <div id="cop-voice" class="cop-grid"></div>
-          </div>
-          <div class="card">
-            <h3>AI Gateway Usage</h3>
-            <div id="cop-gateway" class="cop-grid"></div>
-          </div>
-          <div class="card">
-            <h3>Memory Usage</h3>
-            <div id="cop-memory" class="cop-grid"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="view-settings" class="view">
-        <header class="page-header">
-          <h2>Settings</h2>
-          <p class="page-sub">TTS and STT providers for this operator.</p>
-        </header>
-        <div class="settings-grid">
-          <div class="card">
-            <h3>TTS Provider</h3>
-            <select id="tts-provider-select" class="select">
-              <option value="workers-ai">Workers AI (Aura-2) — Free, no API key</option>
-              <option value="mimo">MiMo — Custom provider</option>
-              <option value="openai">OpenAI TTS</option>
-              <option value="xai">xAI</option>
-            </select>
-          </div>
-          <div class="card">
-            <h3>STT Provider</h3>
-            <select id="stt-provider-select" class="select">
-              <option value="workers-ai">Workers AI (Whisper) — Free</option>
-              <option value="deepgram">Deepgram Nova-3</option>
-              <option value="openai">OpenAI Whisper</option>
-            </select>
-          </div>
-          <div class="card">
-            <h3>Voice Model</h3>
-            <select id="voice-model-select" class="select">
-              <option value="aura-2-en">Aura-2 English</option>
-              <option value="aura-1">Aura-1</option>
-              <option value="melotts">MeloTTS (multi-language)</option>
-            </select>
-          </div>
-          <div class="card">
-            <h3>Custom Voice Sample</h3>
-            <p class="muted">Upload a voice sample to customize Alfred's voice.</p>
-            <input type="file" id="voice-sample-upload" accept="audio/wav,audio/mpeg,audio/mp3,audio/ogg,audio/webm" />
-            <button class="btn btn-primary" id="btn-upload-voice">Upload</button>
-            <div id="upload-status" class="upload-status"></div>
-            <p class="muted" id="settings-status"></p>
-          </div>
-        </div>
-        <button class="btn btn-primary" id="btn-save-settings">Save Settings</button>
-      </section>
-    </main>
-  </div>
-
-  <div id="modal-new-mission" class="modal hidden">
-    <div class="modal-content">
-      <h3>Create New Mission</h3>
-      <input type="text" id="mission-title" placeholder="Mission title" class="input" />
-      <textarea id="mission-description" placeholder="Description (optional)" class="input textarea"></textarea>
-      <label>Priority (1-10): <input type="number" id="mission-priority" value="5" min="1" max="10" class="input small" /></label>
-      <label>Budget (USD, optional): <input type="number" id="mission-budget" value="" min="0" step="0.01" class="input small" /></label>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="btn-cancel-mission">Cancel</button>
-        <button class="btn btn-primary" id="btn-create-mission">Create</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="/app.js"></script>
+  <footer class="foot">
+    <p>OpenRoyle<span class="al">Al</span></p>
+    <p class="foot-links">
+      <a class="icon-link" href="https://github.com/OpenRoyleAl" aria-label="OpenRoyleAl on GitHub">GitHub</a>
+      ·
+      <span class="mono">Alfred, report!</span>
+    </p>
+  </footer>
+  <script src="/landing.js?v=4"></script>
 </body>
 </html>

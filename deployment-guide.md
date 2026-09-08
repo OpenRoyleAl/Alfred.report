@@ -5,7 +5,7 @@
 npm install -g wrangler@latest
 npx wrangler login
 npx wrangler whoami
-# Account: Iceberg Media (0870b0bdbc14bcd31f43fe5e82c3ee8e)
+# Account: OpenRoyleAl (0870b0bdbc14bcd31f43fe5e82c3ee8e)
 ```
 
 ## Step 1 — Delete Abandoned Workers
@@ -61,7 +61,7 @@ npx wrangler secrets-store secret put CF_API_TOKEN --store alfred-secrets --remo
 
 ## Step 9 — Reserve Cloudflare Wallet Handle
 1. Go to https://cloudflare.pay/
-2. Reserve handle for Iceberg Media
+2. Reserve handle for OpenRoyleAl
 
 ## Step 10 — Enable Cloudflare Access
 For each Worker: enable Access, create policy (email or service token).

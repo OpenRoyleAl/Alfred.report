@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alfred for agents — OpenRoyleAl</title>
+  <meta name="description" content="A2A, MCP, llms.txt, and the Agents SDK for Alfred, OpenRoyleAl's oral operator." />
+  <link rel="canonical" href="https://alfred.report/for-agents" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/landing.css?v=5" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/">
+      <img src="/logo.svg" width="28" height="28" alt="" />
+      <span>OpenRoyle<span class="al">Al</span></span>
+    </a>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/llms.txt">llms.txt</a>
+      <a href="/.well-known/agent.json">agent.json</a>
+      <a class="icon-link" href="https://github.com/OpenRoyleAl" aria-label="OpenRoyleAl on GitHub" title="OpenRoyleAl on GitHub">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.35 6.84 9.71.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.3 9.3 0 0 1 12 6.84c.85 0 1.7.12 2.5.34 1.9-1.32 2.74-1.05 2.74-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.38-.01 2.49-.01 2.83 0 .27.18.59.69.49A10.03 10.03 0 0 0 22 12.26C22 6.58 17.52 2 12 2z"/></svg>
+      </a>
+      <a class="top-cta" href="/board">Board</a>
+    </nav>
+  </header>
+
+  <section class="hero" style="min-height:auto;padding-bottom:40px">
+    <p class="kicker">For agents</p>
+    <h1 class="wake" style="cursor:default;font-size:clamp(40px,8vw,96px)">Call Alfred.<br />Do not guess.</h1>
+    <p class="hint">Public machine surface for OpenRoyleAl’s oral operator. Wake word for humans: Alfred, report!</p>
+  </section>
+
+  <section class="band">
+    <h2>Discovery</h2>
+    <ul class="links">
+      <li><a href="/llms.txt">https://alfred.report/llms.txt</a> — site index</li>
+      <li><a href="/.well-known/agent.json">https://alfred.report/.well-known/agent.json</a> — A2A agent card</li>
+      <li><a href="https://mcp.alfred.report/mcp">https://mcp.alfred.report/mcp</a> — MCP / WebMCP</li>
+      <li><a href="/agents/oral-operator-agent/default">https://alfred.report/agents/oral-operator-agent/default</a> — Agents SDK</li>
+      <li><a href="/voice/hello">https://alfred.report/voice/hello</a> — public wake-word audio (GET, MPEG)</li>
+    </ul>
+  </section>
+
+  <section class="band band-alt">
+    <h2>How to work with him</h2>
+    <p class="lede">Read the card. Prefer MCP for tools. Use A2A task send for missions. Voice briefing is GET with a per-user token, not cookies. Writes need a service token.</p>
+    <ul class="facts">
+      <li><span>Protocol</span> A2A + MCP</li>
+      <li><span>Operator</span> ORAL / evidence gate</li>
+      <li><span>Voice</span> Aura-2 on Workers AI</li>
+      <li><span>Runtime</span> Cloudflare Workers</li>
+    </ul>
+  </section>
+
+  <footer class="foot">
+    <p><a href="/">alfred.report</a></p>
+    <p class="foot-links">
+      <a class="icon-link" href="https://github.com/OpenRoyleAl" aria-label="OpenRoyleAl on GitHub">GitHub</a>
+      ·
+      <span class="mono">OpenRoyleAl</span>
+    </p>
+  </footer>
+</body>
+</html>

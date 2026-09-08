@@ -118,7 +118,16 @@ button, input, select, textarea { font-family: inherit; border-radius: 0; }
   border-left-color: var(--gold);
 }
 
-.sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); }
+.sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.gh-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+.gh-link:hover { color: var(--gold); }
 
 .health-status { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
 .health-status.ok { color: var(--success); }

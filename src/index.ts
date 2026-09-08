@@ -27,7 +27,9 @@ app.all("*", async (c, next) => {
   if (
     path.startsWith("/api") || path.startsWith("/ws") ||
     path.startsWith("/a2a") || path === "/mcp" ||
-    path === "/.well-known/agent.json" || path === "/llms.txt"
+    path.startsWith("/agents") || path.startsWith("/voice") ||
+    path === "/.well-known/agent.json" || path === "/llms.txt" ||
+    path === "/robots.txt"
   ) {
     return next();
   }
@@ -165,23 +167,73 @@ app.get("/api/missions", async (c) => {
   return c.json(missions);
 });
 
+async function missionDo(env: Env, id: string, action: string, body?: unknown): Promise<Response> {
+  const doId = env.MISSION_STATE.idFromName(id);
+  const doStub = env.MISSION_STATE.get(doId);
+  return doStub.fetch(new Request(`https://do/${action}?missionId=${encodeURIComponent(id)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  }));
+}
+
 app.patch("/api/missions/:id/status", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json<{ status: string; result?: unknown; evidence?: unknown[] }>();
   const { status } = body;
-  const doId = c.env.MISSION_STATE.idFromName(id);
-  const doStub = c.env.MISSION_STATE.get(doId);
   const action = status === "active" ? "start" : status === "paused" ? "pause" : status === "completed" ? "complete" : null;
   if (!action) return c.json({ error: "Invalid status transition" }, 400);
   try {
-    return await doStub.fetch(new Request(`https://do/${action}?missionId=${encodeURIComponent(id)}`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }));
+    return await missionDo(c.env, id, action, body);
   } catch (error) {
     console.error("Mission transition failed", error);
     return c.json({ error: "Mission transition failed" }, 500);
   }
+});
+
+app.post("/api/missions/:id/execute", async (c) => {
+  const id = c.req.param("id");
+  const mission = await getMission(c.env, id);
+  if (!mission) return c.json({ error: "Not found" }, 404);
+  const startRes = await missionDo(c.env, id, "start");
+  if (!startRes.ok && startRes.status !== 409) return startRes;
+
+  const urlMatch = `${mission.description || ""} ${mission.title}`.match(/https?:\/\/[^\s]+/i);
+  let scrape: unknown = null;
+  if (urlMatch) {
+    const browserRes = await c.env.AGENT_ALFRED.fetch("https://agent-alfred/internal/browser-task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: urlMatch[0], action: "markdown" }),
+    });
+    scrape = await browserRes.json();
+    await missionDo(c.env, id, "evidence", {
+      evidence: { type: "browser_markdown", url: urlMatch[0], scrape },
+    });
+  } else {
+    await missionDo(c.env, id, "evidence", {
+      evidence: { type: "execution", note: "Mission executed without scrape target" },
+    });
+  }
+
+  const completeRes = await missionDo(c.env, id, "complete", {
+    result: { executed: true, scrape: scrape ? { ok: true, url: urlMatch?.[0] } : null },
+  });
+  const completed = await completeRes.json().catch(() => ({ error: "complete failed" }));
+  return c.json({ missionId: id, start: startRes.status, completed });
+});
+
+app.post("/api/missions/:id/gate", async (c) => {
+  return missionDo(c.env, c.req.param("id"), "gate");
+});
+
+app.post("/api/missions/:id/evidence", async (c) => {
+  const body = await c.req.json<{ evidence: unknown }>();
+  return missionDo(c.env, c.req.param("id"), "evidence", body);
+});
+
+app.get("/api/missions/:id/status", async (c) => {
+  return missionDo(c.env, c.req.param("id"), "status");
 });
 
 app.get("/api/missions/:id/events", async (c) => {
@@ -234,6 +286,10 @@ app.all("/api/oral/*", async (c) => {
   });
 });
 
+app.all("/agents/*", async (c) => {
+  return c.env.AGENT_ALFRED.fetch(c.req.raw);
+});
+
 // ============================================================
 // A2A — agent-to-agent protocol
 // ============================================================
@@ -253,13 +309,19 @@ app.get("/llms.txt", (c) => c.text(`# alfred.report
 
 # About
 Alfred is an ORAL (Operator Response and Action Logic) operator running on Cloudflare Workers.
-Capabilities: mission execution, voice interaction, report generation.
+Capabilities: mission execution, voice interaction, report generation, browser scrape, AI Search.
 
 # MCP Endpoint
 https://mcp.alfred.report/mcp
 
 # A2A Agent Card
 https://alfred.report/.well-known/agent.json
+
+# Agents SDK
+https://alfred.report/agents/oral-operator-agent/default
+
+# Voice briefing (Access)
+https://voice.alfred.report/voice/briefing
 
 # API
 https://command-os-review.icebergmedia.co.uk/api/health
@@ -270,6 +332,87 @@ https://voice.alfred.report/ws
 Cloudflare Access service token required for write endpoints.
 Read endpoints (health, agent card, llms.txt) are public.
 `));
+
+app.get("/robots.txt", (c) => c.text(`# Bot Preference Sync — alfred.report
+User-agent: *
+Allow: /
+Allow: /llms.txt
+Allow: /.well-known/agent.json
+
+# Search engines
+User-agent: Googlebot
+Allow: /
+User-agent: Bingbot
+Allow: /
+
+# AI crawlers: Pay Per Crawl on alfred.report (closed beta).
+User-agent: GPTBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: CCBot
+Allow: /
+`));
+
+async function toArrayBuffer(value: unknown): Promise<ArrayBuffer> {
+  if (value instanceof ArrayBuffer) return value;
+  if (ArrayBuffer.isView(value)) {
+    return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+  }
+  if (value instanceof Blob) return value.arrayBuffer();
+  if (value && typeof (value as ReadableStream).getReader === "function") {
+    return new Response(value as ReadableStream).arrayBuffer();
+  }
+  return new TextEncoder().encode(String(value)).buffer as ArrayBuffer;
+}
+
+app.get("/voice/briefing", async (c) => {
+  const start = Date.now();
+  const userId = c.req.query("user_id") || "hans";
+  const missions = await listMissions(c.env, undefined);
+  const active = missions.filter((m) => m.status === "active" || m.status === "pending");
+  const completedToday = missions.filter((m) => m.status === "completed").slice(0, 3);
+  const cost = await c.env.DB.prepare(
+    `SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM cost_events WHERE created_at >= date('now')`
+  ).first<{ cost: number }>();
+  const lines = [
+    "Good evening. This is Alfred with your operational briefing.",
+    `There are ${active.length} open missions.`,
+    active.slice(0, 5).map((m) => `${m.title}, status ${m.status}.`).join(" "),
+    completedToday.length ? `Recently completed: ${completedToday.map((m) => m.title).join(", ")}.` : "No completed missions on the board.",
+    `Spend today is ${(cost?.cost ?? 0).toFixed(4)} dollars.`,
+    "End of briefing.",
+  ].filter(Boolean).join(" ");
+
+  const audio = await toArrayBuffer(await c.env.AI.run("@cf/deepgram/aura-2-en", { text: lines }));
+  recordCop(c.env, {
+    userId,
+    missionId: "briefing",
+    agent: "voice",
+    provider: "workers-ai",
+    model: "@cf/deepgram/aura-2-en",
+    eventType: "tts",
+    tokensOut: Math.ceil(lines.length / 4),
+    durationMs: Date.now() - start,
+  });
+  await recordCostEvent(c.env, {
+    missionId: null,
+    userId,
+    agent: "voice",
+    provider: "workers-ai",
+    model: "@cf/deepgram/aura-2-en",
+    eventType: "tts",
+    tokensOut: Math.ceil(lines.length / 4),
+    durationMs: Date.now() - start,
+  });
+  return new Response(audio, {
+    headers: {
+      "Content-Type": "audio/mpeg",
+      "Cache-Control": "no-store",
+      "Content-Disposition": 'inline; filename="alfred-briefing.mp3"',
+    },
+  });
+});
 
 // ============================================================
 // Health check

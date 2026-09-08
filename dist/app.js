@@ -86,13 +86,23 @@ async function loadMissions() {
 }
 
 function renderMission(m) {
+  const actions = m.status === "pending" || m.status === "paused"
+    ? `<button class="btn btn-primary btn-small" data-action="execute" data-id="${m.id}">Execute</button>`
+    : m.status === "active"
+      ? `<button class="btn btn-primary btn-small" data-action="execute" data-id="${m.id}">Finish</button>`
+      : m.status === "completed"
+        ? `<button class="btn btn-secondary btn-small" data-action="status" data-id="${m.id}">Status</button>`
+        : "";
   return `
     <div class="mission-item">
       <div class="mission-info">
         <h4>${escapeHtml(m.title)}</h4>
         <p>${m.description ? escapeHtml(m.description) : "No description"} · Priority ${m.priority}${m.budget_usd ? ` · Budget $${m.budget_usd}` : ""}</p>
       </div>
-      <div class="mission-status ${m.status}">${m.status}</div>
+      <div class="mission-meta">
+        <div class="mission-status ${m.status}">${m.status}</div>
+        ${actions}
+      </div>
     </div>
   `;
 }
@@ -128,11 +138,40 @@ document.getElementById("btn-create-mission").addEventListener("click", async ()
     document.getElementById("mission-budget").value = "";
     document.getElementById("modal-new-mission").classList.add("hidden");
     loadMissions();
+    loadDashboard();
   } catch (err) {
     console.error("Create mission error:", err);
     alert("Failed to create mission");
   }
 });
+
+document.getElementById("missions-list").addEventListener("click", handleMissionAction);
+document.getElementById("recent-missions").addEventListener("click", handleMissionAction);
+
+async function handleMissionAction(event) {
+  const btn = event.target.closest("[data-action]");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+  btn.disabled = true;
+  try {
+    if (action === "execute") {
+      const res = await fetch(`${API}/missions/${id}/execute`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Execute failed");
+    } else if (action === "status") {
+      const res = await fetch(`${API}/missions/${id}/status`);
+      const data = await res.json();
+      alert(`Phase: ${data.phase || data.state}\nGate: ${JSON.stringify(data.gateResult || {})}`);
+    }
+    loadMissions();
+    loadDashboard();
+  } catch (err) {
+    alert(err.message || "Mission action failed");
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 // --- Voice ---
 const btnConnect = document.getElementById("btn-connect-voice");
@@ -147,6 +186,25 @@ btnConnect.addEventListener("click", toggleVoiceConnection);
 btnMic.addEventListener("click", toggleMic);
 btnSendText.addEventListener("click", sendText);
 textInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendText(); });
+document.getElementById("btn-briefing").addEventListener("click", playBriefing);
+
+async function playBriefing() {
+  const btn = document.getElementById("btn-briefing");
+  btn.disabled = true;
+  btn.textContent = "Loading briefing…";
+  try {
+    const res = await fetch("/voice/briefing");
+    if (!res.ok) throw new Error("Briefing failed");
+    const buf = await res.arrayBuffer();
+    await playAudio(buf);
+    addTranscript("alfred", "Played operational briefing.");
+  } catch (err) {
+    addTranscript("system", "Could not play briefing.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Play briefing";
+  }
+}
 
 function toggleVoiceConnection() {
   if (voiceWs && voiceWs.readyState === WebSocket.OPEN) {
@@ -276,20 +334,18 @@ document.getElementById("btn-refresh-cop").addEventListener("click", loadCopMap)
 
 async function loadCopMap() {
   try {
-    const [overview, burn, missions, agents, voice, gateway, memory] = await Promise.all([
-      fetch(`${API}/cop/overview`).then(r => r.json()),
-      fetch(`${API}/cop/burn-rate`).then(r => r.json()),
-      fetch(`${API}/cop/missions`).then(r => r.json()),
-      fetch(`${API}/cop/agents`).then(r => r.json()),
-      fetch(`${API}/cop/voice`).then(r => r.json()),
-      fetch(`${API}/cop/gateway`).then(r => r.json()),
-      fetch(`${API}/cop/memory`).then(r => r.json()),
-    ]);
+    const overview = await jsonOrEmpty(`${API}/cop/overview`);
+    const burn = asArray(await jsonOrEmpty(`${API}/cop/burn-rate`));
+    const missions = asArray(await jsonOrEmpty(`${API}/cop/missions`));
+    const agents = asArray(await jsonOrEmpty(`${API}/cop/agents`));
+    const voice = asArray(await jsonOrEmpty(`${API}/cop/voice`));
+    const gateway = asArray(await jsonOrEmpty(`${API}/cop/gateway`));
+    const memory = await jsonOrEmpty(`${API}/cop/memory`);
 
     document.getElementById("cop-stats").innerHTML = `
-      <div class="stat-card"><div class="stat-value">${overview.active_missions}</div><div class="stat-label">Active Missions</div></div>
-      <div class="stat-card"><div class="stat-value">$${overview.cost_today_usd?.toFixed(2) ?? "0.00"}</div><div class="stat-label">Cost Today</div></div>
-      <div class="stat-card"><div class="stat-value">${overview.active_voice_sessions}</div><div class="stat-label">Voice Sessions</div></div>
+      <div class="stat-card"><div class="stat-value">${overview.active_missions ?? 0}</div><div class="stat-label">Active Missions</div></div>
+      <div class="stat-card"><div class="stat-value">$${(overview.cost_today_usd ?? 0).toFixed(2)}</div><div class="stat-label">Cost Today</div></div>
+      <div class="stat-card"><div class="stat-value">${overview.active_voice_sessions ?? 0}</div><div class="stat-label">Voice Sessions</div></div>
       <div class="stat-card"><div class="stat-value">${burn.reduce((s, b) => s + (b.burn_per_min || 0), 0).toFixed(0)}</div><div class="stat-label">Tokens/min</div></div>
     `;
 
@@ -342,16 +398,19 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     stt_provider: document.getElementById("stt-provider-select").value,
     voice_model: document.getElementById("voice-model-select").value,
   };
+  const statusEl = document.getElementById("settings-status");
 
   try {
-    await fetch(`${API}/oral/preferences`, {
+    const res = await fetch(`${API}/oral/preferences`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: currentUserId, ...prefs }),
     });
-    alert("Settings saved");
+    statusEl.textContent = res.ok ? "Settings saved." : "Save failed.";
+    statusEl.className = res.ok ? "muted" : "upload-status error";
   } catch (err) {
-    alert("Failed to save settings");
+    statusEl.textContent = "Failed to save settings";
+    statusEl.className = "upload-status error";
   }
 });
 
@@ -393,6 +452,20 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = String(str);
   return div.innerHTML;
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+async function jsonOrEmpty(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return {};
+    return await res.json();
+  } catch {
+    return {};
+  }
 }
 
 // --- Init ---

@@ -26,11 +26,16 @@
 
   "durable_objects": {
     "bindings": [
-      { "name": "ORCHESTRATOR", "class_name": "Orchestrator" }
+      { "name": "ORCHESTRATOR", "class_name": "Orchestrator" },
+      { "name": "OralOperatorAgent", "class_name": "OralOperatorAgent" }
     ]
   },
   "exports": {
     "Orchestrator": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "OralOperatorAgent": {
       "type": "durable-object",
       "storage": "sqlite"
     }
@@ -58,6 +63,7 @@
     "CF_ACCOUNT_ID": "0870b0bdbc14bcd31f43fe5e82c3ee8e",
     "AI_GATEWAY_ID": "alfred-gateway",
     "AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/0870b0bdbc14bcd31f43fe5e82c3ee8e/alfred-gateway",
-    "ALFRED_PERSONALITY": "warm-british-male-authoritative-concise-dry-wit"
+    "ALFRED_PERSONALITY": "warm-british-male-authoritative-concise-dry-wit",
+    "WALLET_HANDLE": "alfred"
   }
 }

@@ -43,6 +43,8 @@ export interface Env {
   XAI_API_KEY: SecretStoreSecret;
   CF_API_TOKEN: SecretStoreSecret;
 
+  WALLET_HANDLE?: string;
+
   // Non-secret env vars
   ENVIRONMENT: string;
   CF_ACCOUNT_ID: string;

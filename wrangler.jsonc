@@ -83,7 +83,8 @@
     "TTS_PROVIDER": "workers-ai",
     "STT_PROVIDER": "workers-ai",
     "VOICE_MODEL": "aura-2-en",
-    "ALFRED_PERSONALITY": "warm-british-male-authoritative-concise-dry-wit"
+    "ALFRED_PERSONALITY": "warm-british-male-authoritative-concise-dry-wit",
+    "WALLET_HANDLE": "alfred"
   },
 
   "routes": [

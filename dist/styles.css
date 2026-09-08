@@ -309,6 +309,27 @@ body {
   margin-top: 24px;
 }
 
+.mission-item .mission-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-small { padding: 6px 12px; font-size: 12px; }
+
+@media (max-width: 720px) {
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .nav { flex-direction: row; overflow-x: auto; }
+  .main { margin-left: 0; padding: 20px; }
+  .voice-controls { flex-wrap: wrap; }
+}
+
 /* Empty state */
 .empty-state {
   text-align: center;

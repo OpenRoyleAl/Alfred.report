@@ -10,6 +10,14 @@ Reference: https://developers.cloudflare.com/ai-crawl-control/features/pay-per-c
 
 **Status:** Closed beta. Signup: https://www.cloudflare.com/paypercrawl-signup/
 
+## Live status (2026-09-08)
+
+- Zone `alfred.report` (`12ed3e870e61489815a917c1d0bfe8f8`)
+- Public Pay Per Crawl enable API: **not available** on this account (no route for `/ai-crawl-control/pay-per-crawl`; undefined zone setting `pay_per_crawl`). Join the closed beta before a price can be set.
+- Bot Preference Sync: **enabled** via Bot Management (`bot_preference_sync_enabled`, `is_robots_txt_managed`).
+- Worker still serves `/robots.txt` (Allow search engines; Allow identified AI crawlers pending PPC charge).
+- Wallet handle reservation page: `https://cloudflare.pay/?handle=alfred` (early access; no funds).
+
 ## Setup for alfred.report (and 145+ domains)
 
 ### Step 1: Enable in Account Settings

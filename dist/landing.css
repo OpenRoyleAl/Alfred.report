@@ -152,13 +152,6 @@ a:hover { text-decoration: underline; }
 }
 .go-max .al { color: #070708; font-weight: 700; }
 .go-max:hover .al { color: var(--gold); }
-.price {
-  font-family: var(--mono);
-  font-size: clamp(28px, 4vw, 40px);
-  color: var(--ink);
-  margin: 8px 0 16px;
-}
-.price span { color: var(--gold); }
 
 .band { padding: 88px 6vw; max-width: 1200px; margin: 0 auto; }
 .band-alt {
@@ -240,7 +233,6 @@ a:hover { text-decoration: underline; }
   .btn-ghost { display: none; }
   .band h2 { font-size: clamp(48px, 14vw, 72px); }
   .lede { font-size: 22px; }
-  .price { font-size: clamp(36px, 12vw, 56px); }
   .grid3, .facts { grid-template-columns: 1fr; }
   .facts li:nth-child(odd) { border-right: 0; }
   .foot { flex-direction: column; gap: 12px; }

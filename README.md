@@ -14,8 +14,6 @@ Alfred, report!
 
 **Go Max Al!** — the commit.
 
-**LFG Max Al!** — $369/month example. Coming soon.
-
 ## Law
 
 Agents follow this, not the homepage.

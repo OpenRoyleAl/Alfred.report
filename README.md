@@ -12,7 +12,9 @@ The sell. Agents: skip this.
 Alfred, report!
 ```
 
-**LFG Max Al!** — all in. Who’s carrying the boats.
+**Go Max Al!** — the commit.
+
+**LFG Max Al!** — $369/month example. Coming soon.
 
 ## Law
 

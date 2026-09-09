@@ -131,14 +131,16 @@ h2.oral .al-mark {
 }
 .click-cue {
   display: inline-flex;
-  color: var(--gold);
   line-height: 0;
   pointer-events: none;
   flex-shrink: 0;
+  margin-left: 2px;
 }
 .click-cue svg {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
+  transform: scaleX(-1);
+  overflow: visible;
 }
 .say-row {
   display: flex;

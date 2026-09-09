@@ -4,14 +4,50 @@ const player = document.getElementById("player");
 const listen = document.getElementById("listen");
 const SAY = 'Speak it<span class="bang">!</span>';
 
-async function report() {
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+let helloBuf = null;
+let helloLoad = null;
+
+function keepAudio() {
+  if (!AudioCtx) return Promise.resolve();
+  if (!audioCtx) audioCtx = new AudioCtx();
+  if (audioCtx.state === "running") return Promise.resolve();
+  return audioCtx.resume();
+}
+
+function loadHello() {
+  if (helloLoad) return helloLoad;
+  helloLoad = fetch("/voice/hello")
+    .then((r) => r.arrayBuffer())
+    .then((raw) => (audioCtx ? audioCtx.decodeAudioData(raw.slice(0)) : null))
+    .then((buf) => { helloBuf = buf; })
+    .catch(() => { helloLoad = null; });
+  return helloLoad;
+}
+
+async function playHello() {
   wake.classList.add("playing");
   hint.innerHTML = "…";
+  await keepAudio();
+  if (!helloBuf) await loadHello();
+  if (audioCtx && helloBuf && audioCtx.state === "running") {
+    const src = audioCtx.createBufferSource();
+    src.buffer = helloBuf;
+    src.connect(audioCtx.destination);
+    src.onended = () => {
+      wake.classList.remove("playing");
+      hint.innerHTML = SAY;
+    };
+    src.start();
+    return;
+  }
   player.src = "/voice/hello";
   try {
     await player.play();
   } catch {
-    hint.textContent = "Allow audio, then tap again.";
+    wake.classList.remove("playing");
+    hint.innerHTML = SAY;
   }
 }
 
@@ -20,7 +56,10 @@ player.addEventListener("ended", () => {
   hint.innerHTML = SAY;
 });
 
-wake.addEventListener("click", report);
+wake.addEventListener("click", () => {
+  keepAudio();
+  playHello();
+});
 
 function fitWake() {
   if (!wake) return;
@@ -55,24 +94,26 @@ function transcriptIsWake(text) {
 }
 
 async function armMic() {
+  await keepAudio();
+  loadHello();
   listen.classList.add("armed");
-  hint.textContent = "Allow the mic…";
+  hint.textContent = "Listening. Say it.";
   try {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => t.stop());
     }
   } catch {
-    hint.textContent = "Mic blocked. Allow it, then tap again.";
+    hint.textContent = "Mic blocked. Tap again and allow it.";
     listen.classList.remove("armed");
     return;
   }
+  await keepAudio();
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
-    hint.textContent = "This browser will not listen. Tap the words.";
     listen.classList.remove("armed");
-    report();
+    playHello();
     return;
   }
 
@@ -87,7 +128,7 @@ async function armMic() {
   rec.onend = () => { listen.classList.remove("armed"); };
   rec.onresult = (event) => {
     const said = event.results[0][0].transcript;
-    if (transcriptIsWake(said)) report();
+    if (transcriptIsWake(said)) playHello();
     else hint.textContent = "Heard “" + said + "”. Try again.";
   };
   rec.start();

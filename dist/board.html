@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Board — Alfred.report</title>
   <meta name="description" content="ORAL board. Demo without sign-in." />
   <link rel="stylesheet" href="/fonts.css?v=2" />
-  <link rel="stylesheet" href="/styles.css?v=9" />
+  <link rel="stylesheet" href="/styles.css?v=10" />
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
 </head>
 <body>
@@ -17,6 +17,10 @@
         <div>
           <h1>Alfred</h1>
           <span class="sidebar-tag">Command OS</span>
+        </div>
+        <div class="demo-tools">
+          <a class="nav-quiet" href="/auth/google">Sign in</a>
+          <a class="btn btn-primary go-max" href="/auth/google">Go Max <span class="al-mark">Al</span><span class="ex">!</span></a>
         </div>
       </div>
       <nav class="nav">
@@ -31,11 +35,7 @@
       </div>
     </aside>
     <main class="main">
-      <div class="demo-tools">
-        <span class="demo-tag">Demo. Not signed in.</span>
-        <a class="nav-quiet" href="/auth/google">Sign in</a>
-        <a class="btn btn-primary go-max" href="/auth/google">Go Max <span class="al-mark">Al</span><span class="ex">!</span></a>
-      </div>
+      <p class="demo-tag">Demo. Not signed in.</p>
       <section class="demo-view active" id="demo-dash">
         <header class="page-header">
           <h2>Dashboard</h2>

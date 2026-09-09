@@ -24,12 +24,19 @@ wake.addEventListener("click", report);
 
 function fitWake() {
   if (!wake) return;
-  wake.style.fontSize = "80px";
+  const hero = document.querySelector(".hero");
+  let maxW = 0;
+  if (hero) {
+    const cs = getComputedStyle(hero);
+    maxW = hero.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  }
+  if (window.visualViewport) maxW = Math.min(maxW || visualViewport.width, visualViewport.width - 32);
+  if (!maxW) maxW = document.documentElement.clientWidth - 48;
+  wake.style.fontSize = "64px";
   const textW = wake.scrollWidth;
-  const maxW = document.documentElement.clientWidth - 24;
-  if (!textW || maxW < 80) return;
-  const size = 80 * (maxW / textW);
-  wake.style.fontSize = Math.max(28, Math.min(size, 168)) + "px";
+  if (!textW || maxW < 72) return;
+  const size = 64 * ((maxW - 8) / textW);
+  wake.style.fontSize = Math.max(26, Math.min(size, 148)) + "px";
 }
 
 let fitTick;

@@ -1,3 +1,6 @@
+> **QUARANTINED.** Curl examples hit `command-os-review.icebergmedia.co.uk`. Not canon.  
+> Deploy: repo root `npx wrangler deploy`. Live: `https://alfred.report`. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
+
 # Deployment Guide v2 — Alfred Complete System
 
 ## Prerequisites

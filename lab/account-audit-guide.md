@@ -1,3 +1,5 @@
+> **LAB.** Internal CF account notes. Public product is `alfred.report`.
+
 # Account Audit Guide — OpenRoyleAl
 
 ## Dashboard Links

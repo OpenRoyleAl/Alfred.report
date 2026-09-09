@@ -1,3 +1,5 @@
+> **LAB.** `command-os-review` is the Wrangler Worker **name**, not a public hostname.
+
 # Recommended Environment Variables for command-os-review
 
 ## Non-secret variables (set in `wrangler.jsonc` `vars` block)

@@ -1,3 +1,5 @@
+> **LAB.** Card is live at `https://alfred.report/.well-known/agent.json`. Ignore Iceberg hostnames.
+
 # A2A Integration — Agent-to-Agent Communication
 
 ## Overview

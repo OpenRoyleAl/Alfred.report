@@ -193,6 +193,55 @@ h2.oral .al-mark {
 .say-cta .bang { color: #070708; margin-left: 0.22em; }
 .say-cta:hover { filter: none; transform: translateY(2px); box-shadow: 0 4px 0 #6f5710, 0 8px 20px rgba(201, 162, 39, 0.22); }
 .say-cta.armed { transform: translateY(4px); box-shadow: 0 2px 0 #6f5710; }
+.say-cta.reporting {
+  white-space: normal;
+  width: min(92vw, 44rem);
+  max-width: 92vw;
+  font-size: clamp(28px, 5.5vw, 44px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  padding: 18px 22px 28px;
+  text-align: center;
+}
+.k-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.38em 0.42em;
+  min-height: 1.2em;
+}
+.k-word {
+  opacity: 0.38;
+  font-weight: 600;
+}
+.k-word.now {
+  opacity: 1;
+  font-weight: 800;
+}
+.say-cta.reporting #hint,
+.say-cta.reporting .k-host {
+  display: block;
+  position: relative;
+  padding-bottom: 18px;
+}
+.k-ball {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border-radius: 50%;
+  background: #070708;
+  transform: translateX(-50%);
+  animation: k-hop 0.28s ease;
+  pointer-events: none;
+}
+@keyframes k-hop {
+  0% { transform: translateX(-50%) translateY(-10px) scale(0.85); }
+  55% { transform: translateX(-50%) translateY(0) scale(1.12); }
+  100% { transform: translateX(-50%) translateY(0) scale(1); }
+}
 .ghost, .btn {
   display: inline-block;
   border: 0;

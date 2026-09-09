@@ -1,3 +1,6 @@
+> **LAB.** Wrangler Worker id is still `command-os-review`. Public host is `alfred.report`.  
+> Pipeline order is still right: Artifacts → Worker → GitHub vanity.
+
 # Artifacts-to-Worker CI Pipeline
 
 ## Overview

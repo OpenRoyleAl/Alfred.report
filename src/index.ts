@@ -369,13 +369,15 @@ https://alfred.report/voice/hello
 # Agents
 A2A: https://alfred.report/.well-known/agent.json
 MCP: https://mcp.alfred.report/mcp
+MCP auth: Cloudflare Access service token (CF-Access-Client-Id, CF-Access-Client-Secret). No token → 302. Not a public MCP.
 Agents SDK: https://alfred.report/agents/oral-operator-agent/default
 Briefing: GET https://voice.alfred.report/voice/briefing?token=
 
 # Auth
-Service token / MCP for writes.
+Service token for MCP and writes.
 Google is for humans on the board.
 llms.txt, agent card, /voice/hello are public.
+Do not use command-os-review.icebergmedia.co.uk.
 `));
 
 app.get("/robots.txt", (c) => c.text(`# Bot Preference Sync — alfred.report
@@ -494,13 +496,15 @@ app.get("/shortcut.download", async (c) => {
   });
 });
 
+const PUBLIC_REPORT =
+  "Board is live. One open mission: evidence pack. Still in bounds. Cost today, twelve cents. Token burn is light. Nothing failed. That is the report.";
+
 app.get("/voice/demo-brief", async (c) => {
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/voice/demo-brief?v=2", c.req.url).toString(), { method: "GET" });
+  const cacheKey = new Request(new URL("/voice/demo-brief?v=3", c.req.url).toString(), { method: "GET" });
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-  const text = "Yes. One open mission. Evidence pack. Spend today, twelve cents. Token burn is light. That is all.";
-  const audio = await toArrayBuffer(await speakAlfred(c.env.AI, text));
+  const audio = await toArrayBuffer(await speakAlfred(c.env.AI, PUBLIC_REPORT));
   const response = new Response(audio, {
     headers: {
       "Content-Type": "audio/mpeg",
@@ -514,11 +518,10 @@ app.get("/voice/demo-brief", async (c) => {
 
 app.get("/voice/hello", async (c) => {
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/voice/hello?v=5", c.req.url).toString(), { method: "GET" });
+  const cacheKey = new Request(new URL("/voice/hello?v=6", c.req.url).toString(), { method: "GET" });
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-  const text = "Yes. One open mission. Evidence pack. Spend today, twelve cents. Token burn is light. That is all.";
-  const audio = await toArrayBuffer(await speakAlfred(c.env.AI, text));
+  const audio = await toArrayBuffer(await speakAlfred(c.env.AI, PUBLIC_REPORT));
   const response = new Response(audio, {
     headers: {
       "Content-Type": "audio/mpeg",

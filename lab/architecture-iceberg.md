@@ -1,3 +1,6 @@
+> **QUARANTINED.** Names the private Iceberg Worker hostname. Not canon.  
+> Use [`../ARCHITECTURE.md`](../ARCHITECTURE.md). Public host is `alfred.report`.
+
 # Full Application Architecture — Alfred Cloudflare-Native System
 
 ## System Overview

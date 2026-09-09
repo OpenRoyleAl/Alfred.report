@@ -1,3 +1,6 @@
+> **QUARANTINED.** Health-check host is Iceberg. Live MCP is Access-gated.  
+> Canon: [`../ARCHITECTURE.md`](../ARCHITECTURE.md). `https://mcp.alfred.report/mcp` needs a Cloudflare Access **service token** or it 302s.
+
 # WebMCP Integration — Agent Discoverability
 
 ## Overview

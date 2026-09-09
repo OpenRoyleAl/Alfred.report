@@ -18,7 +18,7 @@ function keepAudio() {
 
 function loadHello() {
   if (helloLoad) return helloLoad;
-  helloLoad = fetch("/voice/hello")
+  helloLoad = fetch("/voice/hello?v=5")
     .then((r) => r.arrayBuffer())
     .then((raw) => (audioCtx ? audioCtx.decodeAudioData(raw.slice(0)) : null))
     .then((buf) => { helloBuf = buf; })
@@ -42,7 +42,7 @@ async function playHello() {
     src.start();
     return;
   }
-  player.src = "/voice/hello";
+  player.src = "/voice/hello?v=5";
   try {
     await player.play();
   } catch {

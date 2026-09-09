@@ -130,23 +130,23 @@ h2.oral .al-mark {
   max-width: 100%;
 }
 .click-cue {
-  display: inline-flex;
+  position: absolute;
+  right: 14px;
+  bottom: 4px;
+  display: block;
   line-height: 0;
   pointer-events: none;
-  flex-shrink: 0;
-  margin-left: 2px;
 }
 .click-cue svg {
-  width: 34px;
-  height: 34px;
-  transform: scaleX(-1);
+  width: 28px;
+  height: 28px;
   overflow: visible;
 }
 .say-row {
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
   margin-top: 36px;
 }
 .wake {

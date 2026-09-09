@@ -202,6 +202,7 @@ export interface TTSProvider {
 
 export interface TTSOptions {
   voice?: string;
+  speaker?: string;
   language?: string;
   speed?: number;
 }

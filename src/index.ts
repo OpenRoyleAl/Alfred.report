@@ -4,7 +4,7 @@
 
 import { Hono } from "hono";
 import type { Env } from "./types";
-import { createTTSProvider } from "./voice/tts";
+import { createTTSProvider, speakAlfred } from "./voice/tts";
 import { createSTTProvider } from "./voice/stt";
 import { handleVoiceUpload, getVoiceSample } from "./voice/custom-voice";
 import { getMemorySummary, buildMemoryContext } from "./memory/agent-memory";
@@ -496,11 +496,11 @@ app.get("/shortcut.download", async (c) => {
 
 app.get("/voice/demo-brief", async (c) => {
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/voice/demo-brief?v=1", c.req.url).toString(), { method: "GET" });
+  const cacheKey = new Request(new URL("/voice/demo-brief?v=2", c.req.url).toString(), { method: "GET" });
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-  const text = "This is a demo brief. One open mission: evidence pack. Spend today is twelve cents. Token burn is light. End of briefing.";
-  const audio = await toArrayBuffer(await c.env.AI.run("@cf/deepgram/aura-2-en", { text }));
+  const text = "Yes. One open mission. Evidence pack. Spend today, twelve cents. Token burn is light. That is all.";
+  const audio = await toArrayBuffer(await speakAlfred(c.env.AI, text));
   const response = new Response(audio, {
     headers: {
       "Content-Type": "audio/mpeg",
@@ -514,11 +514,11 @@ app.get("/voice/demo-brief", async (c) => {
 
 app.get("/voice/hello", async (c) => {
   const cache = caches.default;
-  const cacheKey = new Request(new URL("/voice/hello?v=4", c.req.url).toString(), { method: "GET" });
+  const cacheKey = new Request(new URL("/voice/hello?v=5", c.req.url).toString(), { method: "GET" });
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-  const text = "Alfred, report.";
-  const audio = await toArrayBuffer(await c.env.AI.run("@cf/deepgram/aura-2-en", { text }));
+  const text = "Yes. One open mission. Evidence pack. Spend today, twelve cents. Token burn is light. That is all.";
+  const audio = await toArrayBuffer(await speakAlfred(c.env.AI, text));
   const response = new Response(audio, {
     headers: {
       "Content-Type": "audio/mpeg",
@@ -551,7 +551,7 @@ app.get("/voice/briefing", async (c) => {
     "End of briefing.",
   ].filter(Boolean).join(" ");
 
-  const audio = await toArrayBuffer(await c.env.AI.run("@cf/deepgram/aura-2-en", { text: lines }));
+  const audio = await toArrayBuffer(await speakAlfred(c.env.AI, lines));
   recordCop(c.env, {
     userId,
     missionId: "briefing",

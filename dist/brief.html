@@ -7,7 +7,7 @@
   <meta name="description" content="Hear the demo brief. Then gone." />
   <link rel="canonical" href="https://alfred.report/brief" />
   <link rel="stylesheet" href="/fonts.css?v=2" />
-  <link rel="stylesheet" href="/landing.css?v=27" />
+  <link rel="stylesheet" href="/landing.css?v=28" />
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
 </head>
 <body>
@@ -45,7 +45,7 @@
     const player = document.getElementById("brief-player");
     btn.addEventListener("click", async () => {
       btn.classList.add("armed");
-      player.src = "/voice/demo-brief";
+      player.src = "/voice/demo-brief?v=2";
       await player.play();
     });
     player.addEventListener("ended", () => {

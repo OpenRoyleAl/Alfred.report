@@ -5,8 +5,11 @@ import type { Env, SecretStoreSecret, TTSProvider, TTSOptions } from "../types";
 class WorkersAITTS implements TTSProvider {
   constructor(private ai: Ai) {}
   async synthesize(text: string, options?: TTSOptions): Promise<ArrayBuffer> {
-    const model = options?.voice?.startsWith("aura-2") ? "@cf/deepgram/aura-2-en" : "@cf/deepgram/aura-1";
-    const response = await this.ai.run(model, { text, ...(options?.voice && { voice: options.voice }) });
+    const model = options?.voice?.startsWith("aura-1") ? "@cf/deepgram/aura-1" : "@cf/deepgram/aura-2-en";
+    const payload = model.endsWith("aura-1")
+      ? { text }
+      : { text, speaker: options?.speaker || "draco" };
+    const response = await this.ai.run(model, payload);
     return response as ArrayBuffer;
   }
 }
@@ -32,6 +35,12 @@ class OpenAITTS implements TTSProvider {
     if (!response.ok) throw new Error(`OpenAI TTS error: ${response.status}`);
     return response.arrayBuffer();
   }
+}
+
+export const ALFRED_SPEAKER = "draco";
+
+export async function speakAlfred(ai: Ai, text: string) {
+  return ai.run("@cf/deepgram/aura-2-en", { text, speaker: ALFRED_SPEAKER });
 }
 
 export function createTTSProvider(env: Env, provider?: string): TTSProvider {

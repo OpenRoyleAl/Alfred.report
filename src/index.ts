@@ -41,6 +41,12 @@ app.all("*", async (c, next) => {
   if (path === "/board" || path === "/board/") {
     return c.env.ASSETS.fetch(new Request(new URL("/board.html", c.req.url)));
   }
+  if (path === "/evidence" || path === "/evidence/") {
+    return c.env.ASSETS.fetch(new Request(new URL("/evidence.html", c.req.url)));
+  }
+  if (path === "/brief" || path === "/brief/") {
+    return c.env.ASSETS.fetch(new Request(new URL("/brief.html", c.req.url)));
+  }
   if (path === "/for-agents" || path === "/for-agents/") {
     return c.env.ASSETS.fetch(new Request(new URL("/for-agents.html", c.req.url)));
   }

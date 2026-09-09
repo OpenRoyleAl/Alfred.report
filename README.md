@@ -46,8 +46,8 @@ Agents follow this, not the homepage.
 
 ## Source
 
-1. **Cloudflare Artifacts** (`alfred-command/alfred-report`) — source of truth.
-2. Worker deploy from that tree.
-3. This GitHub repo is the public mirror. No secrets. No shortcuts. No vault.
+1. **Cloudflare Artifacts** (`alfred-command/alfred-report`) — git. Source of truth.
+2. **Worker** — the live operator. Artifacts cannot answer `alfred.report`.
+3. **GitHub** — public square. Vanity. Not backup. Not deploy.
 
 Default branch: `v0.3`.

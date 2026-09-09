@@ -3,13 +3,16 @@
 ## Overview
 
 ```
-┌─────────────────┐     ┌─────────────┐     ┌──────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────┐
-│  CF Artifacts    │────▶│  CI Workflow │────▶│  Build   │────▶│  Deploy to   │────▶│  R2 Snapshot │────▶│  GitHub   │
-│  (alfred-command │     │  (Wrangler)  │     │  (Vite)  │     │  Worker      │     │  (backup)    │     │  (mirror)│
-│   namespace)    │     │             │     │          │     │  (wrangler   │     │              │     │  optional│
-│                  │     │             │     │          │     │   deploy)    │     │              │     │          │
-└─────────────────┘     └─────────────┘     └──────────┘     └──────────────┘     └──────────────┘     └──────────┘
+Artifacts (source) → wrangler deploy (Worker = the live app) → GitHub (vanity / square)
 ```
+
+Artifacts is git. It does not serve alfred.report, run voice, or hold sessions.
+
+The Worker is the operator: routes, Google, D1, KV, TTS, MCP, A2A.
+
+R2 on this Worker is for product files (voice samples, mission blobs). A tarball of `dist/` is not a second source of truth — skip it.
+
+GitHub is the public square. Not backup. Not deploy source.
 
 **Key:** Uses `wrangler deploy` (not `wrangler pages deploy`) because
 command-os-review is a Worker with static assets.
@@ -40,15 +43,7 @@ npx wrangler deploy
 npx wrangler deploy --dry-run  # validate first
 ```
 
-### Stage 5 — R2 Snapshot
-```bash
-TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-tar -czf /tmp/snapshot-${TIMESTAMP}.tar.gz -C ./dist .
-npx wrangler r2 object put alfred-snapshots/command-os-review/${TIMESTAMP}.tar.gz \
-  --file /tmp/snapshot-${TIMESTAMP}.tar.gz
-```
-
-### Stage 6 — GitHub Mirror (public, after Artifacts)
+### Stage 5 — GitHub Mirror (public, after Artifacts)
 
 Public repo: `https://github.com/OpenRoyleAl/Alfred.report`
 
@@ -87,16 +82,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 0870b0bdbc14bcd31f43fe5e82c3ee8e
-      - name: R2 Snapshot
-        run: |
-          TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-          tar -czf /tmp/snapshot-${TIMESTAMP}.tar.gz -C ./dist .
-          npx wrangler r2 object put \
-            alfred-snapshots/command-os-review/${TIMESTAMP}.tar.gz \
-            --file /tmp/snapshot-${TIMESTAMP}.tar.gz
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 0870b0bdbc14bcd31f43fe5e82c3ee8e
 ```
 
 ## Pipeline Summary
@@ -107,5 +92,4 @@ jobs:
 | CI trigger | Webhook Worker or GitHub Actions | ✅ (Worker) / ⚠️ (Actions) |
 | Build | Vite / static build | ✅ |
 | Deploy | `wrangler deploy` | ✅ |
-| Snapshot | R2 via `wrangler r2 object put` | ✅ |
-| Mirror | `git push` to GitHub | ❌ (optional) |
+| Mirror | `git push` to GitHub | vanity |

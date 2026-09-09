@@ -34,7 +34,31 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.03em; }
 button, input, select, textarea { font-family: inherit; }
 
 #app { display: flex; min-height: 100vh; }
-#app[hidden], #access-gate[hidden] { display: none !important; }
+#demo { display: flex; min-height: 100vh; }
+#app[hidden], #demo[hidden] { display: none !important; }
+
+.demo-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+.demo-tag {
+  margin-right: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.demo-tools .nav-quiet {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.demo-tools .nav-quiet:hover { color: var(--gold); }
+.demo-view[hidden] { display: none !important; }
 
 .access-gate {
   min-height: 100vh;

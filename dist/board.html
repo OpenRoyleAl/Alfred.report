@@ -3,22 +3,130 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ORAL board." />
   <title>Board — Alfred.report</title>
-  <meta name="robots" content="noindex" />
-  <link rel="stylesheet" href="/fonts.css?v=1" />
-  <link rel="stylesheet" href="/styles.css?v=8" />
+  <meta name="description" content="ORAL board. Demo without sign-in." />
+  <link rel="stylesheet" href="/fonts.css?v=2" />
+  <link rel="stylesheet" href="/styles.css?v=9" />
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
 </head>
 <body>
-  <div id="access-gate" class="access-gate" hidden>
-    <div class="access-panel">
-      <img src="/logo.svg" alt="Alfred" width="48" height="48" />
-      <h1>Alfred</h1>
-      <p>Google in. Board. Siri is a tap.</p>
-      <p class="muted"><a href="/" style="color:inherit">Back to alfred.report</a></p>
-      <a id="access-login" class="btn btn-primary go-max" href="/auth/google" aria-label="Go Max Al">Go Max <span class="al-mark">Al</span><span class="ex">!</span></a>
-    </div>
+  <div id="demo">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img class="logo" src="/logo.svg" alt="" width="36" height="36" />
+        <div>
+          <h1>Alfred</h1>
+          <span class="sidebar-tag">Command OS</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="nav-item" href="/" style="text-decoration:none">Site</a>
+        <button type="button" class="nav-item active" data-demo-view="dash">Dashboard</button>
+        <button type="button" class="nav-item" data-demo-view="missions">Missions</button>
+        <button type="button" class="nav-item" data-demo-view="voice">Voice</button>
+        <button type="button" class="nav-item" data-demo-view="map">Map</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="health-status ok">demo — live look</div>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="demo-tools">
+        <span class="demo-tag">Demo. Not signed in.</span>
+        <a class="nav-quiet" href="/auth/google">Sign in</a>
+        <a class="btn btn-primary go-max" href="/auth/google">Go Max <span class="al-mark">Al</span><span class="ex">!</span></a>
+      </div>
+      <section class="demo-view active" id="demo-dash">
+        <header class="page-header">
+          <h2>Dashboard</h2>
+          <p class="page-sub">What a live board feels like. Sign in to run yours.</p>
+        </header>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value">3</div><div class="stat-label">Missions</div></div>
+          <div class="stat-card"><div class="stat-value">1</div><div class="stat-label">Voice sessions</div></div>
+          <div class="stat-card"><div class="stat-value">$0.12</div><div class="stat-label">Cost today</div></div>
+          <div class="stat-card"><div class="stat-value">1/1/0</div><div class="stat-label">Active / done / failed</div></div>
+        </div>
+        <div class="dash-grid">
+          <div class="card">
+            <h3>Recent Missions</h3>
+            <div class="mission-list">
+              <div class="mission-item">
+                <div class="mission-info">
+                  <h4>Evidence pack — crawl</h4>
+                  <p>In. Bound. Out. · Priority 8</p>
+                </div>
+                <div class="mission-meta"><div class="mission-status active">active</div></div>
+              </div>
+              <div class="mission-item">
+                <div class="mission-info">
+                  <h4>Morning brief</h4>
+                  <p>Wake word. Then gone. · Priority 5</p>
+                </div>
+                <div class="mission-meta"><div class="mission-status completed">completed</div></div>
+              </div>
+              <div class="mission-item">
+                <div class="mission-info">
+                  <h4>Parked: board walkthrough</h4>
+                  <p>Waiting on a human. · Priority 3</p>
+                </div>
+                <div class="mission-meta"><div class="mission-status pending">pending</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Map</h3>
+            <div class="cop-grid">
+              <div class="cop-cell status-live"><h4>Active missions</h4><p>1</p></div>
+              <div class="cop-cell status-ok"><h4>Briefs today</h4><p>1</p></div>
+              <div class="cop-cell status-idle"><h4>Voice</h4><p>idle</p></div>
+              <div class="cop-cell status-warn"><h4>Parked</h4><p>1</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="demo-view" id="demo-missions" hidden>
+        <header class="page-header">
+          <h2>Missions</h2>
+          <p class="page-sub">Lifecycle. Gate. Execution. This list is sample.</p>
+        </header>
+        <div class="card">
+          <div class="mission-list">
+            <div class="mission-item">
+              <div class="mission-info"><h4>Evidence pack — crawl</h4><p>Pages in. Bounds. Report out.</p></div>
+              <div class="mission-meta"><div class="mission-status active">active</div></div>
+            </div>
+            <div class="mission-item">
+              <div class="mission-info"><h4>Morning brief</h4><p>Done. Clip gone.</p></div>
+              <div class="mission-meta"><div class="mission-status completed">completed</div></div>
+            </div>
+            <div class="mission-item">
+              <div class="mission-info"><h4>Parked: board walkthrough</h4><p>Needs a human.</p></div>
+              <div class="mission-meta"><div class="mission-status pending">pending</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="demo-view" id="demo-voice" hidden>
+        <header class="page-header">
+          <h2>Voice</h2>
+          <p class="page-sub">The live mic is on the home page. Sign in for a private session.</p>
+        </header>
+        <p class="page-sub"><a href="/" style="color:var(--gold)">Alfred, report!</a> — click. Speak it.</p>
+      </section>
+      <section class="demo-view" id="demo-map" hidden>
+        <header class="page-header">
+          <h2>Map</h2>
+          <p class="page-sub">Where work stands. Sample cells.</p>
+        </header>
+        <div class="cop-grid">
+          <div class="cop-cell status-live"><h4>Operator</h4><p>ORAL</p></div>
+          <div class="cop-cell status-ok"><h4>Evidence</h4><p>in</p></div>
+          <div class="cop-cell status-ok"><h4>Brief</h4><p>out</p></div>
+          <div class="cop-cell status-idle"><h4>Board</h4><p>demo</p></div>
+        </div>
+      </section>
+    </main>
   </div>
 
   <div id="app" hidden>
@@ -222,6 +330,17 @@
     </div>
   </div>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=8"></script>
+  <script>
+    document.querySelectorAll("#demo [data-demo-view]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#demo [data-demo-view]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        document.querySelectorAll("#demo .demo-view").forEach((v) => { v.hidden = true; });
+        const panel = document.getElementById("demo-" + btn.dataset.demoView);
+        if (panel) panel.hidden = false;
+      });
+    });
+  </script>
 </body>
 </html>

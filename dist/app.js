@@ -10,7 +10,7 @@ let currentUserId = "user-" + (localStorage.getItem("alfred-user-id") || crypto.
 localStorage.setItem("alfred-user-id", currentUserId);
 
 async function ensureAccess() {
-  const gate = document.getElementById("access-gate");
+  const demo = document.getElementById("demo");
   const app = document.getElementById("app");
   const banner = document.getElementById("siri-banner");
   const siriBtn = document.getElementById("btn-siri");
@@ -22,23 +22,17 @@ async function ensureAccess() {
       localStorage.setItem("alfred-user-id", currentUserId);
       if (siriBtn && me.shortcuts_url) siriBtn.href = me.shortcuts_url;
       if (banner) banner.hidden = false;
-      gate.hidden = true;
+      if (demo) demo.hidden = true;
       app.hidden = false;
       return true;
     }
   } catch {}
-  const hosted = location.hostname.endsWith("alfred.report") || location.hostname.includes("command-os-review");
-  if (!hosted) {
-    gate.hidden = true;
-    app.hidden = false;
-    return true;
-  }
-  gate.hidden = false;
+  if (demo) demo.hidden = false;
   app.hidden = true;
   return false;
 }
 
-document.querySelectorAll(".nav-item").forEach(btn => {
+document.querySelectorAll("#app .nav-item").forEach(btn => {
   btn.addEventListener("click", () => {
     if (!btn.dataset.view) return;
     document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));

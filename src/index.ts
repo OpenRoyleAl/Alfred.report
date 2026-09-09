@@ -385,6 +385,7 @@ Allow: /llms.txt
 Allow: /for-agents
 Allow: /.well-known/agent.json
 Allow: /voice/hello
+Allow: /voice/demo-brief
 
 # Search engines
 User-agent: Googlebot
@@ -491,6 +492,24 @@ app.get("/shortcut.download", async (c) => {
       "Cache-Control": "public, max-age=300",
     },
   });
+});
+
+app.get("/voice/demo-brief", async (c) => {
+  const cache = caches.default;
+  const cacheKey = new Request(new URL("/voice/demo-brief?v=1", c.req.url).toString(), { method: "GET" });
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const text = "This is a demo brief. One open mission: evidence pack. Spend today is twelve cents. Token burn is light. End of briefing.";
+  const audio = await toArrayBuffer(await c.env.AI.run("@cf/deepgram/aura-2-en", { text }));
+  const response = new Response(audio, {
+    headers: {
+      "Content-Type": "audio/mpeg",
+      "Cache-Control": "public, max-age=3600",
+      "Content-Disposition": 'inline; filename="alfred-demo-brief.mp3"',
+    },
+  });
+  c.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
 });
 
 app.get("/voice/hello", async (c) => {

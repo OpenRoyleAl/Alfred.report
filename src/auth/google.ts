@@ -8,18 +8,17 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.profile",
 ];
 
-function redirectUri(url: URL): string {
-  return `${url.protocol}//${url.host}/auth/google/callback`;
+function redirectUri(): string {
+  return "https://alfred.report/auth/google/callback";
 }
 
-export function googleStart(env: Env, requestUrl: string): Response {
+export function googleStart(env: Env, _requestUrl: string): Response {
   const clientId = env.GOOGLE_CLIENT_ID;
   if (!clientId) return Response.json({ error: "Google sign-in is not configured" }, { status: 500 });
-  const url = new URL(requestUrl);
   const state = crypto.randomUUID();
   const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   auth.searchParams.set("client_id", clientId);
-  auth.searchParams.set("redirect_uri", redirectUri(url));
+  auth.searchParams.set("redirect_uri", redirectUri());
   auth.searchParams.set("response_type", "code");
   auth.searchParams.set("scope", SCOPES.join(" "));
   auth.searchParams.set("state", state);
@@ -56,7 +55,7 @@ export async function googleCallback(env: Env, request: Request): Promise<Respon
     code,
     client_id: clientId,
     client_secret: clientSecret,
-    redirect_uri: redirectUri(url),
+    redirect_uri: redirectUri(),
     grant_type: "authorization_code",
   });
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {

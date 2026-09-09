@@ -63,6 +63,7 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--gold-dim);
   padding: 18px 20px;
   margin-bottom: 24px;
+  border-radius: 20px;
 }
 .siri-banner[hidden] { display: none !important; }
 .siri-banner h3 {
@@ -137,6 +138,13 @@ button, input, select, textarea { font-family: inherit; }
   font-weight: 600;
 }
 .go-max .ex { margin-left: 0.18em; }
+.go-max .al-mark {
+  font-family: "Outfit", var(--font);
+  font-weight: 700;
+  font-size: 1.08em;
+  letter-spacing: -0.08em;
+  color: inherit;
+}
 
 .health-status { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
 .health-status.ok { color: var(--success); }

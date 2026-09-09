@@ -5,6 +5,7 @@
   --gold: #c9a227;
   --line: #222226;
   --serif: "Instrument Serif", Georgia, serif;
+  --display: "Roboto", "Outfit", system-ui, sans-serif;
   --sans: "Outfit", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
 }
@@ -51,16 +52,22 @@ a:hover { text-decoration: underline; }
 .al-mark {
   font-family: "Outfit", var(--sans);
   font-weight: 700;
-  font-size: 28px;
+  font-size: 1.05em;
   color: var(--gold);
   letter-spacing: -0.08em;
   line-height: 1;
 }
-.brand .al, h2 .al, .foot .al, .go-max .al {
+.brand-al .al-mark { font-size: 28px; }
+.brand .word { font-size: 18px; }
+.go-max .al-mark {
+  font-size: 1.08em;
+  color: #070708;
+}
+.foot .brand { gap: 0; }
+.band h2 .al-mark {
   font-family: "Outfit", var(--sans);
-  font-weight: 600;
-  color: var(--gold);
-  letter-spacing: -0.06em;
+  font-weight: 700;
+  font-size: 0.92em;
 }
 .top nav { display: flex; gap: 22px; align-items: center; }
 .top nav a { color: var(--muted); font-size: 13px; text-decoration: none; }
@@ -86,7 +93,6 @@ a:hover { text-decoration: underline; }
   text-transform: none;
   border-radius: 8px;
 }
-.top-cta.go-max .al { color: #070708; font-weight: 700; }
 .top-cta.go-max .ex { color: #070708; }
 .top-cta:hover { filter: brightness(1.08); text-decoration: none; }
 
@@ -102,10 +108,11 @@ a:hover { text-decoration: underline; }
   background: none;
   border: 0;
   color: var(--ink);
-  font-family: var(--serif);
+  font-family: var(--display);
+  font-weight: 400;
   font-size: clamp(36px, 7.2vw, 104px);
   line-height: 1.05;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   text-align: center;
   cursor: pointer;
   padding: 0;
@@ -122,27 +129,23 @@ a:hover { text-decoration: underline; }
   margin-bottom: 24px;
 }
 .wake:hover, .wake.playing { color: var(--gold); }
-.bang { color: var(--gold); }
-.hint {
-  margin: 0;
-  color: inherit;
-  font-size: inherit;
-  font-family: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-}
-.listen {
-  margin-top: 18px;
-  background: none;
+.wake .bang { color: var(--gold); margin-left: 0.22em; }
+.say-cta {
+  margin-top: 32px;
+  background: var(--gold);
+  color: #070708;
   border: 0;
-  color: var(--gold);
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  border-radius: 8px;
+  font-family: "Outfit", var(--sans);
+  font-size: clamp(17px, 2.6vw, 22px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  padding: 16px 28px;
   cursor: pointer;
 }
-.listen:hover { text-decoration: underline; }
+.say-cta .bang { color: #070708; margin-left: 0.22em; }
+.say-cta:hover { filter: brightness(1.08); }
+.say-cta.armed { opacity: 0.92; }
 .ghost, .btn {
   display: inline-block;
   border: 0;
@@ -173,9 +176,7 @@ a:hover { text-decoration: underline; }
   background: var(--gold);
   color: #070708;
 }
-.go-max .al { color: #070708; font-weight: 700; }
-.go-max:hover .al { color: var(--gold); }
-.go-max:hover .ex { color: var(--gold); }
+.go-max:hover { filter: brightness(1.08); }
 
 .band {
   padding: 56px 6vw;
@@ -210,7 +211,7 @@ a:hover { text-decoration: underline; }
 }
 .lede code { font-family: var(--mono); color: var(--gold); font-size: 0.85em; }
 .band h2 {
-  font-family: var(--serif);
+  font-family: var(--display);
   font-size: clamp(32px, 5vw, 56px);
   line-height: 1.05;
   font-weight: 400;
@@ -243,6 +244,7 @@ a:hover { text-decoration: underline; }
 }
 .facts li:nth-child(odd) { border-right: 1px solid var(--line); }
 .facts li span { color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px; }
+.facts .al-mark { color: var(--gold); font-size: 1em; }
 
 .links { list-style: none; }
 .links li { padding: 10px 0; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 14px; }
@@ -281,8 +283,7 @@ a:hover { text-decoration: underline; }
     padding: 20px 8px;
   }
   .grid3 article:first-child { border-top: 0; }
-  .hint { margin-top: 0; font-size: inherit; }
-  .listen { margin-top: 8px; }
+  .say-cta { margin-top: 22px; padding: 14px 22px; }
   .band { padding: 40px 20px; }
   .band h2 { font-size: clamp(32px, 10vw, 48px); }
   .lede { font-size: 18px; margin-bottom: 24px; }

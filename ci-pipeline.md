@@ -48,11 +48,15 @@ npx wrangler r2 object put alfred-snapshots/command-os-review/${TIMESTAMP}.tar.g
   --file /tmp/snapshot-${TIMESTAMP}.tar.gz
 ```
 
-### Stage 6 — GitHub Mirror (optional)
+### Stage 6 — GitHub Mirror (public, after Artifacts)
+
+Public repo: `https://github.com/OpenRoyleAl/Alfred.report`
+
 ```bash
-git remote add github https://github.com/<org>/command-os-review.git
-git push github main --force
+git push origin v0.3
 ```
+
+Never push secrets, vault files, or Siri shortcuts. Artifacts first. GitHub second.
 
 ## GitHub Actions Workflow (Option B)
 

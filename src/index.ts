@@ -377,7 +377,6 @@ Briefing: GET https://voice.alfred.report/voice/briefing?token=
 Service token for MCP and writes.
 Google is for humans on the board.
 llms.txt, agent card, /voice/hello are public.
-Do not use command-os-review.icebergmedia.co.uk.
 `));
 
 app.get("/robots.txt", (c) => c.text(`# Bot Preference Sync — alfred.report

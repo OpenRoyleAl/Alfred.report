@@ -97,7 +97,6 @@
   },
 
   "routes": [
-    { "pattern": "command-os-review.icebergmedia.co.uk/*", "zone_name": "icebergmedia.co.uk" },
     { "pattern": "alfred.report/*", "zone_name": "alfred.report" },
     { "pattern": "voice.alfred.report/*", "zone_name": "alfred.report" },
     { "pattern": "speak.alfred.report/*", "zone_name": "alfred.report" },

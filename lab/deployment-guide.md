@@ -1,4 +1,4 @@
-> **QUARANTINED.** Curl examples hit `command-os-review.icebergmedia.co.uk`. Not canon.  
+> **QUARANTINED.** Not canon.  
 > Deploy: repo root `npx wrangler deploy`. Live: `https://alfred.report`. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 # Deployment Guide v2 — Alfred Complete System
@@ -91,29 +91,29 @@ cd .. && npm ci && npm run build && npx wrangler deploy
 ```
 
 ## Step 14 — Set Up Custom Domains
-- command-os-review.icebergmedia.co.uk
+- alfred.report
 - voice.alfred.report
 - speak.alfred.report
 - mcp.alfred.report
 
 ## Step 15 — Enable Web Analytics
-Dashboard: Web Analytics > Add site > command-os-review.icebergmedia.co.uk
+Dashboard: Web Analytics > Add site > alfred.report
 
 ## Step 16 — Set Budget Alerts
 Dashboard: Manage Account > Billing > Billable Usage > Budget alerts
 
 ## Step 17 — Verify
 ```bash
-curl https://command-os-review.icebergmedia.co.uk/api/health
-curl https://command-os-review.icebergmedia.co.uk/api/cop/overview
+curl https://alfred.report/api/health
+curl https://alfred.report/api/cop/overview
 curl -X POST https://speak.alfred.report/api/tts \
   -H "Content-Type: application/json" \
   -d '{"text": "Good evening. Alfred at your service."}' --output test.mp3
 curl -X POST https://mcp.alfred.report/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"initialize","id":1}'
-curl https://command-os-review.icebergmedia.co.uk/.well-known/agent.json
-curl https://command-os-review.icebergmedia.co.uk/llms.txt
+curl https://alfred.report/.well-known/agent.json
+curl https://alfred.report/llms.txt
 ```
 
 ## Resource Summary

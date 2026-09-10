@@ -45,7 +45,7 @@ Agents follow this, not the homepage. Architecture: [`ARCHITECTURE.md`](ARCHITEC
 | MCP | Access. Service token. https://mcp.alfred.report/mcp — unauthenticated **302** |
 | Protocol | https://alfred.report/for-agents |
 
-Do not wire `command-os-review.icebergmedia.co.uk`. That is a private Worker route. The Wrangler name `command-os-review` is an id, not the product.
+The Wrangler Worker name is an internal id. Product host is alfred.report.
 
 ## Source
 

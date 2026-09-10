@@ -1,4 +1,4 @@
-> **QUARANTINED.** Names the private Iceberg Worker hostname. Not canon.  
+> **QUARANTINED.** Old diagram. Not canon.  
 > Use [`../ARCHITECTURE.md`](../ARCHITECTURE.md). Public host is `alfred.report`.
 
 # Full Application Architecture — Alfred Cloudflare-Native System
@@ -13,7 +13,7 @@
 │  │  command-os-review (Worker + Static Assets)                  │        │
 │  │  Frontend + API Gateway Worker                                │        │
 │  │  Routes:                                                      │        │
-│  │    command-os-review.icebergmedia.co.uk  → Static UI          │        │
+│  │    alfred.report  → Static UI          │        │
 │  │    voice.alfred.report                   → WebSocket voice    │        │
 │  │    speak.alfred.report                   → HTTP TTS endpoint   │        │
 │  │  Bindings:                                                    │        │
@@ -60,7 +60,7 @@ The unified frontend and API gateway. Migrated from Pages to Worker
 with Static Assets for full Worker capabilities.
 
 **Routes:**
-- `command-os-review.icebergmedia.co.uk` — Static UI
+- `alfred.report` — Static UI
 - `voice.alfred.report/ws/:sessionId` — WebSocket voice sessions
 - `speak.alfred.report/api/tts` — HTTP TTS endpoint
 - `speak.alfred.report/api/stt` — HTTP STT endpoint

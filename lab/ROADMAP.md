@@ -1,6 +1,5 @@
 > **LAB / ROADMAP — not live canon.**  
 > Public truth: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) and [`../README.md`](../README.md).  
-> Live host: `https://alfred.report`. Do not wire `command-os-review.icebergmedia.co.uk`.  
 > This file mixes **shipped** and **wishlist** (WriteGuard / Kitesurf / “name unconfirmed”). Trust the Status column only.
 
 # Architecture v2 — Alfred on the 2026 Agent Stack

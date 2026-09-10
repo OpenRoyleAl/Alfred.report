@@ -3,7 +3,7 @@
 Canon. Matches live. Lab notes: [`lab/`](lab/README.md).
 
 **Public host is `https://alfred.report`.**  
-Wrangler Worker name `command-os-review` is an internal id. A leftover route on `command-os-review.icebergmedia.co.uk` is private. Do not put it in agent configs.
+Wrangler Worker name `command-os-review` is an internal id, not a hostname.
 
 ```
 Artifacts (alfred-command / alfred-report)  →  git

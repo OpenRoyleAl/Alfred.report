@@ -1,0 +1,202 @@
+/* alfred-pi install face — pi.dev soul, Alfred.report skin */
+
+.pi-hero {
+  min-height: auto;
+  padding: 8vh var(--page-x) 4vh;
+}
+
+.pi-hero h1 {
+  font-family: var(--display);
+  font-size: clamp(36px, 7vw, 72px);
+  line-height: 1.08;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  max-width: 18ch;
+  margin: 0 auto 20px;
+}
+
+.pi-hero .lede {
+  margin-bottom: 32px;
+}
+
+.install-stack {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  text-align: left;
+}
+
+.install-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--line);
+  background: #0c0c0e;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.install-row code {
+  flex: 1;
+  display: block;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.install-row .copy {
+  flex: 0 0 auto;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.install-row .copy:hover,
+.install-row .copy.copied {
+  color: var(--gold);
+  background: rgba(201, 162, 39, 0.08);
+}
+
+.install-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 8px;
+}
+
+.install-label:first-child {
+  margin-top: 0;
+}
+
+.cmd-list {
+  list-style: none;
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.cmd-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  align-items: baseline;
+}
+
+.cmd-list li:last-child {
+  border-bottom: 0;
+}
+
+.cmd-list code {
+  font-family: var(--mono);
+  color: var(--gold);
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.cmd-list span {
+  color: var(--muted);
+}
+
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  max-width: 960px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.platform-card {
+  padding: 24px 22px;
+  border-left: 1px solid var(--gold);
+}
+
+.platform-card:first-child {
+  border-left: 0;
+}
+
+.platform-card h3 {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+
+.platform-card p,
+.platform-card ul {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.platform-card ul {
+  margin-top: 10px;
+  padding-left: 18px;
+}
+
+.todo-note {
+  max-width: 720px;
+  margin: 28px auto 0;
+  padding: 16px 18px;
+  border: 1px dashed var(--gold);
+  color: var(--muted);
+  font-size: 14px;
+  text-align: left;
+  border-radius: 10px;
+}
+
+.todo-note strong {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.pi-nav a.pi-active {
+  color: var(--gold);
+}
+
+@media (max-width: 800px) {
+  .cmd-list li {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .platform-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .platform-card {
+    border-left: 0;
+    border-top: 1px solid var(--gold);
+    padding: 20px 8px;
+  }
+
+  .platform-card:first-child {
+    border-top: 0;
+  }
+
+  .install-row code {
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+}

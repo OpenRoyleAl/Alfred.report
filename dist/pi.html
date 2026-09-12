@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>alfred-pi — local harness</title>
+  <meta name="description" content="Default local harness for Alfred.report. Wake word, slug sessions, your Cloudflare AI Gateway." />
+  <link rel="canonical" href="https://alfred.report/pi" />
+  <meta property="og:title" content="alfred-pi — local harness" />
+  <meta property="og:description" content="Install alfred-pi. Say Alfred.report! Resume sessions by kebab slug." />
+  <meta property="og:url" content="https://alfred.report/pi" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Alfred.report" />
+  <meta property="og:image" content="https://alfred.report/og.png?v=5" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="stylesheet" href="/fonts.css?v=2" />
+  <link rel="stylesheet" href="/landing.css?v=30" />
+  <link rel="stylesheet" href="/pi.css?v=1" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+</head>
+<body>
+  <header class="top">
+    <a class="brand brand-al" href="/" aria-label="Alfred.report">
+      <span class="al-mark">Al</span>
+    </a>
+    <nav class="pi-nav">
+      <a href="/pi" class="pi-active">alfred-pi</a>
+      <a href="/download">Download</a>
+      <a href="/login">Sign in</a>
+      <a class="top-cta go-max" href="/login">Alfred.report<span class="ex">!</span></a>
+    </nav>
+  </header>
+
+  <section class="hero pi-hero">
+    <p class="kicker">alfred-pi</p>
+    <h1>There are many agent harnesses but this one is yours</h1>
+    <p class="lede">alfred-pi is the default local harness for <a href="/">Alfred.report</a>. Your machine. Your Cloudflare <code>alfred-ai-gateway</code> for Workers AI neuron metering. Wake word <strong>Alfred.report!</strong> Slug sessions resume with <code>alfred report &lt;slug&gt;</code>.</p>
+
+    <div class="install-stack" id="install">
+      <p class="install-label">Unix / macOS / Linux</p>
+      <div class="install-row">
+        <code>curl -fsSL https://alfred.report/install.sh | sh</code>
+        <button type="button" class="copy" aria-label="Copy curl install">Copy</button>
+      </div>
+
+      <p class="install-label">Windows (PowerShell)</p>
+      <div class="install-row">
+        <code>powershell -c "irm https://alfred.report/install.ps1 | iex"</code>
+        <button type="button" class="copy" aria-label="Copy PowerShell install">Copy</button>
+      </div>
+
+      <p class="install-label">npm</p>
+      <div class="install-row">
+        <code>npm install -g --ignore-scripts @openroyleal/alfred-pi</code>
+        <button type="button" class="copy" aria-label="Copy npm install">Copy</button>
+      </div>
+
+      <p class="install-label">pnpm</p>
+      <div class="install-row">
+        <code>pnpm add -g --ignore-scripts @openroyleal/alfred-pi</code>
+        <button type="button" class="copy" aria-label="Copy pnpm install">Copy</button>
+      </div>
+
+      <p class="install-label">bun</p>
+      <div class="install-row">
+        <code>bun add -g --ignore-scripts @openroyleal/alfred-pi</code>
+        <button type="button" class="copy" aria-label="Copy bun install">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Why alfred-pi?</h2>
+    <p class="lede">A minimal local harness wired to your kingdom. Voice-first. Session trees keyed by human-readable kebab slugs — never <code>mb-</code> prefixes, never dashed UUIDs in the UI.</p>
+    <ul class="facts">
+      <li><span>Harness</span> Local default for Alfred.report</li>
+      <li><span>Gateway</span> Your CF alfred-ai-gateway</li>
+      <li><span>Metering</span> Workers AI neurons via gateway</li>
+      <li><span>Wake word</span> Alfred.report!</li>
+      <li><span>Sessions</span> <code>alfred report &lt;slug&gt;</code></li>
+      <li><span>Login</span> <a href="/login">/login</a> — sign in | sign up</li>
+    </ul>
+  </section>
+
+  <section class="band band-alt">
+    <h2>CLI — locked UX</h2>
+    <p class="lede">Commands as shipped. No aliases in docs.</p>
+    <ul class="cmd-list">
+      <li><code>install alfred report</code><span>First-time install (installer scripts run this)</span></li>
+      <li><code>alfred report</code><span>Wake word on first launch — starts a new session</span></li>
+      <li><code>alfred report update</code><span>Update the harness</span></li>
+      <li><code>update alfred report</code><span>Same update, alternate word order</span></li>
+      <li><code>alfred report &lt;slug&gt;</code><span>Resume a slug session (kebab-case only)</span></li>
+      <li><code>/login</code><span>Alfred.report! — sign in or sign up with your Cloudflare account</span></li>
+    </ul>
+    <p class="todo-note"><strong>TODO:</strong> Wire <code>alfred-mem</code> to auto-rename sessions to meaty kebab slugs from context. Stub today — humans still pick slugs; UUIDs stay internal.</p>
+  </section>
+
+  <section class="band">
+    <h2>Session slugs</h2>
+    <p class="lede">Humans see kebab slugs only: <code>evidence-pack</code>, <code>board-brief</code>, <code>go-max-al</code>. No <code>mb-</code> prefixes. No dashed UUIDs in the terminal or UI. Internal ids stay internal.</p>
+    <div class="grid3">
+      <a class="tile" href="/download">
+        <h3>Download</h3>
+        <p>Windows, Mac, Linux.</p>
+      </a>
+      <a class="tile" href="/login">
+        <h3>Login</h3>
+        <p>Link your CF account.</p>
+      </a>
+      <a class="tile" href="/for-agents">
+        <h3>Agents</h3>
+        <p>Law, not the sell.</p>
+      </a>
+    </div>
+  </section>
+
+  <section class="band band-alt">
+    <h2>Voice</h2>
+    <p class="lede">Local STT/TTS through your gateway. Deep voice path is stubbed — wake audio ships from <a href="/voice/hello">/voice/hello</a> until local voice lands.</p>
+    <p class="todo-note"><strong>TODO:</strong> Local voice loop (mic → gateway → speaker). Gateway binding and neuron metering are real; on-device voice is next.</p>
+  </section>
+
+  <footer class="foot">
+    <a class="brand" href="https://openroyleal.com">
+      <span class="word">OpenRoyle</span><span class="al-mark">Al</span>
+    </a>
+    <a class="icon-link" href="https://github.com/OpenRoyleAl/Alfred.report" aria-label="OpenRoyleAl on GitHub" title="OpenRoyleAl on GitHub">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.35 6.84 9.71.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.3 9.3 0 0 1 12 6.84c.85 0 1.7.12 2.5.34 1.9-1.32 2.74-1.05 2.74-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.38-.01 2.49-.01 2.83 0 .27.18.59.69.49A10.03 10.03 0 0 0 22 12.26C22 6.58 17.52 2 12 2z"/></svg>
+    </a>
+  </footer>
+  <script src="/pi.js?v=1"></script>
+</body>
+</html>

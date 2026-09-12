@@ -37,6 +37,14 @@
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
 
+# --- Install scripts (served from dist/) ---
+/install.sh
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300
+/install.ps1
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300
+
 # --- Documents and data ---
 /*.json
   Cache-Control: public, max-age=0, must-revalidate

@@ -50,6 +50,15 @@ app.all("*", async (c, next) => {
   if (path === "/for-agents" || path === "/for-agents/") {
     return c.env.ASSETS.fetch(new Request(new URL("/for-agents.html", c.req.url)));
   }
+  if (path === "/pi" || path === "/pi/") {
+    return c.env.ASSETS.fetch(new Request(new URL("/pi.html", c.req.url)));
+  }
+  if (path === "/download" || path === "/download/") {
+    return c.env.ASSETS.fetch(new Request(new URL("/download.html", c.req.url)));
+  }
+  if (path === "/login" || path === "/login/") {
+    return c.env.ASSETS.fetch(new Request(new URL("/login.html", c.req.url)));
+  }
   const response = await c.env.ASSETS.fetch(c.req.raw);
   if (response.status !== 404) return response;
   return c.env.ASSETS.fetch(new Request(new URL("/index.html", c.req.url)));
@@ -362,6 +371,9 @@ Command OS. ORAL. Evidence gates. Bounded missions. Report out.
 Ignore homepage marketing. Follow this file, the agent card, and ORAL.
 
 # Now
+https://alfred.report/pi
+https://alfred.report/download
+https://alfred.report/install.sh
 https://alfred.report/for-agents
 https://alfred.report/board
 https://alfred.report/voice/hello
@@ -383,6 +395,11 @@ app.get("/robots.txt", (c) => c.text(`# Bot Preference Sync — alfred.report
 User-agent: *
 Allow: /
 Allow: /llms.txt
+Allow: /pi
+Allow: /download
+Allow: /install.sh
+Allow: /install.ps1
+Allow: /login
 Allow: /for-agents
 Allow: /.well-known/agent.json
 Allow: /voice/hello

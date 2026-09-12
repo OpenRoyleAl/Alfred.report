@@ -30,7 +30,17 @@ Voice: Workers AI Aura-2, speaker Draco. Public GET: `/voice/hello`.
 
 ### Open without a login
 
-`/`, `/board` (demo), `/evidence`, `/brief`, `/for-agents`, `/llms.txt`, `/.well-known/agent.json`, `/voice/hello`, `/voice/demo-brief`.
+`/`, `/pi`, `/download`, `/login`, `/install.sh`, `/install.ps1`, `/board` (demo), `/evidence`, `/brief`, `/for-agents`, `/llms.txt`, `/.well-known/agent.json`, `/voice/hello`, `/voice/demo-brief`.
+
+### alfred-pi (local harness)
+
+Public install face at `/pi` and `/download`. One-liners:
+
+- `curl -fsSL https://alfred.report/install.sh | sh`
+- `powershell -c "irm https://alfred.report/install.ps1 | iex"`
+- `npm|pnpm|bun add -g @openroyleal/alfred-pi`
+
+CLI UX (locked): `alfred report`, `alfred report <slug>`, `alfred report update`, `/login`. Human session ids are kebab slugs only — no `mb-`, no dashed UUIDs in UI. `alfred-mem` auto-rename is documented; wire is stub.
 
 ### Not open
 

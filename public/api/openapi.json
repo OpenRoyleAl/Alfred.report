@@ -1,0 +1,333 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Alfred.report API",
+    "description": "REST and Voice API for Alfred — the voice-first AI Chief of Staff and agent execution engine on Cloudflare.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Alfred.report Support",
+      "url": "https://alfred.report/contact",
+      "email": "hans@icebergmedia.co.uk"
+    },
+    "license": {
+      "name": "Proprietary",
+      "url": "https://alfred.report/privacy"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://alfred.report",
+      "description": "Alfred.report REST API"
+    },
+    {
+      "url": "https://voice.alfred.report",
+      "description": "Voice & Neural Audio Engine"
+    }
+  ],
+  "paths": {
+    "/voice/briefing": {
+      "get": {
+        "summary": "Generate spoken status briefing",
+        "description": "Synthesizes an audio briefing of all active, gated, and closed missions for the authenticated tenant.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "description": "Session token generated during onboarding",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audio WAV stream of spoken briefing",
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters"
+          },
+          "500": {
+            "description": "TTS synthesis failure"
+          }
+        }
+      }
+    },
+    "/voice": {
+      "get": {
+        "summary": "Text to speech synthesis (GET)",
+        "description": "Converts arbitrary text into voice audio using tenant persona style.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "text",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "style",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audio stream in WAV format",
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Text to speech synthesis (POST)",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" },
+                  "style": { "type": "string" }
+                },
+                "required": ["text"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Audio stream in WAV format",
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth": {
+      "get": {
+        "summary": "Issue Siri Shortcut token",
+        "description": "Mints a session token in D1 and redirects to the iPhone onboarding screen.",
+        "responses": {
+          "302": {
+            "description": "Redirects to https://iphone.alfred.report/?token={TOKEN}"
+          }
+        }
+      }
+    },
+    "/api/command/stats": {
+      "get": {
+        "summary": "Get 24-hour mission statistics",
+        "description": "Returns counts of completed missions, total token burn, and budget metrics.",
+        "responses": {
+          "200": {
+            "description": "Mission metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandStats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/command/missions": {
+      "get": {
+        "summary": "List missions",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["active", "gated", "complete", "failed", "aborted", "drafted"]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of mission objects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Mission"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new mission",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMissionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created mission object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mission"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "System health check",
+        "responses": {
+          "200": {
+            "description": "Service status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ok" },
+                    "domain": { "type": "string", "example": "alfred.report" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Mission": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "objective": { "type": "string" },
+          "state": {
+            "type": "string",
+            "enum": ["drafted", "active", "gated", "complete", "failed", "aborted"]
+          },
+          "budget": {
+            "type": "object",
+            "properties": {
+              "max_usd": { "type": "number" },
+              "max_tokens": { "type": "integer" },
+              "used_tokens": { "type": "integer" },
+              "spend_usd": { "type": "number" }
+            }
+          },
+          "acceptance": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "check": { "type": "string" },
+                "passed": { "type": "boolean" },
+                "summary": { "type": "string" }
+              }
+            }
+          },
+          "created_at": { "type": "integer" },
+          "updated_at": { "type": "integer" }
+        },
+        "required": ["id", "objective", "state", "created_at", "updated_at"]
+      },
+      "CreateMissionInput": {
+        "type": "object",
+        "properties": {
+          "objective": { "type": "string" },
+          "acceptance": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "budget": {
+            "type": "object",
+            "properties": {
+              "max_usd": { "type": "number" },
+              "max_tokens": { "type": "integer" }
+            }
+          }
+        },
+        "required": ["objective"]
+      },
+      "CommandStats": {
+        "type": "object",
+        "properties": {
+          "closed_24h": { "type": "integer" },
+          "burn_24h_usd": { "type": "number" },
+          "active_count": { "type": "integer" },
+          "gated_count": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

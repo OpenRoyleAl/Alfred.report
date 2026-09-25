@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About Alfred — Voice-First AI Chief of Staff</title>
+  <meta name="description" content="Learn about Alfred.report — the voice-first AI operator built on Cloudflare Workers, Durable Objects, and neural voice synthesis." />
+  <link rel="canonical" href="https://alfred.report/about" />
+  <link rel="icon" href="/favicon.svg" />
+  <meta property="og:title" content="About Alfred — Voice-First AI Chief of Staff" />
+  <meta property="og:description" content="Learn about Alfred.report — the voice-first AI operator built on Cloudflare Workers, Durable Objects, and neural voice synthesis." />
+  <meta property="og:url" content="https://alfred.report/about" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://alfred.report/favicon.svg" />
+  <meta name="twitter:card" content="summary" />
+  
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "OpenRoyleAl",
+    "url": "https://alfred.report",
+    "logo": "https://alfred.report/logo.svg",
+    "description": "Creators of Alfred.report — Cloudflare-native missions, ORAL, and Map.",
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "telephone": "+44-20-8040-4422",
+      "contactType": "customer support",
+      "email": "al@alfred.report",
+      "availableLanguage": "English"
+    },
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "71-75 Shelton Street, Covent Garden",
+      "addressLocality": "London",
+      "postalCode": "WC2H 9JQ",
+      "addressCountry": "GB"
+    }
+  }
+  </script>
+
+  <style>
+    :root { --bg:#0a0a0a; --fg:#eceae4; --muted:#9a958c; --gold:#c9a227; --card:#141414; --border:#2a2a2a; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--fg); line-height:1.65; font-size:17px; padding:2rem 1.25rem; }
+    .container { max-width:760px; margin:0 auto; }
+    header { border-bottom:1px solid var(--border); padding-bottom:1.5rem; margin-bottom:2.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
+    .brand { font-size:1.3rem; font-weight:700; }
+    .brand span { color:var(--gold); }
+    nav a { color:var(--muted); text-decoration:none; margin-left:1.2rem; font-size:0.95rem; }
+    nav a:hover, nav a.active { color:var(--gold); }
+    h1 { font-size:2.4rem; line-height:1.2; margin-bottom:1rem; font-weight:700; }
+    h2 { font-size:1.5rem; color:var(--gold); margin:2.2rem 0 0.8rem; font-weight:600; }
+    h3 { font-size:1.15rem; margin:1.2rem 0 0.4rem; color:#fff; }
+    p { margin-bottom:1.2rem; color:#d1cfc7; }
+    ul { margin:0 0 1.5rem 1.5rem; color:#d1cfc7; }
+    li { margin-bottom:0.5rem; }
+    .highlight-card { background:var(--card); border:1px solid var(--border); border-left:4px solid var(--gold); border-radius:8px; padding:1.25rem; margin:1.5rem 0; }
+    footer { margin-top:4rem; padding-top:2rem; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:0.9rem; }
+    footer a { color:var(--gold); text-decoration:none; margin:0 0.5rem; }
+    footer a:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">Alfred · <span>report!</span></div>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/about" class="active">About</a>
+        <a href="/contact">Contact</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/api/docs">API</a>
+        <a href="/iphone">iPhone</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>About Alfred.report</h1>
+      <p>
+        Alfred is a voice-first AI Chief of Staff designed for business operators who demand closure instead of endless conversation. A product of OpenRoyleAl. Alfred.report replaces chat-based assistant bloat with durable, evidence-gated missions.
+      </p>
+
+      <div class="highlight-card">
+        <p style="margin:0;font-weight:600;color:var(--gold);">
+          "Chat stacks leave you as the router. Alfred.report is the opposite: durable missions, strict budgets, cryptographic evidence, and a gate before anything counts as done."
+        </p>
+      </div>
+
+      <h2>The Problem: Chat Army Fatigue</h2>
+      <p>
+        Most AI agent platforms spawn disconnected chat sessions that treat human principals as message dispatchers. When managing high-scale operations—such as monitoring technical health across 145+ client domains—multi-agent swarms frequently generate hallucinations, false completion reports, and unverified work.
+      </p>
+      <p>
+        Alfred.report eliminates this friction by operating under four core doctrines:
+      </p>
+      <ul>
+        <li><strong>One Wake Word:</strong> "Hey Siri, Alfred report." You speak once, and the system delivers concise, spoken mission debriefs over neural audio.</li>
+        <li><strong>Evidence Before Completion:</strong> An agent cannot mark a mission "complete" without concrete evidence (test suites passing, artifact URLs, screenshot proof, or explicit human sign-off).</li>
+        <li><strong>Hard Token &amp; Dollar Budgets:</strong> Every mission executes within strict spending boundaries. Over-budget processes halt immediately.</li>
+        <li><strong>Ephemeral Execution, Durable State:</strong> Worker subagents spawn to solve specific tasks, deposit verified findings into Cloudflare D1 and Agent Memory, and terminate cleanly.</li>
+      </ul>
+
+      <h2>Cloudflare-Native Architecture</h2>
+      <p>
+        Alfred.report is built exclusively on Cloudflare's serverless edge infrastructure:
+      </p>
+      <ul>
+        <li><strong>Cloudflare Workers &amp; Durable Objects:</strong> High-throughput, low-latency coordination and distributed state management.</li>
+        <li><strong>Cloudflare D1:</strong> Serverless relational SQL database for mission records, acceptance criteria, and audit histories.</li>
+        <li><strong>Cloudflare Agent Memory:</strong> Durable semantic memory retaining long-term operational context.</li>
+        <li><strong>MiMo Neural TTS:</strong> Ultra-low latency voice synthesis tailored for hands-free Siri debriefs.</li>
+      </ul>
+
+      <h2>Leadership &amp; Origins</h2>
+      <p>
+        Alfred.report is built by OpenRoyleAl for operators who want one wake word and a real report back — not another chat window.
+      </p>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 OpenRoyleAl. A product of OpenRoyleAl.</p>
+      <p>
+        <a href="/">Home</a> ·
+        <a href="/about">About</a> ·
+        <a href="/contact">Contact</a> ·
+        <a href="/privacy">Privacy</a> ·
+        <a href="/api/docs">Docs</a> ·
+        <a href="/llms.txt">llms.txt</a> ·
+        <a href="/sitemap.xml">Sitemap</a>
+      </p>
+    </footer>
+  </div>
+</body>
+</html>

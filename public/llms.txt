@@ -1,0 +1,52 @@
+# Alfred.report
+
+> Your domain. Your Alfred. One wake. The report comes back.
+
+Alfred is a voice-first AI Chief of Staff on Cloudflare Workers. You speak once. Closed work comes back. You stay out of the middle.
+
+## Product surfaces (sitemap)
+
+- Home: https://alfred.report/
+- Privacy: https://alfred.report/privacy
+- Terms: https://alfred.report/terms
+- Go Max Al!: https://alfred.report/go-max
+- Login: https://alfred.report/login
+- Signup: https://alfred.report/signup
+
+Setup is automatic after signup — there is no /setup page.
+
+## Core
+
+- Voice brief: you wake Alfred; Alfred delivers the status — no fluff, no “sir, ready?”
+- Durable missions with budgets and evidence gates
+- Multi-tenant isolation (your domain, your Alfred)
+- Operator path: ORAL
+
+## alfred-pi (local harness)
+
+- Landing: https://alfred.report/
+- Go Max Al!: https://alfred.report/go-max
+- Login: https://alfred.report/login
+- Install (Unix): `curl -fsSL https://alfred.report/install.sh | sh`
+- Package: `npm|pnpm|bun add -g @openroyleal/alfred-pi`
+
+CLI: `install alfred report`, `alfred report`, `alfred report update`, `alfred report <slug>`, `/login`.
+
+### LLM ladder (via alfred-ai-gateway)
+
+1. Workers AI free neurons first
+2. MIMO flash / pro for easy work
+3. Grok for hard smarts while available
+
+## Key endpoints
+
+- Agent instructions: https://alfred.report/for-agents.txt
+- OpenAPI: https://alfred.report/api/openapi.json
+- Docs: https://alfred.report/api/docs
+- Sitemap: https://alfred.report/sitemap.xml
+- Full LLM context: https://alfred.report/llms-full.txt
+
+## Law
+
+Kingdom: OpenRoyleAl · Law: Alfred.report · Operator: ORAL
+Evidence in. Bounds. Report out.

@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.dev.vars.*
+*.log
+.env
+.env.*
+!.env.example
+!.dev.vars.example
+
+# local / IDE / dumps
+.grok/
+.vercel/
+.vscode/
+.idea/
+*.zip
+*.tar
+*.tar.gz
+.node_modules.lock
+.DS_Store
+
+# runtime / secrets-adjacent
+state/
+screenshots/
+artifacts/
+*.bak
+*.bak-*
+*.bak.*

@@ -1,0 +1,20 @@
+{
+  "name": "@openroyleal/alfred-grok",
+  "version": "0.1.0",
+  "description": "alfred-grok — Alfred.report! Reserve harness (linked open-grok). Branding stays Alfred; upstream updates via npm/git.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "alfred-grok": "./bin/alfred-grok.js"
+  },
+  "files": ["bin", "README.md"],
+  "engines": { "node": ">=20" },
+  "dependencies": {},
+  "optionalDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenRoyleAl/Alfred.report.git",
+    "directory": "packages/alfred-grok"
+  },
+  "keywords": ["alfred-grok", "alfred.report", "open-grok"]
+}

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Start — use your own Cloudflare — Alfred.report</title>
+  <meta name="description" content="Connect your own Cloudflare account to Alfred.report. Invite al@alfred.report as Super Admin. You never handle tokens." />
+  <link rel="canonical" href="https://alfred.report/start" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="stylesheet" href="/pi.css?v=2" />
+  <link rel="stylesheet" href="/fonts.css?v=2" />
+  <link rel="stylesheet" href="/landing.css?v=45" />
+</head>
+<body>
+  <header class="header">
+    <a class="brand" href="/home">Alfred · <span>report!</span></a>
+    <nav class="pi-nav">
+      <a href="/home">Dashboard</a>
+      <a href="/start" class="pi-active">Start</a>
+    </nav>
+  </header>
+  <main class="section" style="padding:1.5rem;max-width:40rem;margin:0 auto">
+    <p class="kicker">Lane 2</p>
+    <h1>Use my own Cloudflare</h1>
+    <p class="lede" style="text-align:left">You never handle tokens. Token Master lives on <strong>your</strong> account. Iceberg never mints for customers. Billing gate before mint.</p>
+    <ol class="start-steps" id="steps">
+      <li data-step="1">
+        <h3>1. Logged in on alfred.report</h3>
+        <p>You are here. Next: your Cloudflare, not Iceberg’s bill.</p>
+      </li>
+      <li data-step="2">
+        <h3>2. Create CF account + invite Super Admin</h3>
+        <p>Open <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">dash.cloudflare.com/sign-up</a>. Invite <code>al@alfred.report</code> as Super Admin.</p>
+        <button type="button" class="btn-primary" id="invited">I invited al@alfred.report</button>
+        <p id="poll" class="lede" style="text-align:left;margin-top:.5rem">Waiting for invite confirmation (paste-poll skeleton).</p>
+      </li>
+      <li data-step="3">
+        <h3>3. Token Master on <em>your</em> account</h3>
+        <p>API Tokens Write only. Secrets Store on your account — not Agent Memory. Not Iceberg Token Master.</p>
+      </li>
+      <li data-step="4">
+        <h3>4. Optional domain ffm.report</h3>
+        <p>Cloudflare Registrar on <strong>your</strong> account (~$19/y). Dogfood: FansFollow-me, not Iceberg SEO.</p>
+        <label>Domain <input id="domain" value="ffm.report" /></label>
+        <button type="button" class="btn-ghost" id="savedomain">Save domain</button>
+      </li>
+      <li data-step="5">
+        <h3>5. Workers Paid $5 nudge</h3>
+        <p>When 10k neurons / daily cap hit. Map shows the bill. Free-first Workers AI until then.</p>
+      </li>
+      <li data-step="6">
+        <h3>6. Deploy Worker + route</h3>
+        <p>Worker <code>ffm-report</code> (or alfred-report on your account) + route <code>ffm.report</code>.</p>
+      </li>
+      <li data-step="7">
+        <h3>7. Private GitHub backup (no keys)</h3>
+        <p>origin = GitHub backup. Artifacts when your account has beta. Never <code>cfut_</code> or <code>.env</code> in git.</p>
+      </li>
+      <li data-step="8">
+        <h3>8. BYOK → their AI Gateway</h3>
+        <p>Workers AI + your key on <strong>your</strong> gateway. Map = one view.</p>
+        <p><a href="/home">Paste key fingerprint on the dashboard</a> (KISS stores hash only until sovereign deploy).</p>
+      </li>
+      <li data-step="9">
+        <h3>9. Connect Pi / Cursor</h3>
+        <p>Pi: <code>curl -fsSL https://alfred.report/install.sh | sh</code> then login.</p>
+        <p>Cursor MCP URL: <code>https://ffm.report/mcp</code> — hobble vs Pi called out honestly.</p>
+      </li>
+    </ol>
+    <div class="card" style="margin-top:1.5rem">
+      <h3>Mint gate</h3>
+      <p>Unpaid alfred-mem → 402. Try it:</p>
+      <button type="button" class="btn-ghost" id="mint">Request Token Master mint</button>
+      <p id="mintout" class="lede" style="text-align:left"></p>
+    </div>
+  </main>
+  <footer class="foot foot-home">
+    <a class="foot-terms" href="/terms">Terms</a>
+    <div class="foot-center">
+      <p class="foot-byline">A product of</p>
+      <a class="foot-mark" href="https://openroyleal.com"><span class="word">OpenRoyle</span><span class="al-mark">Al</span></a>
+    </div>
+    <a class="foot-privacy" href="/privacy">Privacy</a>
+  </footer>
+  <script>
+    async function boot() {
+      const r = await fetch("/api/kiss/start");
+      if (r.status === 401) { location.href = "/login"; return; }
+      const d = await r.json();
+      if (d.invited_al) document.getElementById("poll").textContent = "Alfred is in. (membership poll skeleton — dash confirmation is Hans/Martin.)";
+      if (d.domain) document.getElementById("domain").value = d.domain;
+    }
+    boot();
+    document.getElementById("invited").onclick = async () => {
+      await fetch("/api/kiss/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invited_al: true, step: 3 }) });
+      document.getElementById("poll").textContent = "Alfred is in.";
+    };
+    document.getElementById("savedomain").onclick = async () => {
+      await fetch("/api/kiss/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain: document.getElementById("domain").value, step: 5 }) });
+    };
+    document.getElementById("mint").onclick = async () => {
+      const r = await fetch("/api/kiss/mint", { method: "POST" });
+      const d = await r.json();
+      document.getElementById("mintout").textContent = r.status + " — " + (d.copy || d.error);
+    };
+  </script>
+</body>
+</html>

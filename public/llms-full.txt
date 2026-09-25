@@ -1,0 +1,79 @@
+# Alfred.report (Full System Reference)
+
+> One wake word. Closed work comes back. You stay out of the middle.
+
+Alfred is a Cloudflare-native operational harness and voice-first AI Chief of Staff operated by OpenRoyleAl.
+
+## 1. System Architecture
+
+Alfred replaces disjointed agent chat sessions with a unified execution spine:
+
+```
+iPhone / Siri / Shortcuts → voice.alfred.report (Cloudflare Worker) → MiMo TTS (WAV)
+                                      ↓
+                               Alfred.report D1 (agent-alfred-knowledge)
+                                      ↓
+                               Mission Kernel & Evidence Gates
+                                      ↓
+                               alfred.report Dashboard (Cloudflare Worker + Static Assets)
+```
+
+### Components
+1. **ORAL Worker (`voice.alfred.report`)**: Voice endpoints, MiMo neural text-to-speech engine, session management, and Durable Object orchestration.
+2. **Board Worker (`alfred.report`)**: Mission management dashboard, REST API proxy, iOS Siri onboarding flow, and developer resources.
+3. **Storage & State**: Cloudflare D1 SQL database (`agent-alfred-knowledge`), Cloudflare Agent Memory (`hermes` namespace), and Cloudflare R2 object store.
+4. **AI Gateway**: `oracle960` gateway routing all LLM and neural TTS token streams with strict cost monitoring.
+
+## 2. Mission Model & Lifecycle
+
+Every task in Alfred.report is modeled as a formal `Mission`:
+
+- **States**: `drafted` → `active` → `gated` → `complete` | `failed` | `aborted`
+- **Budget**: Bounded token and USD limits (`max_tokens`, `max_usd`, `spend_class`).
+- **Acceptance Criteria**: Explicit array of requirements that must be validated prior to closure.
+- **Evidence Trail**: Cryptographic or structured attestations (test passes, artifact links, screenshots) proving requirements were met.
+- **Closure Gate**: Missions attempting to complete without verified evidence or with zero recorded usage are rejected.
+
+## 3. Detailed API Reference
+
+### Voice Endpoints (`https://voice.alfred.report`)
+
+#### GET /voice/briefing
+- **Parameters**: `token` (string, required query param or Bearer header).
+- **Behavior**: Analyzes active, gated, and closed missions in D1 for the tenant; generates a concise speech summary; converts to audio using the tenant's selected voice persona; returns a standard `audio/wav` stream.
+- **Response**: `200 OK` with `Content-Type: audio/wav`.
+
+#### GET / POST /voice
+- **Parameters**: `token` (string), `text` (string), `style` (optional string).
+- **Behavior**: Synthesizes provided text using the MiMo neural TTS model into natural, resonant speech.
+- **Response**: `200 OK` with `Content-Type: audio/wav`.
+
+#### GET /auth
+- **Parameters**: None.
+- **Behavior**: Generates and persists a secure session token in D1, then redirects the user to `https://iphone.alfred.report/?token={TOKEN}` for 1-click iOS Siri setup.
+
+### Command API (`https://alfred.report`)
+
+#### GET /api/command/missions
+- **Description**: Lists recent missions filtered by status (`active`, `gated`, `closed`, `all`).
+- **Response**: JSON array of Mission objects.
+
+#### POST /api/command/missions
+- **Description**: Creates a new mission with objective, budget, and acceptance criteria.
+- **Body**: `{ "objective": string, "acceptance": string[], "budget": { "max_usd": number, "max_tokens": number } }`
+
+#### GET /api/command/stats
+- **Description**: Returns 24-hour mission closure rate, token burn, and active counts.
+
+## 4. When to Use Alfred
+- Autonomous multi-step operations requiring auditability and evidence verification.
+- Hands-free voice debriefs on iOS, watchOS, and macOS via "Hey Siri, Alfred report".
+- SEO portfolio monitoring (140+ domains) with automated site audits and rank verification.
+
+## 5. Trust, Governance & Contact
+- **Operator**: OpenRoyleAl
+- **Headquarters**: 71-75 Shelton Street, Covent Garden, London, WC2H 9JQ, United Kingdom
+- **Email**: hans@icebergmedia.co.uk
+- **Documentation**: https://alfred.report/api/docs
+- **OpenAPI 3.1 Spec**: https://alfred.report/api/openapi.json
+- **Sitemap**: https://alfred.report/sitemap.xml

@@ -1,0 +1,4 @@
+#!/bin/bash
+# Herdr pane shell — always include ~/.local/bin (alfred-pi, grok, cursor-agent).
+export PATH="${HOME}/.local/bin:${HOME}/bin:/usr/local/bin:/usr/bin:/bin:${PATH}"
+exec /bin/bash "$@"

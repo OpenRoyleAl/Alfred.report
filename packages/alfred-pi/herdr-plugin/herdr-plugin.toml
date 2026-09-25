@@ -1,0 +1,36 @@
+id = "alfred.report"
+name = "Alfred.report!"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Launch alfred-pi (Alfred.report!) in the focused pane CWD — models, missions, keep running"
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "alfred-pi"
+title = "alfred pi"
+contexts = ["workspace"]
+command = ["sh", "launch.sh"]
+
+[[actions]]
+id = "alfred-report"
+title = "alfred report"
+contexts = ["workspace"]
+command = ["sh", "launch.sh"]
+
+[[actions]]
+id = "alfred-dot-report"
+title = "alfred.report"
+contexts = ["workspace"]
+command = ["sh", "launch.sh"]
+
+[[actions]]
+id = "alfred-report-bang"
+title = "Alfred.report!"
+contexts = ["workspace"]
+command = ["sh", "launch.sh"]
+
+[[panes]]
+id = "alfred-tui"
+title = "Alfred.report!"
+placement = "tab"
+command = ["sh", "-c", "export PATH=\"$HOME/.local/bin:$PATH\"; exec alfred-herdr"]

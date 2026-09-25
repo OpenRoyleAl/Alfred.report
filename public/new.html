@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Open mission · Alfred.report</title>
+  <link rel="icon" href="/favicon.svg" />
+  <style>
+:root {
+  --bg:#0b0c0f; --bg2:#12141a; --card:#161922; --border:#2a2e3a;
+  --text:#e8e6e1; --muted:#9a958c; --gold:#c9a227; --gold-dim:#8a7018;
+  --active:#5b9a6f; --gated:#c9a227; --complete:#6b8cae;
+  --aborted:#a35d5d; --failed:#c45c5c; --drafted:#6b6b6b;
+  --up:#5b9a6f; --down:#8a8580;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+  --safe-x:env(safe-area-inset-left,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  font-size:17px;background:var(--bg);color:var(--text);
+  font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  min-height:100%;line-height:1.45;
+  padding-left:var(--safe-x);padding-right:var(--safe-x);
+}
+a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
+.top{
+  display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+  padding:calc(.75rem + var(--safe-top)) 1rem .75rem;
+  border-bottom:1px solid var(--border);background:var(--bg2);
+  position:sticky;top:0;z-index:20;
+}
+.brand{font-size:.9rem;letter-spacing:.04em;white-space:nowrap}
+.brand em{color:var(--gold);font-style:normal;font-weight:700}
+.nav{display:flex;align-items:center;gap:.35rem}
+.nav a,.nav button.navplus{
+  color:var(--muted);font-size:.85rem;font-family:inherit;
+  background:transparent;border:none;cursor:pointer;
+  min-height:44px;min-width:44px;padding:.45rem .7rem;
+  display:inline-flex;align-items:center;justify-content:center;border-radius:10px;
+}
+.nav a.on,.nav a:hover,.nav button.navplus:hover{color:var(--gold);background:#1a1d27}
+.nav button.navplus{font-size:1.35rem;font-weight:700;color:var(--gold);line-height:1}
+.wrap{max-width:42rem;margin:0 auto;padding:1rem 1rem calc(3rem + var(--safe-bot))}
+.field{
+  display:grid;grid-template-columns:1fr 1fr;gap:.55rem;
+  margin:0 0 1rem;
+}
+.field a.cell{
+  display:block;text-align:center;min-width:0;min-height:88px;
+  padding:.9rem .65rem;background:var(--bg2);
+  border:1px solid var(--border);border-radius:14px;color:inherit;
+  text-decoration:none;cursor:pointer;
+}
+.field a.cell:hover,.field a.cell:focus{border-color:var(--gold);outline:none}
+.field .n{font-size:1.85rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--gold);line-height:1.1}
+.field .delta{font-size:.85rem;margin-top:.25rem;font-variant-numeric:tabular-nums}
+.field .delta.up{color:var(--up)}.field .delta.down{color:var(--down)}.field .delta.flat{color:var(--muted)}
+.field .l{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:.35rem}
+.filters{display:flex;gap:.4rem;margin-bottom:1rem}
+.chip{
+  flex:1;border:1px solid var(--border);background:transparent;color:var(--muted);
+  border-radius:999px;padding:.7rem .5rem;font-size:.82rem;cursor:pointer;
+  font-family:inherit;min-height:44px;
+}
+.chip.on,.chip:hover{border-color:var(--gold);color:var(--gold)}
+.list{display:flex;flex-direction:column;gap:.65rem}
+.card{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:1rem;cursor:pointer;min-height:44px;
+}
+.card:hover,.card:focus{border-color:var(--gold-dim);outline:none}
+.card .title{font-size:1.05rem;font-weight:600;line-height:1.3;margin:.35rem 0 .25rem}
+.card .need{color:var(--muted);font-size:.88rem;margin-top:.2rem}
+.card .who{
+  display:inline-block;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--gold-dim);border:1px solid var(--gold-dim);border-radius:999px;
+  padding:.15rem .45rem;margin-right:.35rem;
+}
+.row{display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start;flex-wrap:wrap}
+.state{
+  font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;
+  padding:.25rem .55rem;border-radius:999px;border:1px solid currentColor;white-space:nowrap;
+}
+.state.active{color:var(--active)}.state.gated{color:var(--gated)}.state.complete{color:var(--complete)}
+.state.aborted,.state.failed{color:var(--aborted)}.state.drafted{color:var(--drafted)}
+.spend,.meta{color:var(--muted);font-size:.72rem;margin-top:.45rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.empty,.err{color:var(--muted);padding:1.5rem .25rem}
+.detail{display:none}.detail.on{display:block}
+.back{
+  display:inline-flex;align-items:center;min-height:44px;margin-bottom:.5rem;
+  color:var(--muted);font-size:.9rem;padding:.25rem 0;
+}
+h1{font-size:1.4rem;font-weight:600;margin-bottom:.35rem}
+h2{font-size:1rem;color:var(--gold);margin:1.1rem 0 .4rem;font-weight:600}
+.compare{
+  display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:.75rem 0 1rem;
+}
+.compare .cell{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:.85rem;text-align:center}
+.compare .n{font-size:1.5rem;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
+.compare .l{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:.25rem}
+.note{font-size:.82rem;color:var(--muted);background:#10131a;border:1px solid var(--border);border-radius:10px;padding:.75rem;margin:.75rem 0}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;white-space:pre-wrap;font-size:.9rem;color:#d6d2c8}
+.panel.muted{opacity:.72;font-size:.82rem;color:var(--muted)}
+.aar-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:.5rem 0 1rem}
+.aar-grid .cell{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem}
+.aar-grid .k{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.aar-grid .v{font-size:.95rem;font-variant-numeric:tabular-nums;margin-top:.2rem}
+.evidence{display:flex;flex-direction:column;gap:.5rem}
+.ev{border-left:3px solid var(--border);padding:.55rem .7rem;background:#10131a;border-radius:0 8px 8px 0;font-size:.82rem}
+.ev.pass{border-left-color:var(--active)}.ev.fail{border-left-color:var(--aborted)}
+.ev .when{color:var(--muted);font-size:.7rem;font-family:ui-monospace,Menlo,monospace}
+.actions{display:flex;flex-wrap:wrap;gap:.45rem;margin:1rem 0;align-items:center}
+.iconbtn{
+  width:44px;height:44px;border-radius:12px;border:1px solid var(--border);
+  background:var(--card);color:var(--text);font-size:1.2rem;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.iconbtn:hover{border-color:var(--gold);color:var(--gold)}
+.composer{
+  display:none;position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.72);
+  padding:calc(1rem + var(--safe-top)) 1rem calc(1rem + var(--safe-bot));
+  align-items:flex-end;justify-content:center;
+}
+.composer.on{display:flex}
+.composer .sheet{
+  width:100%;max-width:42rem;background:var(--bg2);border:1px solid var(--border);
+  border-radius:16px 16px 12px 12px;padding:1rem;max-height:90vh;overflow:auto;
+}
+.composer h2{margin-top:0}
+.composer label{display:block;font-size:.78rem;color:var(--muted);margin:.75rem 0 .35rem}
+.composer textarea,.composer input{
+  width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;
+  color:var(--text);font-family:inherit;font-size:1rem;padding:.75rem;min-height:44px;
+}
+.composer textarea{min-height:5.5rem;resize:vertical}
+.composer .rowbtns{display:flex;gap:.5rem;margin-top:1rem}
+.composer .btn{
+  flex:1;min-height:48px;border:none;border-radius:10px;font-family:inherit;
+  font-weight:700;font-size:.95rem;cursor:pointer;
+}
+.composer .btn.primary{background:var(--gold);color:#1a1405}
+.composer .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.composer .hint{font-size:.75rem;color:var(--muted);margin-top:.35rem}
+footer{text-align:center;padding:1.25rem;border-top:1px solid #2a2a2a;margin-top:1.5rem}
+footer a{color:#888;text-decoration:none;font-size:1rem}
+footer .go{color:#c9a227;font-weight:700;margin-top:.5rem}
+@media (max-width:420px){
+  .aar-grid,.compare{grid-template-columns:1fr}
+  .brand{font-size:.8rem}
+  .field .n{font-size:1.6rem}
+}
+
+.agent-grid{display:grid;gap:.5rem;margin:.5rem 0 1rem}
+.agent-opt{display:flex;gap:.65rem;align-items:flex-start;padding:.7rem .75rem;border:1px solid var(--border,#333);border-radius:10px;cursor:pointer;background:rgba(255,255,255,.03)}
+.agent-opt:has(input:checked){border-color:var(--gold,#c9a227);background:rgba(201,162,39,.08)}
+.agent-opt input{margin-top:.2rem}
+.agent-opt .name{font-weight:600}
+.agent-opt .desc{font-size:.82rem;color:var(--muted,#999);margin-top:.15rem}
+.badge{display:inline-block;font-size:.65rem;text-transform:uppercase;letter-spacing:.04em;padding:.1rem .35rem;border-radius:4px;background:var(--gold,#c9a227);color:#111;margin-left:.35rem;vertical-align:middle}
+</style>
+</head>
+<body>
+  <header class="top">
+    <a class="back" href="/">← Board</a>
+    <div class="brand">Alfred.report · New</div>
+    <div class="go">Go Max Al!</div>
+  </header>
+
+  <main class="sheet on" style="max-width:42rem;margin:1rem auto;padding:1.25rem;position:relative;transform:none;border-radius:12px">
+    <h1 style="font-size:1.35rem;margin:0 0 .75rem">Open mission</h1>
+    <p class="hint" style="margin-top:0">Full CF OS: Agent Memory · Artifacts · AI Gateway. One tap Go Max on a mission moves parked work to Cursor. Cursor talks A2A direct (<code>go-max claim</code> / <code>report</code>). Grok Bot = mouth only.</p>
+
+    <label for="objInput">Objective (one sentence)</label>
+    <textarea id="objInput" placeholder="What needs to ship?" maxlength="2000"></textarea>
+
+    <label for="accInput">Acceptance (optional, one per line)</label>
+    <textarea id="accInput" placeholder="done when…" maxlength="4000"></textarea>
+
+    <div style="margin-top:1rem;font-size:.85rem;color:var(--muted,#999);text-transform:uppercase;letter-spacing:.04em">Field agent</div>
+    <div class="agent-grid" id="agentGrid" role="radiogroup" aria-label="Field agent"></div>
+
+    <div class="rowbtns">
+      <a class="btn ghost" href="/" style="text-decoration:none;display:inline-flex;align-items:center">Cancel</a>
+      <button type="button" class="btn primary" id="saveBtn">Open mission</button>
+    </div>
+    <p class="err" id="err" style="display:none"></p>
+    <p class="hint" id="holdHint" style="display:none"></p>
+  </main>
+
+<script>
+const AGENTS = [
+  { id:"cursor", name:"Cursor Agent (Vultr)", desc:"First active reserve — Composer/Grok burns Cursor pool. CF Memory + Gateway + Artifacts still Command.", rec:true },
+  { id:"oral", name:"ORAL / CF Worker", desc:"Native Command bee on Workers. Best for CF-only missions." },
+  { id:"openclaw", name:"OpenClaw field", desc:"Personal/channels field team under CF Command." },
+  { id:"grok-cli", name:"Grok CLI", desc:"Vultr Grok CLI pane — not this Grok Bot chat." },
+  { id:"mimocode", name:"MiMoCode", desc:"MIMO volume when Cursor pool dry." },
+  { id:"pi", name:"Pi", desc:"Light field reserve." },
+  { id:"hermes", name:"Hermes (egg)", desc:"Phase 3 only — not Command spine." },
+];
+
+const grid = document.getElementById("agentGrid");
+AGENTS.forEach((a,i) => {
+  const lab = document.createElement("label");
+  lab.className = "agent-opt";
+  lab.innerHTML = '<input type="radio" name="field_agent" value="'+a.id+'" '+(a.rec||i===0?"checked":"")+' />'
+    + '<div><div class="name">'+a.name+(a.rec?'<span class="badge">default</span>':'')+'</div>'
+    + '<div class="desc">'+a.desc+'</div></div>';
+  grid.appendChild(lab);
+});
+
+async function refreshHold(){
+  try{
+    const r=await fetch("/api/command/stats",{credentials:"same-origin"});
+    if(!r.ok) return;
+    const s=await r.json();
+    if(s.hold_new_missions){
+      document.getElementById("holdHint").style.display="block";
+      document.getElementById("holdHint").textContent="New missions held — metering gate. Close the loop before opening more.";
+      document.getElementById("saveBtn").disabled=true;
+    }
+  }catch(_){}
+}
+refreshHold();
+const pre=sessionStorage.getItem("alfred_voice_objective");
+if(pre){ document.getElementById("objInput").value=pre; sessionStorage.removeItem("alfred_voice_objective"); }
+// Voice-first on /new
+(function(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const btn=document.createElement("button");
+  btn.type="button"; btn.className="btn ghost"; btn.textContent="🎤 Voice";
+  btn.style.marginTop=".5rem";
+  document.getElementById("objInput").insertAdjacentElement("afterend", btn);
+  btn.onclick=function(){
+    if(!SR){ alert("Voice not supported here"); return; }
+    const r=new SR(); r.lang="en-GB";
+    btn.textContent="Listening…";
+    r.onresult=function(ev){
+      const t=Array.from(ev.results).map(x=>x[0].transcript).join(" ").trim();
+      const el=document.getElementById("objInput");
+      el.value=(el.value?el.value+" ":"")+t;
+      btn.textContent="🎤 Voice";
+    };
+    r.onerror=function(){ btn.textContent="🎤 Voice"; };
+    r.onend=function(){ btn.textContent="🎤 Voice"; };
+    r.start();
+  };
+})();
+
+document.getElementById("saveBtn").onclick=async function(){
+  const objective=document.getElementById("objInput").value.trim();
+  const accRaw=document.getElementById("accInput").value.trim();
+  const err=document.getElementById("err");
+  const fa=(document.querySelector('input[name="field_agent"]:checked')||{}).value||"cursor";
+  if(!objective){ err.textContent="Objective required."; err.style.display="block"; return; }
+  const body={ objective, field_agent: fa };
+  if(accRaw) body.acceptance=accRaw.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  this.disabled=true; err.style.display="none";
+  try{
+    const r=await fetch("/api/command/missions",{
+      method:"POST", credentials:"same-origin",
+      headers:{"Content-Type":"application/json","Accept":"application/json"},
+      body:JSON.stringify(body)
+    });
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data.message||data.error||("Create failed "+r.status));
+    const id=data.id||data.mission_id||(data.mission&&data.mission.id);
+    if(id) location.href="/m/"+encodeURIComponent(id);
+    else location.href="/";
+  }catch(e){
+    err.textContent=e.message||String(e); err.style.display="block";
+  }finally{ this.disabled=false; }
+};
+</script>
+</body>
+</html>

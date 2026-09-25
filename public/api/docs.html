@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Documentation — Alfred.report</title>
+  <meta name="description" content="Official API reference for Alfred.report, Siri Voice endpoints, and Mission Engine." />
+  <link rel="canonical" href="https://alfred.report/api/docs" />
+  <link rel="icon" href="/favicon.svg" />
+  <meta property="og:title" content="API Documentation — Alfred.report" />
+  <meta property="og:description" content="Official API reference for Alfred.report, Siri Voice endpoints, and Mission Engine." />
+  <meta property="og:url" content="https://alfred.report/api/docs" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://alfred.report/favicon.svg" />
+  <meta name="twitter:card" content="summary" />
+  <style>
+    :root { --bg:#0a0a0a; --bg2:#141414; --fg:#eceae4; --muted:#9a958c; --gold:#c9a227; --card:#161922; --border:#2a2a2a; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--fg); line-height:1.6; font-size:16px; padding:2rem 1.25rem; }
+    .container { max-width:860px; margin:0 auto; }
+    header { border-bottom:1px solid var(--border); padding-bottom:1.5rem; margin-bottom:2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
+    .brand { font-size:1.3rem; font-weight:700; }
+    .brand span { color:var(--gold); }
+    nav a { color:var(--muted); text-decoration:none; margin-left:1rem; font-size:0.95rem; }
+    nav a:hover, nav a.active { color:var(--gold); }
+    h1 { font-size:2.2rem; margin-bottom:0.5rem; }
+    h2 { font-size:1.4rem; color:var(--gold); margin:2rem 0 0.75rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem; }
+    h3 { font-size:1.1rem; margin:1.25rem 0 0.4rem; }
+    p { margin-bottom:1rem; color:#ccc; }
+    .badge { display:inline-block; font-size:0.75rem; font-weight:700; padding:0.2rem 0.5rem; border-radius:4px; margin-right:0.5rem; }
+    .get { background:#1e3a8a; color:#93c5fd; }
+    .post { background:#065f46; color:#6ee7b7; }
+    .endpoint { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1.25rem; margin-bottom:1.25rem; }
+    .endpoint-header { font-family:monospace; font-size:1.05rem; display:flex; align-items:center; margin-bottom:0.5rem; }
+    pre { background:#0d0e12; border:1px solid var(--border); border-radius:8px; padding:1rem; overflow-x:auto; font-size:0.85rem; color:#e0e0e0; margin:0.75rem 0; }
+    code { font-family:ui-monospace,Menlo,Monaco,monospace; }
+    .btn { display:inline-block; background:var(--gold); color:#1a1405; font-weight:700; padding:0.6rem 1.1rem; border-radius:8px; text-decoration:none; margin-top:0.5rem; }
+    footer { margin-top:3rem; padding-top:1.5rem; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:0.9rem; }
+    footer a { color:var(--gold); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">Alfred · <span>report API</span></div>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+        <a href="/api/docs" class="active">API Docs</a>
+        <a href="/api/openapi.json" target="_blank">OpenAPI JSON</a>
+        <a href="/llms.txt">llms.txt</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Developer API Reference</h1>
+      <p>Alfred.report provides a unified HTTP interface for Siri Shortcuts voice briefings, text-to-speech synthesis, and mission execution.</p>
+      
+      <p>
+        <a class="btn" href="/api/openapi.json" download="openapi.json">Download OpenAPI 3.1 Spec</a>
+      </p>
+
+      <h2>1. Voice Briefing &amp; TTS</h2>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge get">GET</span>
+          <code>https://voice.alfred.report/voice/briefing?token={TOKEN}</code>
+        </div>
+        <p>Synthesizes and streams a high-definition WAV audio briefing of all active, gated, and completed missions for the authenticated tenant.</p>
+        <h3>Example Request:</h3>
+        <pre><code>curl -s "https://voice.alfred.report/voice/briefing?token=YOUR_TOKEN" --output briefing.wav</code></pre>
+        <h3>Response:</h3>
+        <p>Binary <code>audio/wav</code> stream compatible with Apple Shortcuts "Play Sound" action.</p>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge get">GET</span>
+          <span class="badge post">POST</span>
+          <code>https://voice.alfred.report/voice</code>
+        </div>
+        <p>Synthesizes arbitrary text into natural neural voice output using MiMo neural TTS.</p>
+        <h3>GET Example:</h3>
+        <pre><code>curl "https://voice.alfred.report/voice?token=YOUR_TOKEN&amp;text=Mission%20complete" -o speech.wav</code></pre>
+      </div>
+
+      <h2>2. Mission Kernel API</h2>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge get">GET</span>
+          <code>https://alfred.report/api/command/missions</code>
+        </div>
+        <p>Lists current missions with full budget, evidence, and acceptance status.</p>
+        <h3>Example Response:</h3>
+        <pre><code>[
+  {
+    "id": "m-8942",
+    "objective": "Audit core web vitals for client portfolio",
+    "state": "active",
+    "budget": {
+      "max_usd": 2.50,
+      "max_tokens": 100000,
+      "used_tokens": 14200
+    },
+    "acceptance": ["All 145 domains scanned", "Report exported to D1"],
+    "created_at": 1788825600000,
+    "updated_at": 1788825900000
+  }
+]</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="badge post">POST</span>
+          <code>https://alfred.report/api/command/missions</code>
+        </div>
+        <p>Dispatches a new mission to the orchestrator queue.</p>
+        <h3>Example Payload:</h3>
+        <pre><code>{
+  "objective": "Verify SSL certificate expiration dates",
+  "acceptance": ["Scan complete", "Alert if < 14 days remaining"],
+  "budget": { "max_usd": 0.50, "max_tokens": 25000 }
+}</code></pre>
+      </div>
+
+      <h2>3. Machine-Readable Context</h2>
+      <p>For autonomous AI agents and crawler integrations, access the following structured discovery endpoints:</p>
+      <ul>
+        <li><strong>OpenAPI Specification:</strong> <a href="/api/openapi.json"><code>/api/openapi.json</code></a></li>
+        <li><strong>LLM Instructions:</strong> <a href="/llms.txt"><code>/llms.txt</code></a></li>
+        <li><strong>Extended Context:</strong> <a href="/llms-full.txt"><code>/llms-full.txt</code></a></li>
+        <li><strong>XML Sitemap:</strong> <a href="/sitemap.xml"><code>/sitemap.xml</code></a></li>
+      </ul>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 OpenRoyleAl. · <a href="/about">About</a> · <a href="/contact">Contact</a> · <a href="/privacy">Privacy</a></p>
+    </footer>
+  </div>
+</body>
+</html>

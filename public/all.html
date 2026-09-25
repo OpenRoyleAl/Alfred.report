@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>God-view — Alfred.report</title>
+  <link rel="icon" href="/favicon.svg" />
+  <style>
+:root {
+  --bg: #0b0c0f; --bg2: #12141a; --card: #161922; --border: #2a2e3a;
+  --text: #e8e6e1; --muted: #9a958c; --gold: #c9a227; --gold-dim: #8a7018;
+  --active: #5b9a6f; --gated: #c9a227; --complete: #6b8cae; --aborted: #a35d5d; --failed: #c45c5c; --drafted: #6b6b6b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-size:18px;background:var(--bg);color:var(--text);font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;min-height:100%;line-height:1.45}
+a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
+.top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 1.1rem;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:10}
+.brand{font-size:.95rem;letter-spacing:.04em}.brand em{color:var(--gold);font-style:normal;font-weight:700}
+.nav{display:flex;gap:.65rem;flex-wrap:wrap;font-size:.82rem}.nav a{color:var(--muted)}.nav a.on,.nav a:hover{color:var(--gold)}
+.wrap{max-width:920px;margin:0 auto;padding:1rem 1.1rem 3rem}
+.alfred{color:var(--muted);font-size:1.05rem;margin:.4rem 0 1rem;font-style:italic}
+.filters{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1rem}
+.chip{border:1px solid var(--border);background:transparent;color:var(--muted);border-radius:999px;padding:.35rem .75rem;font-size:.78rem;cursor:pointer;font-family:inherit}
+.chip.on,.chip:hover{border-color:var(--gold);color:var(--gold)}
+.list{display:flex;flex-direction:column;gap:.65rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:.9rem 1rem;cursor:pointer}
+.card:hover{border-color:var(--gold-dim)}
+.row{display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start}
+.state{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;padding:.2rem .5rem;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.state.active{color:var(--active)}.state.gated{color:var(--gated)}.state.complete{color:var(--complete)}
+.state.aborted,.state.failed{color:var(--aborted)}.state.drafted{color:var(--drafted)}
+.obj{font-size:1.12rem;margin-top:.35rem}
+.meta{color:var(--muted);font-size:.75rem;margin-top:.45rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.empty,.err{color:var(--muted);padding:1.5rem .25rem}
+.detail{display:none}.detail.on{display:block}
+.back{display:inline-block;margin-bottom:.75rem;color:var(--muted);font-size:.85rem}
+h1{font-size:1.55rem;font-weight:600;margin-bottom:.25rem}
+h2{font-size:1.05rem;color:var(--gold);margin:1.1rem 0 .4rem;font-weight:600}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;white-space:pre-wrap;font-size:.9rem;color:#d6d2c8}
+.evidence{display:flex;flex-direction:column;gap:.5rem}
+.ev{border-left:3px solid var(--border);padding:.45rem .7rem;background:#10131a;border-radius:0 8px 8px 0;font-size:.82rem}
+.ev.pass{border-left-color:var(--active)}.ev.fail{border-left-color:var(--aborted)}
+.ev .when{color:var(--muted);font-size:.72rem;font-family:ui-monospace,Menlo,monospace}
+.actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0}
+.btn{background:var(--gold);color:#1a1405;border:none;border-radius:8px;padding:.55rem .9rem;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit}
+.btn.ghost{background:transparent;color:var(--gold);border:1px solid var(--gold-dim)}
+.upload{border:1px dashed var(--border);border-radius:10px;padding:.9rem;color:var(--muted);font-size:.85rem}
+.upload input{display:block;margin-top:.5rem;color:var(--text)}
+.dense .card{padding:.7rem .8rem}.dense .obj{font-size:.9rem}
+@media (max-width:640px){.wrap{padding:.85rem .85rem 2.5rem}}
+</style>
+</head>
+<body class="dense">
+  <div class="top">
+    <div class="brand">Alfred.report · <em>Alfred</em></div>
+    <nav class="nav">
+      <a href="//">Now</a>
+      <a class="on" href="/all/">All</a>
+      </nav>
+  </div>
+  <div class="wrap">
+    <div id="listView">
+      <h1>God-view</h1>
+      <p class="alfred">Archive / god-view — denser fleet list. Primary board is <a href="//">Now</a>.</p>
+      <div class="filters" id="filters">
+        <button class="chip on" data-state="all">All</button>
+        <button class="chip" data-state="active">Active</button>
+        <button class="chip" data-state="gated">Gated</button>
+        <button class="chip" data-state="complete">Complete</button>
+        <button class="chip" data-state="aborted">Aborted</button>
+        <button class="chip" data-state="failed">Failed</button>
+        <button class="chip" data-state="drafted">Drafted</button>
+      </div>
+      <div class="list" id="list"><div class="empty">Fetching the board…</div></div>
+    </div>
+    <div class="detail" id="detailView"></div>
+  </div>
+  <script>
+
+function fmtWhen(ts){
+  if(!ts) return "—";
+  try { return new Date(ts).toLocaleString("en-GB",{timeZone:"Asia/Manila",dateStyle:"medium",timeStyle:"short"})+" PT"; }
+  catch(e){ return String(ts); }
+}
+function trunc(s,n){ s=String(s||""); n=n||140; return s.length>n?s.slice(0,n-1)+"…":s; }
+function esc(s){ return String(s||"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function fetchMissions(state){
+  const u=new URL("/api/command/missions",location.origin);
+  if(state && state!=="all") u.searchParams.set("state",state);
+  u.searchParams.set("limit","100");
+  const r=await fetch(u,{credentials:"same-origin"});
+  if(!r.ok) throw new Error("Alfred could not fetch the board ("+r.status+").");
+  const data=await r.json();
+  return data.missions||[];
+}
+async function fetchMission(id){
+  const r=await fetch("/api/command/missions/"+encodeURIComponent(id),{credentials:"same-origin"});
+  if(!r.ok) throw new Error("Mission not found ("+r.status+").");
+  return r.json();
+}
+function pickBritishVoice(){
+  const voices=speechSynthesis.getVoices()||[];
+  const scored=voices.map(v=>{
+    let score=0; const n=(v.name||"")+" "+(v.lang||"");
+    if(/en-GB/i.test(v.lang)) score+=50;
+    if(/British|UK|England|Daniel|Google UK|Arthur|Oliver|Martha/i.test(n)) score+=30;
+    if(/male|Daniel|Arthur|Oliver|George/i.test(n)) score+=5;
+    return {v,score};
+  }).sort((a,b)=>b.score-a.score);
+  return (scored[0] && scored[0].v) || null;
+}
+function speakAlfred(text){
+  if(!window.speechSynthesis){ alert("Speech synthesis unavailable, sir."); return; }
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang="en-GB"; u.rate=0.95; u.pitch=0.9;
+  const voice=pickBritishVoice(); if(voice) u.voice=voice;
+  speechSynthesis.speak(u);
+}
+function ensureVoices(cb){ if(speechSynthesis.getVoices().length){cb();return;} speechSynthesis.onvoiceschanged=()=>cb(); }
+function parseMissionId(base){
+  const m=location.pathname.match(new RegExp("^"+base+"/m/([^/]+)/?$"));
+  if(m) return decodeURIComponent(m[1]);
+  return new URLSearchParams(location.search).get("id");
+}
+function renderEvidence(ev, dense){
+  const list=(ev||[]).slice().sort((a,b)=>(b.at||0)-(a.at||0));
+  const take=dense?list:list.slice(0,12);
+  if(!take.length) return '<div class="empty">No evidence yet, sir.</div>';
+  return '<div class="evidence">'+take.map(e=>{
+    const cls=e.passed?"pass":"fail";
+    return '<div class="ev '+cls+'"><div class="when">'+fmtWhen(e.at)+' · '+esc(e.actor||"?")+' · '+esc(e.check||"?")+'</div><div>'+esc(trunc(e.notes||"", dense?420:180))+'</div></div>';
+  }).join("")+"</div>";
+}
+
+const BASE="/all";
+const DENSE=true;
+let currentState="all";
+
+function goList(){
+  history.pushState({}, "", BASE+"/");
+  document.getElementById("listView").style.display="block";
+  document.getElementById("detailView").classList.remove("on");
+}
+function goDetail(id){
+  history.pushState({id}, "", BASE+"/m/"+encodeURIComponent(id));
+  showDetail(id);
+}
+async function loadList(){
+  const el=document.getElementById("list");
+  el.innerHTML='<div class="empty">One moment, sir…</div>';
+  try {
+    const cache = await fetchMissions(currentState);
+    if(!cache.length){ el.innerHTML='<div class="empty">No missions in this state. Quiet house tonight.</div>'; return; }
+    el.innerHTML = cache.map(m => {
+      const objN = DENSE ? 220 : 160;
+      return '<div class="card" data-id="'+esc(m.id)+'">'
+        + '<div class="row"><span class="state '+(m.state||'drafted')+'">'+esc(m.state||'?')+'</span><span class="meta">'+fmtWhen(m.updated_at)+'</span></div>'
+        + '<div class="obj">'+esc(trunc(m.objective,objN))+'</div>'
+        + '<div class="meta">'+esc(m.id)+(DENSE && m.evidence && m.evidence.length ? ' · '+m.evidence.length+' evidence' : '')+'</div>'
+        + '</div>';
+    }).join("");
+    el.querySelectorAll(".card").forEach(c => c.onclick = () => goDetail(c.dataset.id));
+  } catch(e) {
+    el.innerHTML = '<div class="err">'+esc(e.message)+'</div>';
+  }
+}
+async function showDetail(id){
+  document.getElementById("listView").style.display="none";
+  const d=document.getElementById("detailView");
+  d.classList.add("on");
+  d.innerHTML='<div class="empty">Opening the dossier…</div>';
+  try {
+    const m = await fetchMission(id);
+    const report = m.report || "No after-action report yet.";
+    const readText = "Mission "+(m.state||"")+". Objective: "+(m.objective||"")+". "+report;
+    d.innerHTML =
+      '<a class="back" href="'+BASE+'/" id="backBtn">← Back to the board</a>'
+      + '<h1>Mission detail</h1>'
+      + '<p class="alfred">“Here are the particulars, sir.”</p>'
+      + '<div class="row" style="margin:.5rem 0 1rem"><span class="state '+(m.state||'')+'">'+esc(m.state||'')+'</span><span class="meta">'+esc(m.id)+'</span></div>'
+      + '<h2>Objective</h2><div class="panel">'+esc(m.objective||"—")+'</div>'
+      + '<h2>Report / AAR</h2><div class="panel">'+esc(m.report||"No report filed yet.")+'</div>'
+      + '<div class="actions"><button class="btn" id="ttsBtn">Read aloud (Alfred)</button><button class="btn ghost" id="stopBtn">Stop</button></div>'
+      + '<h2>Evidence'+(DENSE?' (full tail)':'')+'</h2>'
+      + renderEvidence(m.evidence, DENSE)
+      + '<h2>Upload (stub)</h2><div class="upload">Attach images or files for later POST — tonight’s stub only.<input type="file" multiple disabled title="POST wiring tomorrow" /></div>'
+      + '<div class="meta" style="margin-top:1rem">Updated '+fmtWhen(m.updated_at)+' · Created '+fmtWhen(m.created_at)+'</div>';
+    document.getElementById("backBtn").onclick=function(e){e.preventDefault();goList();};
+    ensureVoices(function(){});
+    document.getElementById("ttsBtn").onclick=function(){speakAlfred(readText);};
+    document.getElementById("stopBtn").onclick=function(){speechSynthesis.cancel();};
+  } catch(e) {
+    d.innerHTML = '<a class="back" href="'+BASE+'/">← Back</a><div class="err">'+esc(e.message)+'</div>';
+  }
+}
+document.getElementById("filters").onclick=function(e){
+  const b=e.target.closest(".chip"); if(!b) return;
+  document.querySelectorAll(".chip").forEach(c=>c.classList.remove("on"));
+  b.classList.add("on"); currentState=b.dataset.state; loadList();
+};
+window.addEventListener("popstate", function(){
+  const id=parseMissionId(BASE);
+  if(id) showDetail(id); else { document.getElementById("listView").style.display="block"; document.getElementById("detailView").classList.remove("on"); }
+});
+(async function init(){
+  const id=parseMissionId(BASE);
+  await loadList();
+  if(id) showDetail(id);
+})();
+  </script>
+<footer style="text-align:center;padding:1.5rem;border-top:1px solid #2a2a2a;margin-top:2rem">
+  <a href="https://github.com/OpenRoyleAl" style="color:#888;text-decoration:none;font-size:1rem">OpenRoyleAl</a>
+  <div style="color:#c9a227;font-weight:700;margin-top:.5rem">Go Max Al!</div>
+</footer>
+</body>
+</html>

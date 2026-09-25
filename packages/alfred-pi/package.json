@@ -1,0 +1,36 @@
+{
+  "name": "@openroyleal/alfred-pi",
+  "version": "0.1.0-local",
+  "description": "alfred-pi \u2014 local harness for Alfred.report (dogfood). There are many agent harnesses but this one is yours.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "bin": {
+    "alfred-pi": "./bin/alfred-pi.js"
+  },
+  "files": [
+    "bin",
+    "docs",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenRoyleAl/Alfred.report.git",
+    "directory": "packages/alfred-pi"
+  },
+  "keywords": [
+    "alfred-pi",
+    "alfred.report",
+    "alfred-ai-gateway"
+  ],
+  "dependencies": {},
+  "optionalDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.87.0"
+  },
+  "scripts": {
+    "postinstall": "node ./bin/check-upstream.js || true"
+  }
+}

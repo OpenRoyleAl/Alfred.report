@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Get Alfred.report</title>
+  <meta name="description" content="Pick your name. Domain at cost. Your Alfred. The report comes back." />
+  <link rel="canonical" href="https://alfred.report/signup" />
+  <link rel="stylesheet" href="/fonts.css?v=2" />
+  <link rel="stylesheet" href="/landing.css?v=53" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+</head>
+<body>
+  <header class="top">
+    <a class="brand brand-al" href="https://alfred.report/" aria-label="Alfred.report"><span class="al-mark">Al</span></a>
+    <nav class="top-nav" aria-label="Primary">
+      <a href="https://alfred.report/oral">ORAL</a>
+      <a class="btn-go-max" href="https://alfred.report/go-max"><span class="gm-go">Go Max</span> <span class="gm-al">Al</span><span class="gm-bang">!</span></a>
+      <a class="sign-in" href="https://alfred.report/login">Sign in</a>
+    </nav>
+  </header>
+  <main class="band" style="padding-top:2rem">
+    <h2 style="text-align:center;margin-bottom:0.5rem">Get started</h2>
+    <p class="lede">Pick a name. We hold the domain so nobody snipes it. Domain at cost. When humming, the domain moves to <strong>your</strong> Cloudflare — no lock-in.</p>
+
+    <form id="f" class="auth-form">
+      <label for="handle">Your Alfred
+        <div class="name-field">
+          <input type="text" name="handle" id="handle" required minlength="3" maxlength="24" pattern="[A-Za-z0-9-]+" autocomplete="username" placeholder="yours" aria-describedby="name-suffix name-status" />
+          <span class="name-suffix" id="name-suffix">.report!</span>
+        </div>
+      </label>
+      <p id="name-status" class="name-status" aria-live="polite"></p>
+
+      <label>Domain
+        <div class="domain-row">
+          <input type="text" name="domain" id="domain" required minlength="3" maxlength="64" placeholder="yours.report" />
+        </div>
+      </label>
+      <p id="domain-status" class="name-status" aria-live="polite"></p>
+
+      <label>Email (for receipt)
+        <input type="email" name="email" id="email" autocomplete="email" placeholder="you@company.com" />
+      </label>
+
+      <div class="price-box" id="price-box">
+        <div class="price-line"><span>Alfred.report subscription</span><strong id="sub-price">—</strong></div>
+        <div class="price-line"><span>Domain (at cost, one-time hold)</span><strong id="dom-price">—</strong></div>
+        <div class="price-line total"><span>Due today</span><strong id="total-price">—</strong></div>
+        <p class="price-note">Billed in your local currency where available. Domain transfers to your CF account when humming.</p>
+      </div>
+
+      <p id="err" class="auth-err" hidden></p>
+      <button class="btn btn-primary" type="submit" id="pay-btn">Subscribe &amp; hold domain</button>
+    </form>
+
+    <p class="lede" style="margin-top:1.25rem;text-align:center">
+      Already paid? <a href="/login">Sign in with Google</a>.
+    </p>
+    <p class="lede" style="margin-top:0.5rem;text-align:center;font-size:0.85rem;opacity:0.85">
+      After checkout you can point your own domain or subdomain. <a href="/iphone">iPhone &amp; Siri</a> is next.
+    </p>
+  </main>
+  <footer class="foot foot-home">
+    <a class="foot-terms" href="/terms">Terms</a>
+    <div class="foot-center">
+      <p class="foot-byline">A product of</p>
+      <a class="foot-mark" href="https://openroyleal.com"><span class="word">OpenRoyle</span><span class="al-mark">Al</span></a>
+      <a class="foot-gh" href="https://github.com/OpenRoyleAl/Alfred.report" aria-label="Alfred.report on GitHub">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.39.6.11.82-.26.82-.58 0-.28-.01-1.02-.02-2-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.85 1.24 1.85 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.49 5.92.43.37.81 1.1.81 2.22 0 1.61-.01 2.91-.01 3.31 0 .32.22.7.83.58C20.56 21.8 24 17.3 24 12 24 5.37 18.63 0 12 0z"/></svg>
+      </a>
+    </div>
+    <a class="foot-privacy" href="/privacy">Privacy</a>
+  </footer>
+  <style>
+    .auth-form { max-width: 24rem; margin: 1rem auto 0; display: flex; flex-direction: column; gap: 0.85rem; text-align: left; }
+    .auth-form label { color: var(--muted); font-size: 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .auth-form input { background: #0e1015; border: 1px solid var(--line); color: var(--ink); padding: 0.7rem 0.85rem; border-radius: 8px; font-size: 1rem; }
+    .auth-err { color: #e07070; text-align: center; }
+    .btn-primary { background: var(--gold); color: #070708; border: 0; padding: 0.85rem 1.2rem; border-radius: 10px; font-weight: 700; cursor: pointer; }
+    .name-status { font-size: 0.85rem; min-height: 1.2em; margin: 0; }
+    .name-status.ok { color: var(--gold); }
+    .name-status.no { color: #e07070; }
+    .price-box { background: #0e1015; border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1rem; margin-top: 0.25rem; }
+    .price-line { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.92rem; margin: 0.35rem 0; color: var(--ink); }
+    .price-line.total { border-top: 1px solid var(--line); padding-top: 0.55rem; margin-top: 0.55rem; font-size: 1.05rem; }
+    .price-note { font-size: 0.75rem; color: var(--muted); margin: 0.5rem 0 0; line-height: 1.35; }
+    code { font-size: 0.85em; }
+  </style>
+  <script>
+    (function () {
+      const handleIn = document.getElementById("handle");
+      const domainIn = document.getElementById("domain");
+      const nameStatus = document.getElementById("name-status");
+      const domainStatus = document.getElementById("domain-status");
+      const subPrice = document.getElementById("sub-price");
+      const domPrice = document.getElementById("dom-price");
+      const totalPrice = document.getElementById("total-price");
+      const err = document.getElementById("err");
+      const payBtn = document.getElementById("pay-btn");
+
+      const q = new URLSearchParams(location.search);
+      if (q.get("handle")) handleIn.value = q.get("handle");
+      if (q.get("domain")) domainIn.value = q.get("domain");
+      if (q.get("cancelled")) {
+        err.textContent = "Checkout cancelled — pick up where you left off.";
+        err.hidden = false;
+      }
+
+      const country = (typeof navigator !== "undefined" && navigator.language || "en-GB").toUpperCase();
+      const isUS = country.includes("US") || country.endsWith("-US");
+      const cur = isUS ? "usd" : "gbp";
+      const sym = cur === "usd" ? "$" : "£";
+      subPrice.textContent = "Subscription";
+
+      let domainCostCents = 0;
+      let domainOk = false;
+      let nameOk = false;
+      let tName, tDom;
+
+      function money(cents) {
+        return sym + (cents / 100).toFixed(2);
+      }
+      function refreshTotal() {
+        domPrice.textContent = domainCostCents ? money(domainCostCents) : "—";
+        totalPrice.textContent = domainCostCents ? ("Domain " + money(domainCostCents) + " + subscription") : "Domain + subscription";
+      }
+      refreshTotal();
+
+      function syncDomainFromHandle() {
+        const h = handleIn.value.trim().toLowerCase();
+        if (!h) return;
+        if (!domainIn.value || domainIn.dataset.auto === "1") {
+          domainIn.value = h + ".report";
+          domainIn.dataset.auto = "1";
+        }
+      }
+
+      async function checkName() {
+        const name = handleIn.value.trim();
+        if (name.length < 3) { nameStatus.textContent = ""; nameOk = false; return; }
+        try {
+          const r = await fetch("/api/kiss/name-available?name=" + encodeURIComponent(name));
+          const d = await r.json();
+          nameOk = !!d.ok;
+          nameStatus.textContent = d.ok ? "Available." : (d.error || "Taken.");
+          nameStatus.className = "name-status " + (d.ok ? "ok" : "no");
+        } catch {
+          nameStatus.textContent = "";
+        }
+      }
+
+      async function checkDomain() {
+        const domain = domainIn.value.trim();
+        if (domain.length < 3) { domainStatus.textContent = ""; domainOk = false; domainCostCents = 0; refreshTotal(); return; }
+        try {
+          const r = await fetch("/api/kiss/domain-check?domain=" + encodeURIComponent(domain));
+          const d = await r.json();
+          if (!d.ok) {
+            domainOk = false;
+            domainStatus.textContent = d.error || "Invalid";
+            domainStatus.className = "name-status no";
+            domainCostCents = 0;
+          } else if (d.available === false) {
+            domainOk = false;
+            domainStatus.textContent = d.domain + " is not available.";
+            domainStatus.className = "name-status no";
+            domainCostCents = 0;
+          } else {
+            domainOk = true;
+            domainCostCents = d.cost_cents || 1200;
+            domainStatus.textContent = d.domain + " looks free · hold at cost " + money(domainCostCents) + (d.mode === "heuristic" ? " (estimate)" : "");
+            domainStatus.className = "name-status ok";
+          }
+          refreshTotal();
+        } catch {
+          domainStatus.textContent = "Could not check domain.";
+          domainStatus.className = "name-status no";
+        }
+      }
+
+      handleIn.addEventListener("input", function () {
+        domainIn.dataset.auto = "1";
+        syncDomainFromHandle();
+        clearTimeout(tName); tName = setTimeout(checkName, 280);
+        clearTimeout(tDom); tDom = setTimeout(checkDomain, 320);
+      });
+      domainIn.addEventListener("input", function () {
+        domainIn.dataset.auto = "0";
+        clearTimeout(tDom); tDom = setTimeout(checkDomain, 280);
+      });
+
+      if (handleIn.value) { syncDomainFromHandle(); checkName(); checkDomain(); }
+      else if (domainIn.value) checkDomain();
+
+      document.getElementById("f").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        err.hidden = true;
+        payBtn.disabled = true;
+        payBtn.textContent = "Opening checkout…";
+        try {
+          const res = await fetch("/api/kiss/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              handle: handleIn.value.trim(),
+              domain: domainIn.value.trim(),
+              email: document.getElementById("email").value.trim() || undefined,
+              country: isUS ? "US" : undefined,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.url) {
+            err.textContent = data.error || "Checkout failed";
+            err.hidden = false;
+            payBtn.disabled = false;
+            payBtn.textContent = "Subscribe & hold domain";
+            return;
+          }
+          location.href = data.url;
+        } catch (ex) {
+          err.textContent = "Network error";
+          err.hidden = false;
+          payBtn.disabled = false;
+          payBtn.textContent = "Subscribe & hold domain";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

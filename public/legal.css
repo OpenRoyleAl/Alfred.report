@@ -1,0 +1,11 @@
+/* Legal pages — Terms / Privacy (MiMo-style structure, OpenRoyleAl brands) */
+.legal-page { max-width: 720px; margin: 0 auto; padding: 2rem var(--page-x) 3rem; }
+.legal-page h1 { font-size: clamp(1.75rem, 5vw, 2.25rem); margin-bottom: 0.5rem; font-weight: 600; }
+.legal-page .updated { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+.legal-page h2 { font-size: 1.15rem; color: var(--gold); margin: 2rem 0 0.75rem; font-weight: 600; }
+.legal-page p, .legal-page li { color: var(--muted); margin-bottom: 0.85rem; line-height: 1.65; }
+.legal-page ul, .legal-page ol { margin: 0 0 1rem 1.25rem; }
+.legal-page strong { color: var(--ink); font-weight: 600; }
+.legal-page a { color: var(--gold); }
+.legal-page .brand-tag { font-weight: 600; color: var(--ink); }
+.legal-page .brand-tag .al-mark { color: var(--gold); }

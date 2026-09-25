@@ -1,0 +1,43 @@
+#!/bin/bash
+# Wrapper: alfred-pi + Herdr agent label (same pattern as mimo-herdr).
+# Makes `herdr agent list` show agent=alfred with working/blocked/idle.
+set -euo pipefail
+export PATH="${HOME}/.local/bin:${PATH}"
+
+HERDR_BIN="${HERDR_BIN_PATH:-herdr}"
+SOURCE="herdr:alfred"
+AGENT="alfred"
+
+report_status() {
+  local status="$1"
+  local message="${2:-}"
+  if [ -n "${HERDR_PANE_ID:-}" ]; then
+    local seq
+    seq=$(date +%s%N 2>/dev/null || date +%s)
+    if [ -n "$message" ]; then
+      "$HERDR_BIN" pane report-agent "$HERDR_PANE_ID" \
+        --source "$SOURCE" --agent "$AGENT" --state "$status" --seq "$seq" \
+        --message "$message" >/dev/null 2>&1 || true
+    else
+      "$HERDR_BIN" pane report-agent "$HERDR_PANE_ID" \
+        --source "$SOURCE" --agent "$AGENT" --state "$status" --seq "$seq" \
+        >/dev/null 2>&1 || true
+    fi
+    if [ -n "${HERDR_SOCKET_PATH:-}" ]; then
+      local request
+      request="{\"id\":\"herdr:alfred:${seq}\",\"method\":\"pane.report_agent\",\"params\":{\"pane_id\":\"${HERDR_PANE_ID}\",\"source\":\"${SOURCE}\",\"agent\":\"${AGENT}\",\"state\":\"${status}\",\"seq\":${seq}}}"
+      echo "$request" | socat - UNIX-CONNECT:"$HERDR_SOCKET_PATH" 2>/dev/null || true
+    fi
+  fi
+}
+
+release_agent() {
+  if [ -n "${HERDR_PANE_ID:-}" ]; then
+    "$HERDR_BIN" pane release-agent "$HERDR_PANE_ID" \
+      --source "$SOURCE" --agent "$AGENT" >/dev/null 2>&1 || true
+  fi
+}
+
+report_status "working"
+trap 'report_status idle; release_agent' EXIT
+exec alfred-pi "$@"

@@ -1,0 +1,117 @@
+{
+  "name": "alfred-report",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-27",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "alias": {"pg": "./src/lib/stubs/empty-pg.ts", "@electric-sql/pglite": "./src/lib/stubs/empty-pglite.ts"},
+
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "ALFRED", "class_name": "Alfred" }
+    ]
+  },
+
+  "exports": {
+    "Alfred": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "AgentSession": {
+      "type": "durable-object",
+      "state": "deleted"
+    },
+    "SignalRouter": {
+      "type": "durable-object",
+      "state": "deleted"
+    },
+    "TenantCoordinator": {
+      "type": "durable-object",
+      "state": "deleted"
+    }
+  },
+
+  "ai": {
+    "binding": "AI"
+  },
+
+  "images": {
+    "binding": "IMAGES"
+  },
+
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "ccfdd66443b1479998ca1257a9319abd" }
+  ],
+
+  "services": [
+    { "binding": "ALFRED_PROXY", "service": "alfred-proxy" }
+  ],
+
+  "r2_buckets": [
+    { "binding": "VAULT", "bucket_name": "alfred-vault" }
+  ],
+
+  "d1_databases": [
+    { "binding": "DB", "database_name": "alfred-vault", "database_id": "e6614633-ef9d-4b4f-b09d-a85c18315ee9" }
+  ],
+
+  "vectorize": [
+    { "binding": "ORACLE960", "index_name": "oracle960-memory" }
+  ],
+
+  "observability": {
+    "enabled": true
+  },
+
+  "triggers": {
+    "crons": []
+  },
+
+  "workers_dev": false,
+
+  "send_email": [
+    { "name": "EMAIL", "allowed_sender_addresses": ["al@alfred.report"] }
+  ],
+
+  "routes": [
+    {"pattern": "alfred.report/*", "zone_name": "alfred.report"},
+    {"pattern": "www.alfred.report/*", "zone_name": "alfred.report"}
+  ],
+
+
+  "secrets_store_secrets": [
+    { "binding": "STRIPE_KEY", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "STRIPE_KEY" },
+    { "binding": "STRIPE_SECRET_KEY", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "STRIPE_KEY" },
+    { "binding": "STRIPE_WEBHOOK_SECRET", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "STRIPE_WEBHOOK_SECRET" },
+    { "binding": "CF_ACCOUNT_ID", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "CF_ACCOUNT_ID" },
+    { "binding": "CF_API_TOKEN", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "CF_API_TOKEN" },
+    { "binding": "ALFRED_OPS_TOKEN", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "ALFRED_OPS_TOKEN" },
+    { "binding": "GOOGLE_CLIENT_ID", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "ALFRED_GOOGLE_CLIENT_ID" },
+    { "binding": "GOOGLE_CLIENT_SECRET", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "GOOGLE_CLIENT_SECRET" },
+    { "binding": "JWT_SECRET", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "ALFRED_JWT_SECRET" },
+    { "binding": "XAI_API_KEY", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "XAI_API_KEY" },
+    { "binding": "MIMO_API_KEY", "store_id": "00f7b300af064e3eaa770cb5f7ca45f3", "secret_name": "MIMO_API_KEY" }
+  ],
+  "vars": {
+    "HERMES_API_URL": "https://hermes-api.openroyleal.com/v1",
+    "HERMES_MODEL": "mimo-v2.5-pro",
+    "WORKERS_AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "CLOUDFLARE_ACCOUNT_ID": "0870b0bdbc14bcd31f43fe5e82c3ee8e",
+    "CLOUDFLARE_GATEWAY_ID": "alfred",
+    "DOMAIN": "alfred.report",
+    "SIGNAL_DOMAIN": "signal.alfred.report",
+    "VAULT_DOMAIN": "vault.alfred.report",
+    "LEDGER_DOMAIN": "ledger.alfred.report",
+    "GBP_SUBJECT": "hans@icebergmedia.co.uk",
+    "STRIPE_PRICE_USD_99": "price_1UIO3pS0NJaOBwm44jFvbhKN",
+    "STRIPE_PRICE_GBP_99": "price_1UIO3pS0NJaOBwm4DCeHmG4L"
+  }
+}

@@ -1,0 +1,36 @@
+# alfred.report — agents
+# Content-Type: text/plain. Not a webpage. That is the point.
+
+# Humans
+If you can read this in a browser: you took the Agents door.
+Leave: https://alfred.report/
+This file is for machines.
+
+# Law
+Kingdom: OpenRoyleAl
+Law: Alfred.report
+Operator: ORAL
+Evidence in. Bounds. Report out.
+
+# Discovery
+https://alfred.report/llms.txt
+https://alfred.report/llms-full.txt
+https://alfred.report/api/openapi.json
+https://alfred.report/sitemap.xml
+
+# Public pages only
+https://alfred.report/
+https://alfred.report/privacy
+https://alfred.report/terms
+https://alfred.report/go-max
+https://alfred.report/login
+https://alfred.report/signup
+
+# Proxy (alfred-proxy) — lease hide.me WireGuard exits
+# Auth: Authorization: Bearer <ALFRED_OPS_TOKEN>
+# Canonical: https://proxy.alfred.report/health|status|lease|release|usage
+# Mirror: https://alfred.report/api/proxy/*
+
+# Lease
+# POST /lease {"holder":"<id>","harness":"<runner>","purpose":"<why>","region":"us-detroit"}
+# POST /release {"holder":"<id>"}

@@ -1,5 +1,5 @@
 /**
- * Resolve a Worker secret that may be a plain string (wrangler secret / .dev.vars)
+ * Resolve a Worker secret that may be a plain string (local dev)
  * or a Secrets Store binding with async .get().
  */
 export type SecretValue = string | { get(): Promise<string> } | undefined | null;

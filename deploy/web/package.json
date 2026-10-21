@@ -1,0 +1,18 @@
+{
+  "name": "alfred-report-web",
+  "private": true,
+  "type": "module",
+  "description": "cf CLI project for the Alfred.report web Worker (src/index.ts). Own directory so cf builds the Worker with the Cloudflare Vite plugin instead of detecting the root TanStack app. Runtime dependencies resolve from the repo root node_modules.",
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "beta",
+    "cf": "^1.0.0-beta.19",
+    "vite": "^8.0.0"
+  },
+  "scripts": {
+    "dev": "cf dev",
+    "build": "cf build",
+    "deploy": "cf deploy",
+    "check": "ALFRED_CONFIG_CHECK=1 cf deploy --dry-run",
+    "types": "cf workers types"
+  }
+}

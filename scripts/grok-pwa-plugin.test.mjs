@@ -20,6 +20,10 @@ import {
 import { renderInstallPage } from "./grok-pwa-plugin.mjs";
 
 const TEMPLATE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+// Injection defaults read src/lib/og/site.json and public/og.* from process.cwd(). Run from an
+// empty directory so the app's real brand (title, custom card) cannot leak into these fixtures;
+// repo files are read through TEMPLATE_ROOT.
+process.chdir(mkdtempSync(join(tmpdir(), "grok-pwa-cwd-")));
 
 test("injects before </head>", () => {
   const out = injectGrokPwaHead("<html><head><title>x</title></head><body></body></html>");

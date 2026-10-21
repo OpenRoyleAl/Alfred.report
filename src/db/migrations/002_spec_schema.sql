@@ -1,4 +1,4 @@
--- Alfred.Report Schema v2 — From agent-alfred spec
+-- Alfred.Report Schema v2
 -- Tables: signal, observation, routing_decision, audit, link
 
 -- Signal: inbound salience from streams

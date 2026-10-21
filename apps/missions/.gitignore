@@ -1,0 +1,31 @@
+node_modules/
+dist/
+.cloudflare/
+.dev.vars
+.dev.vars.*
+*.log
+.env
+.env.*
+!.env.example
+
+# runtime state (may hold credentials / ops dumps)
+state/
+
+# ammo / rollback bak with secrets risk
+*.bak
+*.bak-*
+*.bak.*
+
+# dumps
+*.zip
+*.tar
+*.tar.gz
+.DS_Store
+.grok/
+.vscode/
+.idea/
+
+# python
+scripts/__pycache__/
+**/__pycache__/
+*.pyc

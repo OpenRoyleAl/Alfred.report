@@ -22,11 +22,11 @@
   <main class="section" style="padding:1.5rem;max-width:40rem;margin:0 auto">
     <p class="kicker">Lane 2</p>
     <h1>Use my own Cloudflare</h1>
-    <p class="lede" style="text-align:left">You never handle tokens. Token Master lives on <strong>your</strong> account. Iceberg never mints for customers. Billing gate before mint.</p>
+    <p class="lede" style="text-align:left">You never handle tokens. Token Master lives on <strong>your</strong> account. Billing gate before mint.</p>
     <ol class="start-steps" id="steps">
       <li data-step="1">
         <h3>1. Logged in on alfred.report</h3>
-        <p>You are here. Next: your Cloudflare, not Iceberg’s bill.</p>
+        <p>You are here. Next: your own Cloudflare account and bill.</p>
       </li>
       <li data-step="2">
         <h3>2. Create CF account + invite Super Admin</h3>
@@ -36,11 +36,11 @@
       </li>
       <li data-step="3">
         <h3>3. Token Master on <em>your</em> account</h3>
-        <p>API Tokens Write only. Secrets Store on your account — not Agent Memory. Not Iceberg Token Master.</p>
+        <p>API Tokens Write only. Secrets Store on your account — not Agent Memory.</p>
       </li>
       <li data-step="4">
         <h3>4. Optional domain ffm.report</h3>
-        <p>Cloudflare Registrar on <strong>your</strong> account (~$19/y). Dogfood: FansFollow-me, not Iceberg SEO.</p>
+        <p>Cloudflare Registrar on <strong>your</strong> account (~$19/y).</p>
         <label>Domain <input id="domain" value="ffm.report" /></label>
         <button type="button" class="btn-ghost" id="savedomain">Save domain</button>
       </li>
@@ -87,7 +87,7 @@
       const r = await fetch("/api/kiss/start");
       if (r.status === 401) { location.href = "/login"; return; }
       const d = await r.json();
-      if (d.invited_al) document.getElementById("poll").textContent = "Alfred is in. (membership poll skeleton — dash confirmation is Hans/Martin.)";
+      if (d.invited_al) document.getElementById("poll").textContent = "Alfred is in.";
       if (d.domain) document.getElementById("domain").value = d.domain;
     }
     boot();

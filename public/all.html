@@ -85,7 +85,7 @@ function fmtWhen(ts){
 function trunc(s,n){ s=String(s||""); n=n||140; return s.length>n?s.slice(0,n-1)+"…":s; }
 function esc(s){ return String(s||"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 async function fetchMissions(state){
-  const u=new URL("/api/command/missions",location.origin);
+  const u=new URL("/api/missions",location.origin);
   if(state && state!=="all") u.searchParams.set("state",state);
   u.searchParams.set("limit","100");
   const r=await fetch(u,{credentials:"same-origin"});
@@ -94,7 +94,7 @@ async function fetchMissions(state){
   return data.missions||[];
 }
 async function fetchMission(id){
-  const r=await fetch("/api/command/missions/"+encodeURIComponent(id),{credentials:"same-origin"});
+  const r=await fetch("/api/missions/"+encodeURIComponent(id),{credentials:"same-origin"});
   if(!r.ok) throw new Error("Mission not found ("+r.status+").");
   return r.json();
 }

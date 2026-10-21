@@ -1,0 +1,33 @@
+{
+  "name": "alfred-report-oral",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ORAL - the voice-listen stage of Alfred.report (Workers AI STT/TTS). cf CLI project, Vite bundler.",
+  "scripts": {
+    "dev": "cf dev",
+    "build": "cf build",
+    "deploy": "cf deploy",
+    "check": "ALFRED_CONFIG_CHECK=1 cf deploy --dry-run",
+    "typecheck": "cf workers types && tsrs --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/voice": "latest",
+    "agents": "latest",
+    "ai": "latest",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "workers-ai-provider": "latest"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "beta",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "latest",
+    "cf": "^1.0.0-beta.19",
+    "tsrs": "^0.18.0-ts7.1.0-dev.20260929",
+    "typescript": "^5.5.0",
+    "vite": "^8.0.0"
+  }
+}

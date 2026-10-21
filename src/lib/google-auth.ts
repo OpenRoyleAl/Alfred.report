@@ -1,5 +1,5 @@
 /**
- * Google OAuth for Alfred.report! — browser + CLI `alfred-pi login` / `alfred-grok login`.
+ * Google OAuth for Alfred.report! - browser and CLI sign-in.
  * No API-key hell: session cookie after Google; CF account linking is later in /start.
  */
 import type { Env } from "./env";
@@ -18,10 +18,10 @@ const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO = "https://www.googleapis.com/oauth2/v3/userinfo";
 
 async function clientId(env: Env): Promise<string> {
-  return (await secretGet(env.GOOGLE_CLIENT_ID)) || (await secretGet(env.GOOGLE_OAUTH_CLIENT_ID));
+  return await secretGet(env.GOOGLE_CLIENT_ID);
 }
 async function clientSecret(env: Env): Promise<string> {
-  return (await secretGet(env.GOOGLE_CLIENT_SECRET)) || (await secretGet(env.GOOGLE_OAUTH_CLIENT_SECRET));
+  return await secretGet(env.GOOGLE_CLIENT_SECRET);
 }
 
 function b64url(buf: ArrayBuffer | Uint8Array | string): string {

@@ -1,7 +1,14 @@
+/// <reference path="../../../src/wasm.d.ts" />
+import coreWasm from "../../../src/alfred/wasm/alfred_core.wasm";
+import { initCore } from "../../../src/alfred/core.ts";
 import { routeAgentRequest } from "agents";
 import { AlfredOral } from "./server";
 import { agentNameAllowed, identify } from "./identity";
 import { instanceBrand, wakeWord } from "../../../src/brand.ts";
+
+// Instantiate the Rust core in the entry module (speakReport / The Report). A missing initCore
+// is a Worker 1101: the wasm Module import is not an Instance until this runs.
+initCore(coreWasm);
 
 export { AlfredOral };
 

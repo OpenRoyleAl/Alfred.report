@@ -2,7 +2,7 @@
 name = "alfred-core"
 version = "0.1.0"
 edition = "2021"
-description = "Alfred.report hot paths in Rust (wasm): search router decisions, rate limiters, model floor."
+description = "Alfred.report hot paths in Rust (wasm module for Workers): search router, model floor/primary, The Report, MCP auth/scopes, rate limiters."
 license = "MIT"
 
 [lib]

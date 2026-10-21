@@ -21,6 +21,24 @@ All model calls: AI Gateway (CLOUDFLARE_GATEWAY_ID) Auto Router, Workers AI floo
 Secrets: Secrets Store. Names: src/brand.ts. Config: config/schema.ts.
 ```
 
+## Rust vs TypeScript
+
+Hot paths compile to a wasm *module* (`crates/alfred-core` → `src/alfred/wasm/alfred_core.wasm`) and
+are called from TypeScript over a JSON ABI. This is the Cloudflare wasm-module pattern (import
+yields a `WebAssembly.Module`; `initCore` instantiates it). It is **not** a workers-rs Worker:
+workers-rs needs wasm-bindgen + a JS glue entry, and cannot host the Agents SDK `Agent` class.
+
+**Rust (wasm):** search router (Ceramic → Exa Lite → Exa auto decisions, Lite URL/body/parse),
+Exa 10 rps and DeepSeek 20 rpm limiters, model floor / primary / 429 / completion-text parse,
+The Report builder and spoken form, MCP token format + scope parse + tool allow-list.
+
+**TypeScript (stays):** Agents SDK Durable Objects (`Alfred`, `AlfredMissions`, `AlfredOral`),
+`routeAgentRequest`, pi-ai / `env.AI.run` / Auto Router, D1 + SHA-256 token store, Secrets Store,
+Ceramic/Exa `fetch`, MCP JSON-RPC transport, Vite/React UI.
+
+`initCore` must run in every Worker entry (`src/index.ts`, `apps/missions/src/index.ts`,
+`apps/oral/src/worker.ts`). A missing init was a 1101 twice.
+
 ## Tenancy
 
 - Owner (`OWNER_EMAILS`, or the `ALFRED_OPS_TOKEN` bearer): missions, intake, knowledge graph, email forwards.

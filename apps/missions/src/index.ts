@@ -15,6 +15,7 @@ import * as cfChangelog from "./lib/cf-changelog";
 import * as memory from "./lib/memory";
 import * as emailIngest from "./lib/email-ingest";
 
+// Do not remove: a missing initCore was a Worker 1101 twice.
 initCore(coreWasm);
 
 // ─── Extended Env for Worker entry ─────────────────────────────

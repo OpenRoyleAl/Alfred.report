@@ -20,6 +20,7 @@ import { listAgentTokens, mintAgentToken, parseScopes, revokeAgentToken, verifyA
 import { fullScopes, mcpError, type MCPIdentity } from "./mcp/server";
 
 // Instantiate the Rust core in the entry module (a side-effect import is tree-shaken: sideEffects=false).
+// Do not remove: a missing initCore was a Worker 1101 twice.
 initCore(coreWasm);
 
 // ─── Worker exports (see deploy/web/cloudflare.config.ts) ──────────────────────────────────────

@@ -1,16 +1,23 @@
 //! Alfred.report hot paths, compiled to wasm32 and called from the Workers.
 //!
-//! - Search router: which tier (Ceramic -> Exa Lite -> Exa auto) serves a query, and when a
-//!   result set is too thin. The Workers do the I/O; every decision is made here.
-//! - Sliding-window rate limiters (Exa 10 rps, DeepSeek V4.1 Flash 20 rpm) kept in wasm memory
-//!   per isolate.
-//! - Model floor: which Workers AI models a mission may fall back to right now.
+//! This is a wasm *module* (not a workers-rs Worker): JSON in, JSON out over linear memory
+//! (`alloc` / `dealloc`, results as packed `(ptr << 32) | len`). Cloudflare documents that
+//! `import "*.wasm"` yields a `WebAssembly.Module`; `initCore` instantiates it in every
+//! Worker entry. A missing init caused 1101s twice — do not skip it.
 //!
-//! ABI: JSON in, JSON out over linear memory (`alloc` / `dealloc`, results returned as a
-//! packed `(ptr << 32) | len` u64). No wasm-bindgen needed.
+//! In Rust: search router, Exa Lite request/result shape, model floor/primary/429, The Report,
+//! MCP token format + scope/tool checks, sliding-window limiters.
+//!
+//! Not in Rust (needs the JS isolate / Agents SDK): Durable Objects, `routeAgentRequest`,
+//! pi-ai / `env.AI.run`, D1, Secrets Store, fetch to Ceramic/Exa, MCP JSON-RPC transport.
+//!
+//! ABI: no wasm-bindgen. workers-rs would pull wasm-bindgen and a JS glue entry, which cannot
+//! host the Agents SDK Agent class.
 
 pub mod limiter;
+pub mod mcp;
 pub mod models;
+pub mod report;
 pub mod search;
 
 use std::alloc::{alloc as raw_alloc, dealloc as raw_dealloc, Layout};
@@ -59,8 +66,93 @@ pub extern "C" fn search_analyze(ptr: *const u8, len: usize) -> u64 {
 }
 
 #[no_mangle]
+pub extern "C" fn search_lite_url(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, search::lite_url_json)
+}
+
+#[no_mangle]
+pub extern "C" fn search_lite_body(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, search::lite_body_json)
+}
+
+#[no_mangle]
+pub extern "C" fn search_lite_parse(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, search::lite_parse_json)
+}
+
+#[no_mangle]
+pub extern "C" fn search_better(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, search::better_json)
+}
+
+#[no_mangle]
 pub extern "C" fn models_floor(ptr: *const u8, len: usize) -> u64 {
     call(ptr, len, models::floor_json)
+}
+
+#[no_mangle]
+pub extern "C" fn models_primary(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, models::primary_json)
+}
+
+#[no_mangle]
+pub extern "C" fn models_headers(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, models::headers_json)
+}
+
+#[no_mangle]
+pub extern "C" fn models_rate_limited(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, models::rate_limited_json)
+}
+
+#[no_mangle]
+pub extern "C" fn models_text(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, models::text_json)
+}
+
+#[no_mangle]
+pub extern "C" fn report_build(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, report::build_json)
+}
+
+#[no_mangle]
+pub extern "C" fn report_speak(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, report::speak_json)
+}
+
+#[no_mangle]
+pub extern "C" fn report_title(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, report::title_json)
+}
+
+#[no_mangle]
+pub extern "C" fn mcp_parse_scopes(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, mcp::parse_scopes_json)
+}
+
+#[no_mangle]
+pub extern "C" fn mcp_tools(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, mcp::tools_json)
+}
+
+#[no_mangle]
+pub extern "C" fn mcp_allow(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, mcp::allow_json)
+}
+
+#[no_mangle]
+pub extern "C" fn mcp_token_ok(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, mcp::token_ok_json)
+}
+
+#[no_mangle]
+pub extern "C" fn mcp_protocol(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, mcp::protocol_json)
+}
+
+#[no_mangle]
+pub extern "C" fn mcp_scopes(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, mcp::scopes_catalog_json)
 }
 
 /// Take a slot on limiter `id` at `now_ms`. Returns 0 when taken, else ms to wait.

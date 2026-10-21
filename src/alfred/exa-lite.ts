@@ -10,7 +10,7 @@
  */
 import type { WebSearchSource, WebSearchResponse } from "agents/websearch";
 import { secretGet, type SecretValue } from "../lib/secret.ts";
-import { LIMITER, limiterTake } from "./core.ts";
+import { LIMITER, limiterTake, searchLiteBody, searchLiteParse, searchLiteUrl } from "./core.ts";
 
 export const EXA_RPS = 10;
 
@@ -48,15 +48,7 @@ export function createRateLimiter(now: () => number = Date.now, sleep = (ms: num
 export const exaRateLimiter: RateLimiter = createRateLimiter();
 
 export function exaLiteUrl(c: Pick<ExaLiteConfig, "accountId" | "gateway" | "slug">): string {
-  return `https://gateway.ai.cloudflare.com/v1/${c.accountId}/${c.gateway}/custom-${c.slug}/search`;
-}
-
-interface ExaResult {
-  url: string;
-  title?: string | null;
-  text?: string | null;
-  summary?: string | null;
-  highlights?: string[] | null;
+  return searchLiteUrl(c.accountId, c.gateway, c.slug);
 }
 
 export function createExaLiteSearch(c: ExaLiteConfig): WebSearchSource {
@@ -72,18 +64,15 @@ export function createExaLiteSearch(c: ExaLiteConfig): WebSearchSource {
       };
       const token = await secretGet(c.gatewayToken);
       if (token) headers["cf-aig-authorization"] = `Bearer ${token}`;
-      // Lite accepts only `query` (plus result count); no filters.
-      const body = { query: req.query, type: "lite", numResults: Math.min(Math.max(req.limit ?? 6, 1), 10) };
+      // URL, body and result map are Rust (crates/alfred-core). The key never touches this code:
+      // AI Gateway injects cf-aig-byok-alias. Fetch stays in the JS isolate.
+      const body = searchLiteBody(req.query, req.limit);
       const r = await f(exaLiteUrl(c), { method: "POST", headers, body: JSON.stringify(body) });
       if (!r.ok) throw new Error(`exa-lite ${r.status}: ${(await r.text()).slice(0, 200)}`);
-      const j = (await r.json()) as { requestId?: string; results?: ExaResult[] };
+      const parsed = searchLiteParse(await r.json());
       return {
-        items: (j.results ?? []).map((x) => ({
-          url: x.url,
-          title: x.title ?? x.url,
-          description: (x.summary || x.highlights?.join(" ") || x.text || "").slice(0, 400),
-        })),
-        metadata: { query: req.query, requestId: j.requestId ?? "", latencyMs: Date.now() - started },
+        items: parsed.items.map((x) => ({ url: x.url, title: x.title, description: x.description ?? "" })),
+        metadata: { query: req.query, requestId: parsed.requestId, latencyMs: Date.now() - started },
       };
     },
   };

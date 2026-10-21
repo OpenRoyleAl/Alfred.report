@@ -1,11 +1,11 @@
 /**
  * KISS lane — email session, D1 missions/spend/memory. No tokens in responses.
- * Users never see Iceberg Token Master. Gateway id stays `alfred`.
+ * Customers mint tokens only on their own Cloudflare account.
  */
 
 import type { Env } from "./env";
 import { secretGet } from "./secret";
-import { AIGateway } from "./ai-gateway";
+import { completeText } from "../alfred/models";
 
 export const KISS_COOKIE = "alfred_kiss";
 export const NEURON_CAP = 10_000;
@@ -66,6 +66,9 @@ const RESERVED_NAMES = new Set([
   "alfred",
   "al",
   "oral",
+  "wake",
+  "voice",
+  "command",
   "report",
   "map",
   "mission",
@@ -81,7 +84,6 @@ const RESERVED_NAMES = new Set([
   "signup",
   "home",
   "openroyleal",
-  "iceberg",
 ]);
 
 function tenantFromEmail(email: string): string {
@@ -369,19 +371,14 @@ export async function chatTurn(env: Env, user: KissUser, message: string) {
     "Noted. Mission recorded in your report. Spend ticks on the map. Connect Cloudflare when you want your own account.";
   let tokens = CHAT_NEURONS_MIN;
   try {
-    const gw = new AIGateway(env);
-    const meta = await gw.chatWithMeta(
-      [
-        {
-          role: "system",
-          content: "You are Alfred.report KISS operator. One short reply. No secrets. Evidence before done.",
-        },
-        { role: "user", content: message.slice(0, 2000) },
-      ],
-      { tenantId: user.tenant_id, maxTokens: 120 }
+    const out = await completeText(
+      env,
+      "You are Alfred.report KISS operator. One short reply. No secrets. Evidence before done.",
+      message.slice(0, 2000),
+      { maxTokens: 120, sessionId: `kiss-${user.tenant_id}` }
     );
-    reply = meta.content.slice(0, 2000);
-    tokens = Math.max(CHAT_NEURONS_MIN, meta.usage.totalTokens || CHAT_NEURONS_MIN);
+    reply = out.text.slice(0, 2000) || reply;
+    tokens = Math.max(CHAT_NEURONS_MIN, out.totalTokens || CHAT_NEURONS_MIN);
   } catch {
     /* metered stub — spend still increments */
   }
@@ -438,14 +435,14 @@ export async function wizardPatch(
   return wizardGet(env, tenant_id);
 }
 
-/** Iceberg never mints for customers. Unpaid → 402. */
+/** Tokens are minted only on the customer account, and only once billing is active. Unpaid → 402. */
 export function mintBlocked(user: KissUser): Response | null {
   if (!user.billing_paid) {
     return Response.json(
       {
         error: "Payment required",
         code: 402,
-        copy: "alfred-mem billing must be active before Token Master mint on your Cloudflare account. Iceberg Token Master never mints for customers.",
+        copy: "alfred-mem billing must be active before Token Master mint on your Cloudflare account.",
       },
       { status: 402 }
     );

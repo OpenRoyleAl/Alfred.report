@@ -80,7 +80,7 @@
           <span class="badge post">POST</span>
           <code>https://voice.alfred.report/voice</code>
         </div>
-        <p>Synthesizes arbitrary text into natural neural voice output using MiMo neural TTS.</p>
+        <p>Synthesizes arbitrary text into natural neural voice output using Workers AI text-to-speech.</p>
         <h3>GET Example:</h3>
         <pre><code>curl "https://voice.alfred.report/voice?token=YOUR_TOKEN&amp;text=Mission%20complete" -o speech.wav</code></pre>
       </div>
@@ -90,7 +90,7 @@
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="badge get">GET</span>
-          <code>https://alfred.report/api/command/missions</code>
+          <code>https://alfred.report/api/missions</code>
         </div>
         <p>Lists current missions with full budget, evidence, and acceptance status.</p>
         <h3>Example Response:</h3>
@@ -114,7 +114,7 @@
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="badge post">POST</span>
-          <code>https://alfred.report/api/command/missions</code>
+          <code>https://alfred.report/api/missions</code>
         </div>
         <p>Dispatches a new mission to the orchestrator queue.</p>
         <h3>Example Payload:</h3>

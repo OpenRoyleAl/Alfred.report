@@ -5,8 +5,6 @@
 import type { Env } from "./env";
 import { secretGet } from "./secret";
 
-export const ALFRED_PRICE_USD = "price_1UIO3pS0NJaOBwm44jFvbhKN";
-export const ALFRED_PRICE_GBP = "price_1UIO3pS0NJaOBwm4DCeHmG4L";
 
 /** Rough at-cost defaults when registrar does not return a price (cents). */
 const DOMAIN_COST_CENTS: Record<string, number> = {
@@ -23,7 +21,7 @@ const DOMAIN_COST_CENTS: Record<string, number> = {
 };
 
 async function stripeKey(env: Env): Promise<string | null> {
-  const k = (await secretGet(env.STRIPE_SECRET_KEY)) || (await secretGet(env.STRIPE_KEY));
+  const k = await secretGet(env.STRIPE_KEY);
   return typeof k === "string" && k.length > 8 ? k : null;
 }
 
@@ -34,8 +32,8 @@ export function currencyForCountry(country?: string | null): "usd" | "gbp" {
 }
 
 export function subscriptionPriceId(currency: "usd" | "gbp", env: Env): string {
-  if (currency === "usd") return env.STRIPE_PRICE_USD_99 || ALFRED_PRICE_USD;
-  return env.STRIPE_PRICE_GBP_99 || ALFRED_PRICE_GBP;
+  if (currency === "usd") return env.STRIPE_PRICE_USD_99 || "";
+  return env.STRIPE_PRICE_GBP_99 || "";
 }
 
 export function normalizeDomainInput(raw: string): { ok: true; domain: string; label: string; tld: string } | { ok: false; error: string } {
@@ -71,8 +69,9 @@ export async function checkDomainAvailability(
   const norm = normalizeDomainInput(raw);
   if (!norm.ok) return { ok: false, error: norm.error, mode: "heuristic" };
 
-  const token = (await secretGet(env.CF_API_TOKEN)) || (await secretGet(env.CLOUDFLARE_API_TOKEN));
-  const account = (await secretGet(env.CF_ACCOUNT_ID)) || (env.CLOUDFLARE_ACCOUNT_ID || "");
+  // Scoped token: Account > Registrar > Read only (never an account-wide token).
+  const token = await secretGet(env.REGISTRAR_API_TOKEN);
+  const account = env.CLOUDFLARE_ACCOUNT_ID || "";
   let available: boolean | undefined;
   let supported = true;
   let mode: "live" | "heuristic" = "heuristic";
@@ -99,7 +98,7 @@ export async function checkDomainAvailability(
 
   if (available === undefined) {
     // Heuristic: known taken marketing names only; do not fake a hold.
-    const reserved = new Set(["alfred.report", "www.report", "oral.report", "openroyleal.report"]);
+    const reserved = new Set(["alfred.report", "www.report", "openroyleal.report"]);
     available = !reserved.has(norm.domain);
     mode = "heuristic";
   }
@@ -141,6 +140,7 @@ export async function createCheckoutSession(
 
   const currency = currencyForCountry(opts.country);
   const priceId = subscriptionPriceId(currency, env);
+  if (!priceId) return { ok: false, error: "Stripe price not configured (STRIPE_PRICE_*_99)", status: 503 };
   const domainCents = Math.max(0, Math.round(opts.domainCostCents));
 
   const params = new URLSearchParams();

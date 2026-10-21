@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -59,6 +60,9 @@ test("an explicit process-env override wins over the file", () => {
   assert.equal(merged.PATH, "/usr/bin");
 });
 
+const SHIPPED = readAppEnv(projectRoot());
+const SHIPPED_FLAG = String(SHIPPED.VITE_AUTH_ENABLED);
+
 test("the template ships auth off", () => {
   assert.deepEqual(readAppEnv(projectRoot()), { VITE_AUTH_ENABLED: "false" });
 });
@@ -80,7 +84,8 @@ test("the wrapped command runs with the app env applied", async () => {
     "-e",
     PRINT_FLAG,
   ]);
-  assert.equal(stdout, "false");
+  // Whatever the workspace ships (or nothing) is what the wrapped command must see.
+  assert.equal(stdout, SHIPPED_FLAG);
 });
 
 test("the wrapped command sees an explicit override, not the file value", async () => {
@@ -124,5 +129,5 @@ test("the CLI still runs when invoked through a symlinked path", async () => {
     "-e",
     PRINT_FLAG,
   ]);
-  assert.equal(stdout, "false");
+  assert.equal(stdout, SHIPPED_FLAG);
 });

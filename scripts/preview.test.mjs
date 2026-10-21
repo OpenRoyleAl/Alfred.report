@@ -79,7 +79,7 @@ test("parseListenerInodes picks LISTEN sockets on the wanted port only", () => {
 });
 
 test("parseListenerInodes reads the tcp6 dump the same way", () => {
-  const v6 = "00000000000000000000000000000000:1F91";
+  const v6 = "00000000000000000000000000000000:1F91"; // secret-scan: allow
   assert.deepEqual(parseListenerInodes(tcpRow(0, v6, "0A", 7777), 8081), ["7777"]);
 });
 

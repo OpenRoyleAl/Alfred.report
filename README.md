@@ -1,88 +1,37 @@
-<p align="center">
-  <a href="https://alfred.report">
-    <img src="public/og.png" alt="Alfred.report" width="720" />
-  </a>
-</p>
+# Alfred.report!
 
-<p align="center">
-  <strong>Alfred.report</strong><br />
-  Voice-first operator on Cloudflare<br />
-  <em>Alfred, report!</em>
-</p>
+A voice-first operator that runs on your own Cloudflare account, branded by your own domain.
+Say your wake word - your instance brand, like **name.report!** - and get **The Report**: a short
+spoken status of your recent missions (success or fail), a one-line synopsis, and what needs you.
 
-<p align="center">
-  <a href="https://alfred.report"><img src="https://img.shields.io/badge/live-alfred.report-c9a227?style=for-the-badge" alt="Live" /></a>
-  <a href="https://alfred.report/signup"><img src="https://img.shields.io/badge/get_started-signup-111111?style=for-the-badge" alt="Signup" /></a>
-  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/OpenRoyleAl/Alfred.report"><img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" /></a>
-</p>
+Alfred.report! is the platform and Sovereign Custodian behind every instance.
 
----
+## What is in here
 
-Alfred is a personal operator that runs on the edge. You wake him with **Alfred, report!** He answers with a short brief, keeps missions moving, and stays out of the way when nothing needs a decision.
+| Part | Folder | What it does |
+|---|---|---|
+| Web | `src/`, `public/`, `deploy/web/` | Site, sign-in (Cloudflare Access / Google), per-user sandbox tenants, the `Alfred` agent (Pi harness in a Durable Object), MCP, owner email forwards. |
+| Missions | `apps/missions/` | Missions, evidence gates, knowledge graph (D1, Vectorize, R2), daily briefing and nightly maintenance (Workflows). |
+| ORAL | `apps/oral/` | Voice: Workers AI speech-to-text and text-to-speech, continuous listening for the wake word. |
 
-The product lives at **[alfred.report](https://alfred.report)**. This repository is the open source for the Cloudflare Worker face, static site, and CLI packages.
+Models go through the instance's AI Gateway (Auto Router). Web search uses Ceramic by default and
+escalates to Exa automatically, billed to the gateway's Exa provider key (`src/alfred/search.ts`).
 
-## Try it
+Every signed-in user gets a limited sandbox (asks per day). The owner (`OWNER_EMAILS`) can start
+missions and forward email to `al@<domain>` to start one.
 
-| | |
-| --- | --- |
-| Product | [alfred.report](https://alfred.report) |
-| Hear the brief | [Speak it](https://alfred.report/) on the home page |
-| iPhone + Siri | [alfred.report/iphone](https://alfred.report/iphone) |
-| Agent discovery | [llms.txt](https://alfred.report/llms.txt) · [OpenAPI](https://alfred.report/api/openapi.json) |
+## Docs
 
-## Stack
+- [docs/SETUP.md](docs/SETUP.md) - per-customer setup with the cf CLI
+- [docs/CONFIG.md](docs/CONFIG.md) - every config key (generated)
+- [docs/NAMING.md](docs/NAMING.md) - brands, Worker and resource names
+- [ARCHITECTURE.md](ARCHITECTURE.md)
 
-- **Cloudflare Workers** + Durable Objects
-- **Static face** under `public/` (landing, auth pages, demo audio)
-- **TypeScript** Worker entry in `src/`
-- **Wrangler** config in `wrangler.jsonc`
-- Optional local harness in `packages/alfred-pi`
-
-## Deploy
-
-```bash
-git clone https://github.com/OpenRoyleAl/Alfred.report.git
-cd Alfred.report
-npm install
-npx wrangler deploy
-```
-
-Or use the **Deploy to Cloudflare** button above.
-
-Secrets (API keys, Stripe, JWT, Google OAuth) belong in **Cloudflare Secrets Store** or `wrangler secret put`. Do not put values in the repo.
-
-```bash
-# examples — names only; values stay in the dashboard / Secrets Store
-npx wrangler secret put XAI_API_KEY
-npx wrangler secret put JWT_SECRET
-```
-
-## Local development
-
-```bash
-npm install
-npm run dev
-```
-
-Copy secrets into a local `.dev.vars` file (gitignored) when you need full auth and billing paths.
-
-## Repository layout
+## Develop
 
 ```
-public/          Marketing site, audio demo, agent discovery files
-src/             Worker, routes, Durable Object, APIs
-packages/        alfred-pi and related open packages
-wrangler.jsonc   Cloudflare Worker config
+npm run install:all
+npm run gate
 ```
 
-## License
-
-MIT. See [LICENSE](./LICENSE).
-
----
-
-<p align="center">
-  <a href="https://alfred.report">alfred.report</a>
-  · OpenRoyleAl
-</p>
+Published by OpenRoyleAl.

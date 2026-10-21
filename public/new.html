@@ -190,13 +190,13 @@ footer .go{color:#c9a227;font-weight:700;margin-top:.5rem}
 
 <script>
 const AGENTS = [
-  { id:"cursor", name:"Cursor Agent (Vultr)", desc:"First active reserve — Composer/Grok burns Cursor pool. CF Memory + Gateway + Artifacts still Command.", rec:true },
-  { id:"oral", name:"ORAL / CF Worker", desc:"Native Command bee on Workers. Best for CF-only missions." },
-  { id:"openclaw", name:"OpenClaw field", desc:"Personal/channels field team under CF Command." },
-  { id:"grok-cli", name:"Grok CLI", desc:"Vultr Grok CLI pane — not this Grok Bot chat." },
-  { id:"mimocode", name:"MiMoCode", desc:"MIMO volume when Cursor pool dry." },
-  { id:"pi", name:"Pi", desc:"Light field reserve." },
-  { id:"hermes", name:"Hermes (egg)", desc:"Phase 3 only — not Command spine." },
+  { id:"alfred", name:"Alfred (this instance)", desc:"The Alfred agent on your Cloudflare account. Best default.", rec:true },
+  { id:"cursor", name:"Cursor", desc:"External coding agent that claims the mission over A2A." },
+  { id:"pi", name:"Pi", desc:"External Pi harness over A2A." },
+  { id:"grok-cli", name:"Grok CLI", desc:"External Grok CLI over A2A." },
+  { id:"openclaw", name:"OpenClaw", desc:"External OpenClaw agent over A2A." },
+  { id:"hermes", name:"Hermes Agent", desc:"External Hermes agent over A2A." },
+  { id:"mimocode", name:"MiMoCode", desc:"External MiMoCode agent over A2A." },
 ];
 
 const grid = document.getElementById("agentGrid");
@@ -211,7 +211,7 @@ AGENTS.forEach((a,i) => {
 
 async function refreshHold(){
   try{
-    const r=await fetch("/api/command/stats",{credentials:"same-origin"});
+    const r=await fetch("/api/stats",{credentials:"same-origin"});
     if(!r.ok) return;
     const s=await r.json();
     if(s.hold_new_missions){
@@ -257,7 +257,7 @@ document.getElementById("saveBtn").onclick=async function(){
   if(accRaw) body.acceptance=accRaw.split(/\n+/).map(s=>s.trim()).filter(Boolean);
   this.disabled=true; err.style.display="none";
   try{
-    const r=await fetch("/api/command/missions",{
+    const r=await fetch("/api/missions",{
       method:"POST", credentials:"same-origin",
       headers:{"Content-Type":"application/json","Accept":"application/json"},
       body:JSON.stringify(body)

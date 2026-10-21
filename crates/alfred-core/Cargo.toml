@@ -1,0 +1,21 @@
+[package]
+name = "alfred-core"
+version = "0.1.0"
+edition = "2021"
+description = "Alfred.report hot paths in Rust (wasm): search router decisions, rate limiters, model floor."
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex-lite = "0.1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

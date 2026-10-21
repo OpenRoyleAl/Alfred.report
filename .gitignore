@@ -1,6 +1,5 @@
 node_modules/
 dist/
-.wrangler/
 .dev.vars
 .dev.vars.*
 *.log
@@ -10,7 +9,12 @@ dist/
 !.dev.vars.example
 
 # local / IDE / dumps
-.grok/
+.grok/*
+!.grok/app-env.json
+!.grok/AGENTS.md
+!.grok/skills/
+.grok/skills/*
+!.grok/skills/og/
 .vercel/
 .vscode/
 .idea/
@@ -27,3 +31,7 @@ artifacts/
 *.bak
 *.bak-*
 *.bak.*
+
+# per-account values (docs/CONFIG.md)
+alfred.config.json
+.cloudflare/

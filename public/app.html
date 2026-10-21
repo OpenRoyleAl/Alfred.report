@@ -223,7 +223,7 @@ footer .go{color:#c9a227;font-weight:700;margin-top:.5rem}
         <button type="button" class="chip" data-filter="complete" role="tab" aria-selected="false">Complete</button>
         <button type="button" class="chip" data-filter="archived" role="tab" aria-selected="false">Archived</button>
       </div>
-      <p class="login-stub">HAK dogfood · named ORAL missions. Multi-tenant CF account linking later.</p>
+      <p class="login-stub">Owner board · missions on this instance.</p>
       <div class="list" id="list"><div class="empty">Loading board…</div></div>
     </div>
     <div class="detail" id="closedView"></div>
@@ -238,7 +238,7 @@ footer .go{color:#c9a227;font-weight:700;margin-top:.5rem}
       <textarea id="objInput" placeholder="What needs to ship?" maxlength="2000"></textarea>
       <label for="accInput">Acceptance (optional, one per line)</label>
       <textarea id="accInput" placeholder="done when…" maxlength="4000"></textarea>
-      <p class="hint">Creates via ORAL. Opens the new mission after save.</p>
+      <p class="hint">Creates the mission in Missions. Opens it after save.</p>
       <div class="rowbtns">
         <button type="button" class="btn ghost" id="composerCancel">Cancel</button>
         <button type="button" class="btn primary" id="composerSave">Open mission</button>
@@ -277,7 +277,7 @@ function lastAgentTouched(m){
   const ev=(m.evidence||[]).slice().filter(e=>e&&e.actor).sort((a,b)=>(b.at||0)-(a.at||0));
   if(ev.length) return String(ev[0].actor||"");
   const b=m.budget||{};
-  return String(b.field_agent||"oral");
+  return String(b.field_agent||"alfred");
 }
 function missionCode(id){
   const s=String(id||"");
@@ -293,10 +293,10 @@ function copyCode(code){
   if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(()=>{});
 }
 async function missionAct(id, action, note){
-  const r=await fetch("/api/command/missions/"+encodeURIComponent(id)+"/act",{
+  const r=await fetch("/api/missions/"+encodeURIComponent(id)+"/act",{
     method:"POST", credentials:"same-origin",
     headers:{"Content-Type":"application/json","Accept":"application/json"},
-    body:JSON.stringify({action, note: note||"", actor:"hans"})
+    body:JSON.stringify({action, note: note||"", actor:"owner"})
   });
   const data=await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(data.error||data.message||("Act failed "+r.status));
@@ -408,22 +408,22 @@ function whoTag(m){
   return "mission";
 }
 
-function latestNeedsHans(m){
-  const ev=(m.evidence||[]).filter(e=>e && e.check==="needs_hans");
+function latestNeedsOwner(m){
+  const ev=(m.evidence||[]).filter(e=>e && e.check==="needs_owner");
   if(!ev.length) return null;
   return ev.slice().sort((a,b)=>(b.at||0)-(a.at||0))[0];
 }
 
 function isNeedsYou(m){
   if(CLOSED.has(m.state)) return false;
-  const nh=latestNeedsHans(m);
+  const nh=latestNeedsOwner(m);
   return !!(nh && nh.passed===false);
 }
 function isClosed(m){ return CLOSED.has(m.state); }
 function isBuilding(m){ return !isClosed(m) && !isNeedsYou(m); }
 
 function needLine(m){
-  const nh=latestNeedsHans(m);
+  const nh=latestNeedsOwner(m);
   if(nh && nh.passed===false && nh.notes){
     let n=String(nh.notes).replace(/\s*Objective:\s*[\s\S]*$/,"").trim();
     n=n.replace(/^STALLED after \d+ heartbeats[^.]*\.\s*/i,"");
@@ -445,7 +445,7 @@ function wallMinutes(m){
 }
 
 async function fetchMissions(){
-  const u=new URL("/api/command/missions",location.origin);
+  const u=new URL("/api/missions",location.origin);
   u.searchParams.set("limit","100");
   const r=await fetch(u,{credentials:"same-origin"});
   if(!r.ok) throw new Error("Board fetch failed ("+r.status+").");
@@ -453,12 +453,12 @@ async function fetchMissions(){
   return data.missions||[];
 }
 async function fetchMission(id){
-  const r=await fetch("/api/command/missions/"+encodeURIComponent(id),{credentials:"same-origin"});
+  const r=await fetch("/api/missions/"+encodeURIComponent(id),{credentials:"same-origin"});
   if(!r.ok) throw new Error("Mission not found ("+r.status+").");
   return r.json();
 }
 async function fetchStats(){
-  const r=await fetch("/api/command/stats",{credentials:"same-origin"});
+  const r=await fetch("/api/stats",{credentials:"same-origin"});
   if(!r.ok) throw new Error("Stats fetch failed ("+r.status+").");
   return r.json();
 }
@@ -694,15 +694,7 @@ async function showBurnView(){
       + '<div class="cell"><div class="k">Missions touched · prior</div><div class="v">'+esc(String(prev.missions_touched||0))+'</div></div>'
       + '</div>'
       + '<div class="note">'+esc(s.metering_note||"Mission budget meters are sparse; zeros mean unmetered, not free.")+'</div>'
-      + '<div class="note">AI Gateway alfred logs are stale / MIMO may bypass — no live gateway burn chart here.</div>'
-      + (health && (health.free_neurons_per_day!=null || health.doctrine)
-        ? '<h2>Free neurons (ORAL health)</h2>'
-          + '<div class="aar-grid">'
-          + '<div class="cell"><div class="k">Free neurons / day</div><div class="v">'+esc(health.free_neurons_per_day!=null?fmtNum(health.free_neurons_per_day):"—")+'</div></div>'
-          + '<div class="cell"><div class="k">Paid $/1k neurons</div><div class="v">'+esc(health.paid_neurons_usd_per_1k!=null?String(health.paid_neurons_usd_per_1k):"—")+'</div></div>'
-          + '</div>'
-          + (health.doctrine?'<div class="panel muted">'+esc(trunc(health.doctrine,420))+'</div>':'')
-        : '')
+      + (health && health.model ? '<div class="note">Models: '+esc(health.model)+' via gateway '+esc(health.gateway||'')+'</div>' : '')
       + '<h2>Missions touched · 24h</h2>'
       + (touched.length
         ? '<div class="list">'+touched.map(m=>missionCardHtml(m,{showState:true})).join("")+'</div>'
@@ -742,7 +734,7 @@ async function showDetail(id){
       report
     ].join(" ");
     const bad=failedBlocked(m.evidence);
-    const fieldAgent=b.field_agent||"oral";
+    const fieldAgent=b.field_agent||"alfred";
     d.innerHTML=
       '<a class="back" href="'+BASE+'" id="backBtn">← Board</a>'
       + '<h1>'+esc(humanName(m))+'</h1>'
@@ -785,10 +777,10 @@ async function showDetail(id){
       if(!confirm("Go Max Al!\n\nMove this mission to Cursor with a temporary full-power burst?")) return;
       const btn=this; btn.disabled=true;
       try{
-        const r=await fetch("/api/command/missions/"+encodeURIComponent(id)+"/go-max",{
+        const r=await fetch("/api/missions/"+encodeURIComponent(id)+"/go-max",{
           method:"POST", credentials:"same-origin",
           headers:{"Content-Type":"application/json","Accept":"application/json"},
-          body:JSON.stringify({reason:"Go Max Al! from board", actor:"hans"})
+          body:JSON.stringify({reason:"Go Max Al! from board", actor:"owner"})
         });
         const data=await r.json().catch(()=>({}));
         if(!r.ok) throw new Error(data.error||data.message||("Go Max failed "+r.status));
@@ -814,7 +806,7 @@ async function showDetail(id){
             return;
           }
           if(act==="note"){
-            const n=prompt("Note for Command:");
+            const n=prompt("Note for Missions:");
             if(n==null||!String(n).trim()) return;
             await missionAct(id,"note",String(n).trim());
             await showDetail(id); return;
@@ -892,7 +884,7 @@ function openComposer(){
     const err=document.getElementById("composerErr");
     const c=document.getElementById("composer");
     c.classList.add("on"); c.setAttribute("aria-hidden","false");
-    err.textContent="New missions held — close Command metering loop first (HOLD_NEW_MISSIONS).";
+    err.textContent="New missions held — close Missions metering loop first (HOLD_NEW_MISSIONS).";
     err.style.display="block";
     document.getElementById("composerSave").disabled=true;
     return;
@@ -925,7 +917,7 @@ document.getElementById("composerSave").onclick=async function(){
   }
   this.disabled=true;
   try{
-    const r=await fetch("/api/command/missions",{
+    const r=await fetch("/api/missions",{
       method:"POST", credentials:"same-origin",
       headers:{"Content-Type":"application/json","Accept":"application/json"},
       body:JSON.stringify(body)

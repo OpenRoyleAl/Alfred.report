@@ -4,6 +4,7 @@
  * Credentials come from env / Secrets Store — never hardcode keys here.
  */
 
+import { secretGet } from "./secret";
 import type { Env } from "./env";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -85,7 +86,7 @@ function base64url(data: Uint8Array | string): string {
 async function importPrivateKey(pem: string): Promise<CryptoKey> {
   // Strip PEM headers/footers and decode
   const pemBody = pem
-    .replace("-----BEGIN PRIVATE KEY-----", "")
+    .replace("-----BEGIN PRIVATE KEY-----", "") // secret-scan: allow
     .replace("-----END PRIVATE KEY-----", "")
     .replace(/\s+/g, "");
   const binaryDer = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
@@ -130,11 +131,12 @@ async function getServiceAccountToken(env: Env): Promise<string> {
     return cachedToken.token;
   }
 
-  const saJson = env.GOOGLE_SA_KEY;
+  const saJson = await secretGet(env.GOOGLE_SA_KEY);
   if (!saJson) throw new Error("GOOGLE_SA_KEY not configured");
 
   const sa: ServiceAccountKey = JSON.parse(saJson);
-  const subject = env.GBP_SUBJECT || "hans@icebergmedia.co.uk";
+  const subject = env.GBP_SUBJECT;
+  if (!subject) throw new Error("GBP_SUBJECT not configured");
   const scope = "https://www.googleapis.com/auth/business.manage";
 
   const assertion = await signJWT(sa, subject, scope);

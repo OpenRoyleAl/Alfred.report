@@ -7,7 +7,7 @@
     "contact": {
       "name": "Alfred.report Support",
       "url": "https://alfred.report/contact",
-      "email": "hans@icebergmedia.co.uk"
+      "url": "https://alfred.report/contact"
     },
     "license": {
       "name": "Proprietary",
@@ -158,7 +158,7 @@
         }
       }
     },
-    "/api/command/stats": {
+    "/api/stats": {
       "get": {
         "summary": "Get 24-hour mission statistics",
         "description": "Returns counts of completed missions, total token burn, and budget metrics.",
@@ -176,7 +176,7 @@
         }
       }
     },
-    "/api/command/missions": {
+    "/api/missions": {
       "get": {
         "summary": "List missions",
         "parameters": [

@@ -173,7 +173,7 @@ export async function handleKissApi(req: Request, env: Env, url: URL): Promise<R
     const blocked = mintBlocked(user);
     if (blocked) return blocked;
     return Response.json({
-      error: "Iceberg Token Master never mints for customers. Use Token Master on your Cloudflare account.",
+      error: "Tokens are minted only on your own Cloudflare account.",
     }, { status: 403 });
   }
 

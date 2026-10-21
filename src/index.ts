@@ -1,79 +1,68 @@
+/// <reference path="./wasm.d.ts" />
+import coreWasm from "./alfred/wasm/alfred_core.wasm";
+import { initCore } from "./alfred/core.ts";
+import { clefGates } from "./alfred/extensions/clef";
 import { Alfred } from "./alfred/orchestrator";
 import type { Env } from "./lib/env";
 import { secretGet } from "./lib/secret";
-import { proxyListMissions, proxyGetMission, proxyCreateMission, proxyGoMaxMission, proxyMissionAct, proxyCommandStats, missionBoardAsset } from "./lib/command-proxy";
+import {
+  isOwnerEmail,
+  safeEqual,
+  tenantFromEmail,
+  verifyAccessEmail,
+  type VerifiedIdentity,
+} from "./lib/access";
+import { proxyListMissions, proxyGetMission, proxyCreateMission, proxyGoMaxMission, proxyMissionAct, proxyMissionsStats, missionBoardAsset } from "./lib/missions-proxy";
 import { handleKissApi } from "./lib/kiss-routes";
 import { handleInboundEmail } from "./lib/mail";
+import { BRAND, brandContext } from "./brand";
+import { listAgentTokens, mintAgentToken, parseScopes, revokeAgentToken, verifyAgentToken } from "./lib/agent-tokens";
+import { fullScopes, mcpError, type MCPIdentity } from "./mcp/server";
 
-// ─── Exports for Wrangler ──────────────────────────────────────
+// Instantiate the Rust core in the entry module (a side-effect import is tree-shaken: sideEffects=false).
+initCore(coreWasm);
+
+// ─── Worker exports (see deploy/web/cloudflare.config.ts) ──────────────────────────────────────
 
 export { Alfred } from "./alfred/orchestrator";
 
-// ─── User Registry (email → tenant) ───────────────────────────
+// ─── Identity (verified only) ─────────────────────────────────
+// Tenant comes from a verified Cloudflare Access JWT or the owner ops token.
+// No hard-coded emails: owners are listed in the OWNER_EMAILS var (per account).
 
-const TENANT_MAP: Record<string, { name: string; tenant_id: string }> = {
-  "hans@icebergmedia.co.uk": { name: "Hans", tenant_id: "hans" },
-  "hans@hansakoch.com": { name: "Hans", tenant_id: "hans" },
-  "test@alfred.report": { name: "Test User", tenant_id: "test" },
-};
 
-// Get user from Cloudflare Access headers (set by Access after OTP/IdP login)
-function getAccessUser(req: Request): { email: string; name: string; tenant_id: string } | null {
-  const email = req.headers.get("Cf-Access-Authenticated-User-Email") || emailFromAccessCookie(req);
-  if (!email) return null;
-  const user = TENANT_MAP[email.toLowerCase()];
-  if (!user) return { email, name: email.split("@")[0], tenant_id: email.split("@")[0] };
-  return { email, name: user.name, tenant_id: user.tenant_id };
+async function ownerFromRequest(req: Request, env: Env): Promise<boolean> {
+  const user = await getVerifiedUser(req, env);
+  return !!user?.isOwner;
 }
 
-/** Optional identity on unprotected paths (e.g. /) via Access JWT cookie. */
-function emailFromAccessCookie(req: Request): string | null {
-  const raw = req.headers.get("Cookie") || "";
-  const m = raw.match(/(?:^|;\s*)CF_Authorization=([^;]+)/);
-  if (!m) return null;
-  try {
-    const payloadB64 = m[1].split(".")[1];
-    if (!payloadB64) return null;
-    const json = atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"));
-    const payload = JSON.parse(json) as { email?: string };
-    return (payload.email || "").toLowerCase() || null;
-  } catch {
-    return null;
-  }
-}
-
-function isHansEmail(email: string | null | undefined): boolean {
-  const e = (email || "").toLowerCase();
-  return e === "hans@icebergmedia.co.uk" || e === "hans@hansakoch.com";
-}
-
-function hansFromRequest(req: Request): boolean {
-  const access = getAccessUser(req);
-  return isHansEmail(access?.email) || isHansEmail(emailFromAccessCookie(req));
-}
-
-/** Access email (Hans) or ALFRED_OPS_TOKEN Bearer — dogfood CLI + board. */
+/** Verified Access email, or ALFRED_OPS_TOKEN Bearer (owner CLI). */
 async function getVerifiedUser(
   req: Request,
   env: Env
-): Promise<{ email: string; tenant_id: string; isHans: boolean } | null> {
-  const authHeader = req.headers.get("Authorization") || req.headers.get("authorization") || "";
+): Promise<(VerifiedIdentity & { isOwnerUser: boolean }) | null> {
+  const authHeader = req.headers.get("Authorization") || "";
   if (authHeader.startsWith("Bearer ")) {
     const bearer = authHeader.slice(7).trim();
     const ops = await secretGet(env.ALFRED_OPS_TOKEN as any);
-    if (ops && bearer === ops) {
-      return { email: "hans@icebergmedia.co.uk", tenant_id: "hans", isHans: true };
+    const owner = (env.OWNER_EMAILS || "").split(",")[0]?.trim().toLowerCase();
+    // ALFRED_AGENT_TOKEN: a second owner bearer for the owner's own agents (deploy smoke tests);
+    // separate from ALFRED_OPS_TOKEN so it can be revoked without touching other automations.
+    const agent = await secretGet(env.ALFRED_AGENT_TOKEN as any);
+    if (owner && ((ops && safeEqual(bearer, ops)) || (agent && safeEqual(bearer, agent)))) {
+      return { email: owner, tenant_id: tenantFromEmail(owner), isOwner: true, isOwnerUser: true, via: "ops_token" };
     }
     return null;
   }
-  const access = getAccessUser(req);
-  const email = (access?.email || emailFromAccessCookie(req) || "").toLowerCase().trim();
+  const email = await verifyAccessEmail(req, env);
   if (!email) return null;
-  return {
-    email,
-    tenant_id: email.split("@")[0].replace(/[^a-z0-9]/g, "") || "default",
-    isHans: isHansEmail(email),
-  };
+  const isOwner = isOwnerEmail(env, email);
+  return { email, tenant_id: tenantFromEmail(email), isOwner, isOwnerUser: isOwner, via: "access" };
+}
+
+function sandboxLimit(v: string | undefined, fallback: number): number {
+  const n = Number.parseInt(v || "", 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
 // ─── Content Negotiation & Markdown Helpers ─────────────────────
@@ -84,92 +73,16 @@ function wantsMarkdown(req: Request, url: URL): boolean {
   return accept.includes("text/markdown") || accept.includes("text/x-markdown");
 }
 
-const MARKDOWN_DOCS: Record<string, string> = {
-  "/": `# Alfred, report! — Voice-First AI Operator & Chief of Staff
-
-> One wake word. Closed work comes back with verified evidence. You stay out of the middle.
-
-Alfred is a voice-first AI Chief of Staff and agent execution engine built on Cloudflare Workers, Durable Objects, D1, and neural voice synthesis. Instead of endless chat windows, Alfred manages durable missions with strict budgets, evidence gates, and instant voice debriefs via Apple Siri and iOS Shortcuts.
-
-## Key Features
-- **Voice-First Debriefing:** Say "Hey Siri, Alfred report" to receive an immediate spoken status report of active, gated, and closed missions.
-- **Durable Mission Engine:** Bounded missions with explicit acceptance criteria, neuron/token budgets, and verification evidence.
-- **Evidence-Gated Completion:** Missions cannot close without verified evidence (attestation, screenshot, test pass, or link). Fake "done" is rejected.
-- **Multi-Tenant Isolation:** Supports distinct tenants with dedicated voice styles, Cloudflare AI Gateways, and isolated mission boards.
-
-## Core Navigation & Endpoints
-- [Developer API Reference](https://alfred.report/api/docs)
-- [OpenAPI 3.1 Specification](https://alfred.report/api/openapi.json)
-- [LLM Instructions](https://alfred.report/llms.txt)
-- [Extended LLM Context](https://alfred.report/llms-full.txt)
-- [About](https://alfred.report/about)
-- [Contact & Support](https://alfred.report/contact)
-- [Privacy Policy](https://alfred.report/privacy)
-- [XML Sitemap](https://alfred.report/sitemap.xml)
-- [Go Max Al!](https://alfred.report/go-max)
-- [Sign up](https://alfred.report/signup)
-- [Sign in](https://alfred.report/login)`,
-
-  "/about": `# About Alfred.report
-
-Alfred is a voice-first AI Chief of Staff designed for business operators who demand closure instead of endless conversation. Built by OpenRoyleAl. Alfred.report replaces chat-based assistant bloat with durable, evidence-gated missions.
-
-## The Problem: Chat Army Fatigue
-Most AI agent platforms spawn disconnected chat sessions that treat human principals as message dispatchers. When managing high-scale operations—such as monitoring technical health across 145+ client domains—multi-agent swarms frequently generate hallucinations, false completion reports, and unverified work.
-
-Alfred.report eliminates this friction by operating under four core doctrines:
-- **One Wake Word:** "Hey Siri, Alfred report." You speak once, and the system delivers concise, spoken mission debriefs over neural audio.
-- **Evidence Before Completion:** An agent cannot mark a mission "complete" without concrete evidence (test suites passing, artifact URLs, screenshot proof, or explicit human sign-off).
-- **Hard Token & Dollar Budgets:** Every mission executes within strict spending boundaries. Over-budget processes halt immediately.
-- **Ephemeral Execution, Durable State:** Worker subagents spawn to solve specific tasks, deposit verified findings into Cloudflare D1 and Agent Memory, and terminate cleanly.
-
-## Cloudflare-Native Architecture
-- **Cloudflare Workers & Durable Objects:** High-throughput, low-latency coordination and distributed state management.
-- **Cloudflare D1:** Serverless relational SQL database for mission records, acceptance criteria, and audit histories.
-- **Cloudflare Agent Memory:** Durable semantic memory retaining long-term operational context.
-- **MiMo Neural TTS:** Ultra-low latency voice synthesis tailored for hands-free Siri debriefs.
-
-## Leadership & Origins
-Built by OpenRoyleAl.`,
-
-  "/contact": `# Contact & Support — Alfred.report
-
-Whether you are integrating voice endpoints with iOS Shortcuts, dispatching autonomous agency workflows, or inquiring about enterprise tenancy, our technical operations team is here to assist.
-
-## Direct Operator Channels
-- **Product email:** al@alfred.report (Cloudflare Email Routing)
-- **Technical Operator Email:** hans@icebergmedia.co.uk (Response time < 4 hours)
-- **Telephone Operations Bridge:** +44 (0) 20 8040 4422 (Mon–Fri 08:00–18:00 GMT / UTC+8)
-- **Registered Postal Address:**
-  Iceberg Media Ltd / OpenRoyleAl
-  71-75 Shelton Street, Covent Garden
-  London, WC2H 9JQ, United Kingdom
-
-## Machine & Agent Integrations
-- Developer Documentation: https://alfred.report/api/docs
-- OpenAPI 3.1 Specification: https://alfred.report/api/openapi.json
-- Agent Instructions: https://alfred.report/llms.txt
-- XML Sitemap: https://alfred.report/sitemap.xml`,
-
-  "/privacy": `# Privacy Policy — Alfred.report
-
-Effective Date: September 8, 2026
-
-At Iceberg Media, protecting the privacy, confidentiality, and integrity of your operational data is fundamental to our software engineering principles.
-
-## 1. Zero Third-Party Tracking
-Our public website (alfred.report) does not employ third-party advertising cookies, behavioral tracking pixels, or cross-site tracking scripts. We do not sell, rent, or monetize your personal or operational data under any circumstances.
-
-## 2. Operational Data & Mission Storage
-- **Authentication Tokens:** Secure session tokens stored with cryptographic hashing in Cloudflare D1.
-- **Mission Context:** Objectives, acceptance criteria, and execution logs recorded to verify task closure.
-- **Voice Synthesis Streams:** Real-time text-to-speech without persistent audio retention.
-
-## 3. Cloudflare Security & GDPR
-- Edge encryption via TLS 1.3 on Cloudflare edge.
-- Full compliance with UK GDPR and EU GDPR statutory data access/erasure rights.
-- Data Controller: Iceberg Media Ltd, 71-75 Shelton Street, Covent Garden, London, WC2H 9JQ, UK.`
-};
+/** Markdown views of the public pages, branded per instance (DOMAIN). No operator details are hard-coded. */
+function markdownDocs(env: Env): Record<string, string> {
+  const b = brandContext(env);
+  const host = env.DOMAIN || "localhost";
+  return {
+    "/": `# ${b.instanceBrand}\n\n${BRAND.tagline}\n\n${b.byline}.\n\n- [About](https://${host}/about)\n- [Contact](https://${host}/contact)\n- [Privacy](https://${host}/privacy)\n- [API docs](https://${host}/api/docs)\n- [llms.txt](https://${host}/llms.txt)`,
+    "/contact": `# Contact - ${b.instanceBrand}\n\n- Email: ${BRAND.senderLocalPart}@${host}\n- Web: https://${host}/contact\n\n${b.byline}.`,
+    "/privacy": `# Privacy - ${b.instanceBrand}\n\nThis instance runs on its owner's own Cloudflare account. ${BRAND.platformBrand} is the platform and Sovereign Custodian behind it.\n\n- No third-party advertising or tracking cookies.\n- Session tokens are stored hashed in Cloudflare D1.\n- Mission objectives, acceptance criteria and logs are kept to verify that work was done.\n- Voice audio is transcribed and not retained.\n\nThe data controller is the owner of ${host}; contact ${BRAND.senderLocalPart}@${host} for access or erasure requests.`,
+  };
+}
 
 function renderMarkdownResponse(content: string, status = 200): Response {
   return new Response(content, {
@@ -184,7 +97,14 @@ function renderMarkdownResponse(content: string, status = 200): Response {
 
 function render404(req: Request, url: URL): Response {
   if (wantsMarkdown(req, url)) {
-    const md = `# 404 Not Found\n\nThe requested resource \`${url.pathname}\` was not found on Alfred.report.\n\n## Helpful Resources\n- [Homepage](https://alfred.report/): Voice-first AI Operator & Chief of Staff\n- [About](https://alfred.report/about)\n- [Contact & Support](https://alfred.report/contact)\n- [Privacy Policy](https://alfred.report/privacy)\n- [API Documentation](https://alfred.report/api/docs)\n- [OpenAPI 3.1 Specification](https://alfred.report/api/openapi.json)\n- [LLM Instructions](https://alfred.report/llms.txt)\n- [XML Sitemap](https://alfred.report/sitemap.xml)\n`;
+    const md = `# 404 Not Found
+
+\`${url.pathname}\` was not found.
+
+- [Home](/)
+- [API docs](/api/docs)
+- [llms.txt](/llms.txt)
+`;
     return renderMarkdownResponse(md, 404);
   }
 
@@ -193,7 +113,7 @@ function render404(req: Request, url: URL): Response {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>404 Not Found — Alfred.report</title>
+  <title>404 Not Found</title>
   <link rel="icon" href="/favicon.svg">
   <style>
     :root { --bg:#0a0a0a; --fg:#eceae4; --muted:#9a958c; --gold:#c9a227; --card:#161922; --border:#2a2a2a; }
@@ -210,7 +130,7 @@ function render404(req: Request, url: URL): Response {
 <body>
   <div class="card">
     <h1>404 — Not Found</h1>
-    <p>The requested page or endpoint does not exist on Alfred.report.</p>
+    <p>The requested page or endpoint does not exist.</p>
     <div class="links">
       <a href="/">← Return to Homepage</a>
       <a href="/api/docs">📖 API Documentation</a>
@@ -237,91 +157,52 @@ export default {
     const url = new URL(req.url);
     const hostname = url.hostname;
 
-    // Canonical host is alfred.report. www is a 301 trampoline only (SEO).
-    if (hostname === "www.alfred.report") {
+    // Canonical host is DOMAIN. www is a 301 trampoline only (SEO).
+    if (env.DOMAIN && hostname === `www.${env.DOMAIN}`) {
       return new Response(null, {
         status: 301,
-        headers: { Location: "https://alfred.report" + url.pathname + url.search },
+        headers: { Location: `https://${env.DOMAIN}` + url.pathname + url.search },
       });
     }
 
-    // Legacy Siri hostname — not a product. One page lives at /iphone.
-    if (hostname === "iphone.alfred.report") {
-      return new Response(null, {
-        status: 301,
-        headers: { Location: "https://alfred.report/iphone" + url.search },
-      });
+    // Alfred's MCP host for agents: mcp.<DOMAIN>. Only the MCP endpoint lives here.
+    if (env.DOMAIN && hostname === `mcp.${env.DOMAIN}`) {
+      return handleMcpHost(req, env, url);
     }
 
-    // Signal plane
-    if (hostname === env.SIGNAL_DOMAIN || hostname === "signal.alfred-report.iceberg.workers.dev") {
-      return handleSignal(req, env);
-    }
-
-    // Vault plane
-    if (hostname === env.VAULT_DOMAIN || hostname === "vault.alfred-report.iceberg.workers.dev") {
-      return handleVault(req, env);
-    }
-
-    // Ledger plane
-    if (hostname === env.LEDGER_DOMAIN || hostname === "ledger.alfred-report.iceberg.workers.dev") {
-      return handleLedger(req, env);
-    }
-
-    // Dashboard
-    if (hostname === env.DOMAIN || hostname === "alfred-report.iceberg.workers.dev") {
+    // One web plane: the instance domain (routes in deploy/web/cloudflare.config.ts).
+    if (hostname === env.DOMAIN || hostname === "localhost" || hostname === "127.0.0.1") {
       return handleDashboard(req, env);
     }
 
     return render404(req, url);
   },
 
-  async email(message: { from: string; to: string; headers: Headers; setReject?: (reason: string) => void }, env: Env): Promise<void> {
+  async email(message: ForwardableEmailMessage, env: Env): Promise<void> {
     await handleInboundEmail(message, env);
   },
 
   async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext): Promise<void> {
-    // Frozen: farmer/curator/distiller/janitor/builder. See docs/ARCHITECTURE-FREEZE.md
+    // Scheduled work runs in the Missions Worker (apps/missions).
   },
 };
 
-// ─── Signal Plane ──────────────────────────────────────────────
+// ─── Signal ingest (/api/signal/ingest) ───────────────────────
 
-async function handleSignal(req: Request, env: Env): Promise<Response> {
-  const url = new URL(req.url);
-
-  if (url.pathname === "/ingest" && req.method === "POST") {
-    try {
-      const body = await req.json() as { kind: string; source: string; headline: string; body?: string; tenant_id?: string };
-      if (!body.kind || !body.source || !body.headline) {
-        return Response.json({ error: "Missing required fields: kind, source, headline" }, { status: 400 });
-      }
-      const id = env.ALFRED.idFromName(body.tenant_id || "default");
-      const stub = env.ALFRED.get(id);
-      return stub.fetch(new Request("https://internal/signal/ingest", { method: "POST", body: JSON.stringify(body) }));
-    } catch (error) {
-      return Response.json({ error: "Failed to ingest signal", detail: String(error) }, { status: 500 });
+async function handleSignalIngest(req: Request, env: Env): Promise<Response> {
+  try {
+    const body = (await req.json()) as { kind: string; source: string; headline: string; body?: string };
+    if (!body.kind || !body.source || !body.headline) {
+      return Response.json({ error: "Missing required fields: kind, source, headline" }, { status: 400 });
     }
+    // Tenant from verified identity only.
+    const identity = await getVerifiedUser(req, env);
+    if (!identity) return Response.json({ error: "unauthorized" }, { status: 401 });
+    const stub = env.ALFRED.getByName(identity.tenant_id);
+    return stub.fetch(new Request("https://internal/signal/ingest", { method: "POST", body: JSON.stringify(body) }));
+  } catch (error) {
+    return Response.json({ error: "Failed to ingest signal", detail: String(error) }, { status: 500 });
   }
-
-  if (url.pathname === "/health") return Response.json({ status: "ok", plane: "signal" });
-  return new Response("Signal Plane", { status: 200 });
-}
-
-// ─── Vault Plane ───────────────────────────────────────────────
-
-async function handleVault(req: Request, env: Env): Promise<Response> {
-  const url = new URL(req.url);
-  if (url.pathname === "/health") return Response.json({ status: "ok", plane: "vault" });
-  return new Response("Vault Plane", { status: 200 });
-}
-
-// ─── Ledger Plane ──────────────────────────────────────────────
-
-async function handleLedger(req: Request, env: Env): Promise<Response> {
-  const url = new URL(req.url);
-  if (url.pathname === "/health") return Response.json({ status: "ok", plane: "ledger" });
-  return new Response("Ledger Plane", { status: 200 });
 }
 
 // ─── Dashboard ─────────────────────────────────────────────────
@@ -340,26 +221,14 @@ async function tryPublicAsset(req: Request, env: Env, url: URL): Promise<Respons
 async function handleDashboard(req: Request, env: Env): Promise<Response> {
   const url = new URL(req.url);
 
-  // alfred-proxy mirror — lease/release for any agent (ops bearer)
-  if (req.method === "OPTIONS" && url.pathname.startsWith("/api/proxy/")) {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Alfred-Ops-Token, X-Alfred-Holder",
-        "Access-Control-Max-Age": "86400",
-      },
-    });
+  if (url.pathname === "/api/signal/ingest" && req.method === "POST") {
+    return handleSignalIngest(req, env);
   }
-  const { handleAlfredProxy } = await import("./lib/alfred-proxy");
-  const proxyRes = await handleAlfredProxy(req, env);
-  if (proxyRes) return proxyRes;
 
   const kissApi = await handleKissApi(req, env, url);
   if (kissApi) return kissApi;
 
-  // Google OAuth (browser + alfred-pi / alfred-grok CLI login)
+  // Google OAuth (browser + CLI login)
   {
     const { handleGoogleAuth } = await import("./lib/google-auth");
     const googleRes = await handleGoogleAuth(req, env, url);
@@ -402,10 +271,9 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
     return handleVisionPrepRequest(req, env);
   }
 
-  // MCP protocol (no Access auth — uses bearer token)
-  if (url.pathname === "/mcp" && req.method === "POST") {
-    const { handleMCP } = await import("./mcp/server");
-    return handleMCP(req, env);
+  // MCP on the main host (behind the Access app on /mcp): same handler and auth as mcp.<DOMAIN>.
+  if (url.pathname === "/mcp") {
+    return serveMcp(req, env);
   }
 
   // Legacy paths → KISS /
@@ -430,12 +298,12 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
 
   // ─── Public Content & Discovery Routes ─────────────────────────
 
-  // Home: logged-in Hans → board; markdown request → markdown; everyone else → marketing
+  // Home: logged-in owner → board; markdown request → markdown; everyone else → marketing
   if (url.pathname === "/" || url.pathname === "/index.html") {
     if (wantsMarkdown(req, url)) {
-      return renderMarkdownResponse(MARKDOWN_DOCS["/"]);
+      return renderMarkdownResponse(markdownDocs(env)["/"]);
     }
-    if (hansFromRequest(req)) {
+    if ((await ownerFromRequest(req, env))) {
       return env.ASSETS.fetch(new Request(new URL("/app.html", url.origin), req));
     }
     return env.ASSETS.fetch(new Request(new URL("/index.html", url.origin), req));
@@ -444,7 +312,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
   // About page
   if (url.pathname === "/about" || url.pathname === "/about.html" || url.pathname === "/about.md") {
     if (wantsMarkdown(req, url)) {
-      return renderMarkdownResponse(MARKDOWN_DOCS["/about"]);
+      return renderMarkdownResponse(markdownDocs(env)["/about"]);
     }
     return env.ASSETS.fetch(new Request(new URL("/about.html", url.origin), req));
   }
@@ -452,7 +320,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
   // Contact page
   if (url.pathname === "/contact" || url.pathname === "/contact.html" || url.pathname === "/contact.md") {
     if (wantsMarkdown(req, url)) {
-      return renderMarkdownResponse(MARKDOWN_DOCS["/contact"]);
+      return renderMarkdownResponse(markdownDocs(env)["/contact"]);
     }
     return env.ASSETS.fetch(new Request(new URL("/contact.html", url.origin), req));
   }
@@ -464,7 +332,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
 
   if (url.pathname === "/privacy" || url.pathname === "/privacy.html" || url.pathname === "/privacy.md") {
     if (wantsMarkdown(req, url)) {
-      return renderMarkdownResponse(MARKDOWN_DOCS["/privacy"]);
+      return renderMarkdownResponse(markdownDocs(env)["/privacy"]);
     }
     return env.ASSETS.fetch(new Request(new URL("/privacy.html", url.origin), req));
   }
@@ -476,19 +344,13 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
 
   // Setup is automatic — old /setup and /download paths go to signup
   if (url.pathname === "/setup" || url.pathname === "/setup/" || url.pathname === "/setup.html") {
-    return Response.redirect(new URL("https://alfred.report/signup", url.origin).toString(), 301);
+    return Response.redirect(new URL("/signup", url.origin).toString(), 301);
   }
   if (url.pathname === "/go-max" || url.pathname === "/go-max/" || url.pathname === "/gomax") {
     return env.ASSETS.fetch(new Request(new URL("/go-max.html", url.origin), req));
   }
   if (url.pathname === "/download" || url.pathname === "/download/") {
-    return Response.redirect(new URL("https://alfred.report/signup", url.origin).toString(), 301);
-  }
-  if (url.pathname === "/pi" || url.pathname === "/pi/") {
-    return Response.redirect(new URL("https://github.com/OpenRoyleAl/Alfred.report", url.origin).toString(), 302);
-  }
-  if (url.pathname === "/install.sh" || url.pathname === "/install.ps1") {
-    return Response.redirect("https://github.com/OpenRoyleAl/Alfred.report", 302);
+    return Response.redirect(new URL("/signup", url.origin).toString(), 301);
   }
 
   // Developer documentation
@@ -530,7 +392,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
     return Response.redirect(new URL("/login", url.origin).toString(), 302);
   }
 
-  // Product paths — ORAL sales page
+  // ORAL (voice-listen stage) product page
   if (url.pathname === "/oral" || url.pathname === "/oral/" || url.pathname === "/oral.html") {
     return env.ASSETS.fetch(new Request(new URL("/oral.html", url.origin), req));
   }
@@ -577,35 +439,35 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
     url.pathname === "/all.html" ||
     url.pathname === "/new.html";
   const isMissionsEndpoint =
-    url.pathname === "/api/command/missions" ||
+    url.pathname === "/api/missions" ||
     url.pathname === "/api/v1/missions" ||
     url.pathname === "/api/missions";
   const isStatsEndpoint =
-    url.pathname === "/api/command/stats" ||
+    url.pathname === "/api/stats" ||
     url.pathname === "/api/v1/stats" ||
     url.pathname === "/api/stats";
   const missionDetailMatch = url.pathname.match(
-    /^\/api\/(?:command\/missions|v1\/missions|missions)\/([^/]+)$/
+    /^\/api\/(?:v1\/missions|missions)\/([^/]+)$/
   );
   const missionGoMaxMatch = url.pathname.match(
-    /^\/api\/(?:command\/missions|v1\/missions|missions)\/([^/]+)\/go-max$/
+    /^\/api\/(?:v1\/missions|missions)\/([^/]+)\/go-max$/
   );
   const missionActMatch = url.pathname.match(
-    /^\/api\/(?:command\/missions|v1\/missions|missions)\/([^/]+)\/act$/
+    /^\/api\/(?:v1\/missions|missions)\/([^/]+)\/act$/
   );
-  const isCommandApi =
+  const isMissionsApi =
     isMissionsEndpoint ||
     isStatsEndpoint ||
     Boolean(missionDetailMatch) ||
     Boolean(missionGoMaxMatch) ||
     Boolean(missionActMatch);
 
-  if (isBoardHtml || isCommandApi) {
+  if (isBoardHtml || isMissionsApi) {
     const verified = await getVerifiedUser(req, env);
-    if (!verified || !verified.isHans) {
-      if (isCommandApi) {
+    if (!verified || !verified.isOwnerUser) {
+      if (isMissionsApi) {
         return Response.json(
-          { error: "Forbidden — Hans only. Sign in at /login/ or Bearer ALFRED_OPS_TOKEN" },
+          { error: "Forbidden - owner only. Sign in at /login/ or Bearer ALFRED_OPS_TOKEN" },
           { status: 403 }
         );
       }
@@ -618,7 +480,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
       return env.ASSETS.fetch(new Request(new URL(url.pathname, url.origin), req));
     }
     if (isStatsEndpoint && req.method === "GET") {
-      return proxyCommandStats(env);
+      return proxyMissionsStats(env);
     }
     if (isMissionsEndpoint && req.method === "GET") {
       return proxyListMissions(req, env);
@@ -638,7 +500,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
   }
 
   // Everything else requires Cloudflare Access auth
-  const user = getAccessUser(req);
+  const user = await getVerifiedUser(req, env);
   if (!user) {
     // If not matching any authenticated route, return a friendly 404
     return render404(req, url);
@@ -646,12 +508,87 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
 
   // Authenticated routes
   const tenant_id = user.tenant_id;
-  const id = env.ALFRED.idFromName(tenant_id);
-  const stub = env.ALFRED.get(id);
+  const stub = env.ALFRED.getByName(tenant_id);
 
-  // Authenticated home → Command board (KISS)
+  // ─── Agent tokens for the MCP (per tenant, scoped; owner may mint for any tenant) ───
+  if (url.pathname === "/api/alfred/agent-tokens" || url.pathname.startsWith("/api/alfred/agent-tokens/")) {
+    return handleAgentTokens(req, env, url, user);
+  }
+
+  // ─── Alfred (Pi harness in the tenant's Durable Object) ──────────
+  if (url.pathname.startsWith("/api/alfred/")) {
+    await stub.bind(tenant_id, user.isOwner);
+    // Sandbox tenants (every signed-in non-owner): chat/ask within a daily quota only.
+    const ownerOnly = req.method === "POST" && (url.pathname === "/api/alfred/missions" || url.pathname === "/api/alfred/intake");
+    if (ownerOnly && !user.isOwner) {
+      return Response.json({ error: "sandbox", message: "Missions and intake are for the instance owner. Your sandbox can ask." }, { status: 403 });
+    }
+    if (url.pathname === "/api/alfred/missions" && req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { objective?: string; wait?: boolean; requireEvidence?: boolean };
+      const objective = (body.objective || "").trim().slice(0, 4000);
+      if (objective.length < 3) return Response.json({ error: "objective required" }, { status: 400 });
+      const opts = { requireEvidence: body.requireEvidence ?? false };
+      return Response.json(body.wait ? await stub.runMission(objective, opts) : await stub.startMission(objective, opts));
+    }
+    const m = url.pathname.match(/^\/api\/alfred\/missions\/([A-Za-z0-9-]{8,64})$/);
+    if (m && req.method === "GET") {
+      const mission = await stub.getMission(m[1]);
+      return mission ? Response.json(mission) : Response.json({ error: "not found" }, { status: 404 });
+    }
+    if (url.pathname === "/api/alfred/gates" && req.method === "GET" && user.isOwner) {
+      // Owner health check of the Clef gates, from the Worker and from the tenant object.
+      const worker = await clefGates(env as never).done("say hi", "hi", "replied hi");
+      return Response.json({ worker, agent: await stub.gateHealth() });
+    }
+    if (url.pathname === "/api/alfred/report" && req.method === "GET") {
+      // The Report (what WAKE speaks): recent missions, success/fail, synopsis, attention.
+      return Response.json(await stub.report());
+    }
+    const lm = url.pathname.match(/^\/api\/alfred\/lessons\/([A-Za-z0-9-]{8,64})$/);
+    if (lm && req.method === "DELETE") {
+      if (!user.isOwner) return Response.json({ error: "owner only" }, { status: 403 });
+      return Response.json(await stub.forgetLesson(lm[1]));
+    }
+    if (url.pathname === "/api/alfred/lessons" && req.method === "GET") {
+      return Response.json({ lessons: await stub.listLessons(20) });
+    }
+    if (url.pathname === "/api/alfred/ask" && req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { prompt?: string };
+      const prompt = (body.prompt || "").trim().slice(0, 8000);
+      if (!prompt) return Response.json({ error: "prompt required" }, { status: 400 });
+      const q = await stub.consumeQuota("ask", sandboxLimit(env.SANDBOX_ASKS_PER_DAY, 30));
+      if (!q.ok) return Response.json({ error: "quota", used: q.used, limit: q.limit }, { status: 429 });
+      return Response.json(await stub.ask(prompt));
+    }
+    if (url.pathname === "/api/alfred/intake" && req.method === "POST") {
+      // Clairic extraction. Body: {kind:"email",subject?,body} | {kind:"voice",transcript?|audioBase64?}
+      //   | {kind:"image",images:[{content_type,base64}],caption?}. Max 16 MiB (Clairic request limit).
+      const len = Number(req.headers.get("content-length") || 0);
+      if (len > 16 * 1024 * 1024) return Response.json({ error: "too large" }, { status: 413 });
+      const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+      const kind = body?.kind;
+      if (kind === "email" && typeof body?.body === "string") {
+        return Response.json(await stub.intake({ kind, body: body.body, subject: typeof body.subject === "string" ? body.subject : undefined }));
+      }
+      if (kind === "voice" && (typeof body?.transcript === "string" || typeof body?.audioBase64 === "string")) {
+        return Response.json(await stub.intake({ kind, transcript: body.transcript as string | undefined, audioBase64: body.audioBase64 as string | undefined }));
+      }
+      if (kind === "image" && Array.isArray(body?.images) && body.images.length) {
+        const images = (body.images as Array<{ content_type?: unknown; base64?: unknown }>)
+          .filter((i) => typeof i?.base64 === "string" && typeof i?.content_type === "string")
+          .slice(0, 4)
+          .map((i) => ({ content_type: String(i.content_type), base64: String(i.base64) }));
+        if (!images.length) return Response.json({ error: "images[{content_type,base64}] required" }, { status: 400 });
+        return Response.json(await stub.intake({ kind, images, caption: typeof body.caption === "string" ? body.caption : undefined }));
+      }
+      return Response.json({ error: "kind email|voice|image with matching fields required" }, { status: 400 });
+    }
+    return Response.json({ error: "not found" }, { status: 404 });
+  }
+
+  // Authenticated home → Missions board (KISS)
   if (url.pathname === "/" || url.pathname === "/index.html") {
-    if (hansFromRequest(req)) {
+    if ((await ownerFromRequest(req, env))) {
       return env.ASSETS.fetch(new Request(new URL("/app.html", url.origin), req));
     }
     return env.ASSETS.fetch(new Request(new URL("/index.html", url.origin), req));
@@ -659,7 +596,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
 
   // User info
   if (url.pathname === "/api/me") {
-    return Response.json({ name: user.name, tenant_id: user.tenant_id, email: user.email });
+    return Response.json({ name: user.email.split("@")[0], tenant_id: user.tenant_id, email: user.email });
   }
 
   // Stats
@@ -711,8 +648,80 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
 
   // Build dashboard
   if (url.pathname === "/build" || url.pathname === "/build/") {
-    return Response.redirect("https://alfred-ai-gateway.iceberg.workers.dev/build", 302);
+    return render404(req, url);
   }
 
   return render404(req, url);
+}
+
+// ─── MCP (Alfred for agents) ────────────────────────────────────
+
+const MCP_REALM = 'Bearer realm="alfred-mcp", error="invalid_token"';
+
+/** Access JWT / owner ops token (all scopes) or a per-tenant scoped agent token. No anonymous access. */
+async function mcpIdentity(req: Request, env: Env): Promise<MCPIdentity | null> {
+  const auth = req.headers.get("Authorization") || "";
+  if (auth.startsWith("Bearer ")) {
+    const tok = await verifyAgentToken(env, auth.slice(7).trim());
+    if (tok) {
+      return { email: `agent:${tok.name}`, tenant_id: tok.tenant_id, isOwner: false, via: "agent_token", scopes: tok.scopes, tokenId: tok.id };
+    }
+  }
+  const user = await getVerifiedUser(req, env);
+  return user ? { ...user, scopes: fullScopes() } : null;
+}
+
+async function serveMcp(req: Request, env: Env): Promise<Response> {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { Allow: "POST, GET, OPTIONS" } });
+  const who = await mcpIdentity(req, env);
+  if (!who) return mcpError(null, -32001, "unauthorized", 401, { "WWW-Authenticate": MCP_REALM });
+  if (req.method === "GET") {
+    // No server-initiated stream; describe the endpoint to the authenticated caller.
+    return Response.json({ name: "alfred-report", transport: "streamable-http (POST JSON-RPC)", tenant: who.tenant_id, scopes: who.scopes }, { headers: { Allow: "POST, GET" } });
+  }
+  if (req.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST, GET" } });
+  const { handleMCP } = await import("./mcp/server");
+  return handleMCP(req, env, who);
+}
+
+async function handleMcpHost(req: Request, env: Env, url: URL): Promise<Response> {
+  if (url.pathname === "/mcp" || url.pathname === "/") return serveMcp(req, env);
+  if (url.pathname === "/health") return Response.json({ ok: true, service: "alfred-mcp", endpoint: `https://mcp.${env.DOMAIN}/mcp`, auth: "bearer (agent token or owner token) or Cloudflare Access" });
+  return Response.json({ error: "not found", endpoint: `https://mcp.${env.DOMAIN}/mcp` }, { status: 404 });
+}
+
+async function handleAgentTokens(
+  req: Request,
+  env: Env,
+  url: URL,
+  user: VerifiedIdentity & { isOwnerUser: boolean }
+): Promise<Response> {
+  const scopeTenant = user.isOwner ? undefined : user.tenant_id;
+  const one = url.pathname.match(/^\/api\/alfred\/agent-tokens\/([0-9a-f-]{36})$/);
+  if (one && req.method === "DELETE") {
+    const ok = await revokeAgentToken(env, one[1], scopeTenant);
+    return Response.json({ revoked: ok }, { status: ok ? 200 : 404 });
+  }
+  if (url.pathname !== "/api/alfred/agent-tokens") return Response.json({ error: "not found" }, { status: 404 });
+  if (req.method === "GET") {
+    const tenant = user.isOwner ? url.searchParams.get("tenant") || undefined : user.tenant_id;
+    return Response.json({ tokens: await listAgentTokens(env, tenant) });
+  }
+  if (req.method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as { name?: string; scopes?: unknown; tenant_id?: string };
+    const name = String(body.name || "").trim();
+    if (!name) return Response.json({ error: "name required" }, { status: 400 });
+    let scopes;
+    try {
+      scopes = parseScopes(body.scopes ?? ["missions:read", "report:read"]);
+    } catch (e) {
+      return Response.json({ error: (e as Error).message }, { status: 400 });
+    }
+    // Only the owner can mint for another tenant (or grant missions:write on the owner tenant).
+    const tenant_id = user.isOwner && body.tenant_id ? String(body.tenant_id) : user.tenant_id;
+    if (!/^[a-z0-9_-]{1,200}$/i.test(tenant_id)) return Response.json({ error: "invalid tenant_id" }, { status: 400 });
+    const minted = await mintAgentToken(env, { tenant_id, name, scopes, created_by: user.email });
+    return Response.json({ ...minted, endpoint: `https://mcp.${env.DOMAIN}/mcp`, note: "Shown once; store it as a secret." }, { status: 201 });
+  }
+  return new Response(null, { status: 405 });
 }

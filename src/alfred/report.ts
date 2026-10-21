@@ -4,8 +4,12 @@
  * Built only from stored mission rows and their end-of-mission reviews (verdict, flags and the
  * Clef mission-done gate). Deterministic: no model writes it, so it cannot invent anything.
  * Shape: success or fail per recent mission, a one-line synopsis, then what needs attention.
+ *
+ * Implementation is Rust (crates/alfred-core report_*). This file is the typed TS facade used
+ * by the Alfred DO (`/api/alfred/report`) and ORAL TTS.
  */
-import type { ReviewFlag, ReviewResult } from "./review.ts";
+import { reportBuild, reportSpeak, reportTitle } from "./core.ts";
+import type { ReviewResult } from "./review.ts";
 
 export interface MissionRow {
   id: string;
@@ -43,85 +47,18 @@ export const STUCK_AFTER_MS = 30 * 60 * 1000;
 
 /** Short spoken title: first sentence of the objective, at most `words` words. */
 export function shortTitle(objective: string, words = 8): string {
-  const first = objective.replace(/^Forwarded email:\s*/i, "").split(/(?<=[.!?])\s|\n/)[0] ?? "";
-  const w = first.trim().split(/\s+/).filter(Boolean);
-  const t = w.slice(0, words).join(" ").replace(/[.,;:!?]+$/, "");
-  return w.length > words ? `${t}...` : t || "untitled mission";
+  return reportTitle(objective, words);
 }
-
-const FLAG_WORDS: Record<ReviewFlag["kind"], string> = {
-  escalated: "needs your approval",
-  clef_not_done: "not finished",
-  no_evidence: "no proof it was done",
-  unanswered: "did not finish",
-  failed_tool: "tools kept failing",
-  loop: "got stuck in a loop",
-  wasted_tokens: "wasted effort",
-  failed_request: "model calls failed",
-  logs_missing: "logs missing",
-  clef_unavailable: "done check unavailable",
-};
 
 export function outcomeOf(m: MissionRow): Outcome {
-  if (m.status === "running" || (!m.finished_at && !m.verdict)) return "running";
-  return m.status === "done" && m.verdict === "pass" ? "success" : "fail";
-}
-
-function clefDoneOf(r: ReviewResult | null): boolean | null {
-  const d = r?.done;
-  return d && d !== "unavailable" ? d.done : null;
-}
-
-function reasonOf(m: MissionRow): string | undefined {
-  const flags = m.review?.flags ?? [];
-  const f = flags.find((x) => x.blocking) ?? (outcomeOf(m) === "fail" ? flags[0] : undefined);
-  if (f) return FLAG_WORDS[f.kind] ?? f.kind;
-  if (outcomeOf(m) === "fail") return m.status === "done" ? "failed review" : "did not finish";
-  return undefined;
+  return (reportBuild({ brand: "", rows: [m], now: 0, limit: 1 }) as TheReport).items[0]?.outcome ?? "fail";
 }
 
 export function buildReport(brand: string, rows: MissionRow[], now = Date.now(), limit = REPORT_LIMIT): TheReport {
-  const recent = [...rows].sort((a, b) => b.started_at - a.started_at).slice(0, limit);
-  const items: ReportItem[] = recent.map((m) => ({
-    id: m.id,
-    title: shortTitle(m.objective),
-    outcome: outcomeOf(m),
-    reason: reasonOf(m),
-    clefDone: clefDoneOf(m.review),
-  }));
-  const counts = { success: 0, fail: 0, running: 0 };
-  for (const i of items) counts[i.outcome]++;
-
-  const attention: string[] = [];
-  for (const m of recent) {
-    const i = items.find((x) => x.id === m.id)!;
-    if (i.outcome === "fail") attention.push(`${i.title}: ${i.reason}`);
-    else if (i.outcome === "running" && now - m.started_at > STUCK_AFTER_MS) {
-      attention.push(`${i.title}: still running after ${Math.round((now - m.started_at) / 60000)} minutes`);
-    }
-  }
-
-  let synopsis: string;
-  if (!items.length) synopsis = "No missions yet.";
-  else {
-    const parts = [
-      counts.success && `${counts.success} succeeded`,
-      counts.fail && `${counts.fail} failed`,
-      counts.running && `${counts.running} running`,
-    ].filter(Boolean);
-    synopsis = `${items.length} recent mission${items.length === 1 ? "" : "s"}: ${parts.join(", ")}.`;
-  }
-  return { brand, generatedAt: now, items, counts, synopsis, attention };
+  return reportBuild({ brand, rows, now, limit }) as TheReport;
 }
 
 /** The spoken form. Short on purpose: TTS reads all of it. */
 export function speakReport(r: TheReport): string {
-  const out = [`${r.brand} The Report.`, r.synopsis];
-  for (const i of r.items) {
-    if (i.outcome === "success") out.push(`Success: ${i.title}${i.clefDone ? ", verified done" : ""}.`);
-    else if (i.outcome === "fail") out.push(`Fail: ${i.title}.`);
-    else out.push(`Running: ${i.title}.`);
-  }
-  out.push(r.attention.length ? `Needs attention: ${r.attention.slice(0, 3).join("; ")}.` : "Nothing needs your attention.");
-  return out.join(" ");
+  return reportSpeak(r);
 }

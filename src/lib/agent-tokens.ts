@@ -3,6 +3,7 @@
  * Only a SHA-256 hash is stored (D1); the token is shown once at mint time.
  * Tokens are accepted by the MCP endpoint only, never by the rest of the API.
  */
+import { mcpParseScopes, mcpTokenOk } from "../alfred/core.ts";
 import type { Env } from "./env";
 
 export const AGENT_SCOPES = [
@@ -53,14 +54,7 @@ function randomToken(): string {
 }
 
 export function parseScopes(input: unknown): AgentScope[] {
-  const list = Array.isArray(input) ? input : typeof input === "string" ? input.split(",") : [];
-  const out = new Set<AgentScope>();
-  for (const raw of list) {
-    const s = String(raw).trim();
-    if ((AGENT_SCOPES as readonly string[]).includes(s)) out.add(s as AgentScope);
-    else if (s) throw new Error(`unknown scope: ${s}`);
-  }
-  return [...out];
+  return mcpParseScopes(input) as AgentScope[];
 }
 
 export async function mintAgentToken(
@@ -83,7 +77,7 @@ export async function verifyAgentToken(
   env: Env,
   bearer: string
 ): Promise<{ id: string; tenant_id: string; name: string; scopes: AgentScope[] } | null> {
-  if (!bearer.startsWith(TOKEN_PREFIX) || bearer.length < 40) return null;
+  if (!mcpTokenOk(bearer)) return null;
   await ensure(env.DB);
   const row = await env.DB.prepare(
     `SELECT id, tenant_id, name, scopes FROM ${TABLE} WHERE token_hash = ? AND revoked_at IS NULL`

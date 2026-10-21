@@ -5,9 +5,10 @@
  * from that identity, never from the request. Tools are filtered and enforced by scope.
  */
 
+import { mcpAllow, mcpProtocol, mcpScopes, mcpTools } from "../alfred/core.ts";
 import type { Env } from "../lib/env";
 import type { VerifiedIdentity } from "../lib/access";
-import { AGENT_SCOPES, type AgentScope } from "../lib/agent-tokens.ts";
+import type { AgentScope } from "../lib/agent-tokens.ts";
 
 export interface MCPIdentity extends VerifiedIdentity {
   scopes: readonly AgentScope[];
@@ -16,64 +17,8 @@ export interface MCPIdentity extends VerifiedIdentity {
 
 /** Access users and owner tokens hold every scope; agent tokens hold what they were minted with. */
 export function fullScopes(): readonly AgentScope[] {
-  return AGENT_SCOPES;
+  return mcpScopes() as AgentScope[];
 }
-
-const SUPPORTED = ["2025-06-18", "2025-03-26", "2024-11-05"];
-
-interface Tool {
-  name: string;
-  scope: AgentScope;
-  ownerOnly?: boolean;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
-
-const NO_ARGS = { type: "object", properties: {}, additionalProperties: false };
-const TOOLS: Tool[] = [
-  { name: "mission_list", scope: "missions:read", description: "List this tenant's missions (newest first).", inputSchema: NO_ARGS },
-  {
-    name: "mission_get",
-    scope: "missions:read",
-    description: "Get one Alfred mission: status, steps, verdict and evidence.",
-    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
-  },
-  {
-    name: "mission_create",
-    scope: "missions:write",
-    ownerOnly: true,
-    description: "Start an Alfred mission (owner tenant). Returns the missionId; poll mission_get.",
-    inputSchema: {
-      type: "object",
-      properties: { objective: { type: "string", minLength: 3, maxLength: 4000 }, requireEvidence: { type: "boolean" } },
-      required: ["objective"],
-    },
-  },
-  {
-    name: "mission_act",
-    scope: "missions:write",
-    description: "Act on a mission: close | archive | open.",
-    inputSchema: {
-      type: "object",
-      properties: { id: { type: "string" }, act: { type: "string", enum: ["close", "archive", "open"] } },
-      required: ["id", "act"],
-    },
-  },
-  {
-    name: "ask",
-    scope: "ask",
-    description: "Ask Alfred (counts against the tenant's daily ask quota).",
-    inputSchema: { type: "object", properties: { prompt: { type: "string", maxLength: 8000 } }, required: ["prompt"] },
-  },
-  { name: "report", scope: "report:read", description: "The Report: recent missions, success/fail, synopsis, attention.", inputSchema: NO_ARGS },
-  { name: "spend", scope: "spend:read", description: "Today's neuron spend vs the daily cap.", inputSchema: NO_ARGS },
-  {
-    name: "memory_recall",
-    scope: "memory:read",
-    description: "Recall this tenant's memory rows.",
-    inputSchema: { type: "object", properties: { limit: { type: "number", minimum: 1, maximum: 50 } } },
-  },
-];
 
 /** The tenant Durable Object methods the MCP uses (typed narrowly; RPC stub types are too deep). */
 interface AlfredRpc {
@@ -85,12 +30,8 @@ interface AlfredRpc {
   report(limit?: number): Promise<{ items: unknown[] }>;
 }
 
-function allowed(t: Tool, who: MCPIdentity): boolean {
-  return who.scopes.includes(t.scope) && (!t.ownerOnly || who.isOwner);
-}
-
 export function getMCPTools(who: MCPIdentity): Array<Record<string, unknown>> {
-  return TOOLS.filter((t) => allowed(t, who)).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+  return mcpTools(who.scopes, who.isOwner);
 }
 
 function quota(v: string | undefined): number {
@@ -99,9 +40,7 @@ function quota(v: string | undefined): number {
 }
 
 export async function executeMCPTool(name: string, args: Record<string, unknown>, env: Env, who: MCPIdentity): Promise<unknown> {
-  const tool = TOOLS.find((t) => t.name === name);
-  if (!tool) throw new Error(`Unknown tool: ${name}`);
-  if (!allowed(tool, who)) throw new Error(`forbidden: ${name} needs scope ${tool.scope}${tool.ownerOnly ? " (owner tenant)" : ""}`);
+  mcpAllow(name, who.scopes, who.isOwner);
   const bound = async (): Promise<AlfredRpc> => {
     const s = env.ALFRED.getByName(who.tenant_id) as unknown as AlfredRpc;
     await s.bind(who.tenant_id, who.isOwner);
@@ -160,7 +99,7 @@ export async function handleMCP(req: Request, env: Env, who: MCPIdentity): Promi
     case "initialize": {
       const asked = String(body.params?.protocolVersion || "");
       return mcpResult(id, {
-        protocolVersion: SUPPORTED.includes(asked) ? asked : SUPPORTED[0],
+        protocolVersion: mcpProtocol(asked),
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "alfred-report", version: "2.0.0" },
         instructions: `Alfred MCP for tenant ${who.tenant_id}. Scopes: ${who.scopes.join(", ")}.`,

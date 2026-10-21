@@ -18,7 +18,17 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { createAI } from "agents/models/pi-ai";
 import { BRAND } from "../brand.ts";
-import { LIMITER, limiterAvailable, limiterCooldown, limiterTake, modelsFloor } from "./core.ts";
+import {
+  LIMITER,
+  limiterAvailable,
+  limiterCooldown,
+  limiterTake,
+  modelsFloor,
+  modelsHeaders,
+  modelsPrimary,
+  modelsRateLimited,
+  modelsText,
+} from "./core.ts";
 
 export const AUTO_MODEL_ID = "cloudflare/auto";
 
@@ -70,8 +80,7 @@ export function rustLimiter(id: number): RpmLimiter {
 export const deepseekLimiter: RpmLimiter = rustLimiter(LIMITER.deepseek);
 
 function isRateLimited(err: unknown): boolean {
-  const m = String((err as Error)?.message || err);
-  return /\b429\b|rate.?limit|capacity|too many requests/i.test(m);
+  return modelsRateLimited(String((err as Error)?.message || err));
 }
 
 function list(v: string | undefined, fallback: string[]): string[] {
@@ -83,11 +92,7 @@ import { gatewayId } from "./gateway.ts";
 export { gatewayId };
 
 export function routerHeaders(env: ModelEnv): Record<string, string> {
-  const headers: Record<string, string> = {};
-  const providers = (env.AUTO_ALLOWED_PROVIDERS || "").trim();
-  if (providers) headers["cf-aig-allowed-providers"] = providers;
-  headers["cf-aig-allowed-models"] = list(env.AUTO_ALLOWED_MODELS, DEFAULT_AUTO_POOL).join(",");
-  return headers;
+  return modelsHeaders(env.AUTO_ALLOWED_PROVIDERS || "", env.AUTO_ALLOWED_MODELS || "");
 }
 
 export function floorModels(env: ModelEnv, limiter: RpmLimiter = deepseekLimiter): string[] {
@@ -95,18 +100,11 @@ export function floorModels(env: ModelEnv, limiter: RpmLimiter = deepseekLimiter
 }
 
 export function primaryModel(env: ModelEnv): string | null {
-  const m = (env.MISSIONS_MODEL || DEEPSEEK_FLASH).trim();
-  return m === "auto" || !m.startsWith("@cf/") ? null : m;
+  return modelsPrimary(env.MISSIONS_MODEL);
 }
 
 function textOf(r: unknown): { text: string; tokens: number } {
-  const o = r as {
-    response?: string;
-    choices?: Array<{ message?: { content?: string }; text?: string }>;
-    usage?: { total_tokens?: number };
-  };
-  const text = o?.choices?.[0]?.message?.content ?? o?.choices?.[0]?.text ?? o?.response ?? "";
-  return { text: String(text), tokens: o?.usage?.total_tokens ?? 0 };
+  return modelsText(r ?? {});
 }
 
 /**

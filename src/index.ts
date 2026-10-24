@@ -16,7 +16,8 @@ import { proxyListMissions, proxyGetMission, proxyCreateMission, proxyGoMaxMissi
 import { handleKissApi } from "./lib/kiss-routes";
 import { handleInboundEmail } from "./lib/mail";
 import { BRAND, brandContext } from "./brand";
-import { listAgentTokens, mintAgentToken, parseScopes, revokeAgentToken, verifyAgentToken } from "./lib/agent-tokens";
+import { listAgentTokens, mintAgentToken, parseScopes, revokeAgentToken, revokeAgentTokenValue, verifyAgentToken } from "./lib/agent-tokens";
+import { authMd, authorizationServerMetadata, CLAIM_GRANT, decideClaim, DEVICE_GRANT, lookupClaim, pollToken, protectedResourceMetadata, registerAgent } from "./lib/agent-auth";
 import { fullScopes, mcpError, type MCPIdentity } from "./mcp/server";
 
 // Instantiate the Rust core in the entry module (a side-effect import is tree-shaken: sideEffects=false).
@@ -422,6 +423,12 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
     const nav = navAppRedirect(url.pathname, url.search, Boolean(who), Boolean(who?.isOwnerUser));
     return Response.redirect(new URL(nav.location, url.origin).toString(), 302);
   }
+  // Agent sign-up approval page (human only): signed out -> sign in, then back here with the code.
+  if (url.pathname === "/connect" || url.pathname === "/connect/") {
+    const who = await getVerifiedUser(req, env);
+    if (!who) return Response.redirect(new URL(navAppRedirect("/connect", url.search, false).location, url.origin).toString(), 302);
+    return env.ASSETS.fetch(new Request(new URL("/connect.html", url.origin), req));
+  }
   if (url.pathname === "/brief" || url.pathname === "/brief/") {
     return Response.redirect(new URL("/", url.origin).toString(), 302);
   }
@@ -523,6 +530,8 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
   // Authenticated routes
   const tenant_id = user.tenant_id;
   const stub = env.ALFRED.getByName(tenant_id);
+
+  if (url.pathname === "/api/alfred/agent-connect") return handleAgentConnect(req, env, url, user);
 
   // ─── Agent tokens for the MCP (per tenant, scoped; owner may mint for any tenant) ───
   if (url.pathname === "/api/alfred/agent-tokens" || url.pathname.startsWith("/api/alfred/agent-tokens/")) {
@@ -747,7 +756,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
 
 // ─── MCP (Alfred for agents) ────────────────────────────────────
 
-const MCP_REALM = 'Bearer realm="alfred-mcp", error="invalid_token"';
+const mcpRealm = (env: Env) => `Bearer realm="alfred-mcp", error="invalid_token", resource_metadata="https://mcp.${env.DOMAIN}/.well-known/oauth-protected-resource"`;
 
 /** Access JWT / owner ops token (all scopes) or a per-tenant scoped agent token. No anonymous access. */
 async function mcpIdentity(req: Request, env: Env): Promise<MCPIdentity | null> {
@@ -765,7 +774,7 @@ async function mcpIdentity(req: Request, env: Env): Promise<MCPIdentity | null> 
 async function serveMcp(req: Request, env: Env): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { Allow: "POST, GET, OPTIONS" } });
   const who = await mcpIdentity(req, env);
-  if (!who) return mcpError(null, -32001, "unauthorized", 401, { "WWW-Authenticate": MCP_REALM });
+  if (!who) return mcpError(null, -32001, "unauthorized", 401, { "WWW-Authenticate": mcpRealm(env) });
   if (req.method === "GET") {
     // No server-initiated stream; describe the endpoint to the authenticated caller.
     return Response.json({ name: "alfred-report", transport: "streamable-http (POST JSON-RPC)", tenant: who.tenant_id, scopes: who.scopes }, { headers: { Allow: "POST, GET" } });
@@ -777,8 +786,80 @@ async function serveMcp(req: Request, env: Env): Promise<Response> {
 
 async function handleMcpHost(req: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === "/mcp" || url.pathname === "/") return serveMcp(req, env);
+  const agent = await handleAgentSignup(req, env, url);
+  if (agent) return agent;
   if (url.pathname === "/health") return Response.json({ ok: true, service: "alfred-mcp", endpoint: `https://mcp.${env.DOMAIN}/mcp`, auth: "bearer (agent token or owner token) or Cloudflare Access" });
   return Response.json({ error: "not found", endpoint: `https://mcp.${env.DOMAIN}/mcp` }, { status: 404 });
+}
+
+const NO_STORE = { "Cache-Control": "no-store" };
+
+async function formOrJson(req: Request): Promise<Record<string, unknown>> {
+  const ct = req.headers.get("Content-Type") || "";
+  const text = (await req.text()).slice(0, 8192);
+  if (ct.includes("application/json")) {
+    try {
+      const v = JSON.parse(text);
+      return v && typeof v === "object" ? v : {};
+    } catch {
+      return {};
+    }
+  }
+  return Object.fromEntries(new URLSearchParams(text));
+}
+
+/** Agent sign-up on mcp.<DOMAIN> (auth.md): discovery, registration, token poll, revoke. */
+async function handleAgentSignup(req: Request, env: Env, url: URL): Promise<Response | null> {
+  const p = url.pathname;
+  const domain = String(env.DOMAIN);
+  if (req.method === "GET" && (p === "/.well-known/oauth-protected-resource" || p === "/.well-known/oauth-protected-resource/mcp")) {
+    return Response.json(protectedResourceMetadata(domain));
+  }
+  if (req.method === "GET" && p === "/.well-known/oauth-authorization-server") return Response.json(authorizationServerMetadata(domain));
+  if (req.method === "GET" && (p === "/auth.md" || p === "/.well-known/auth.md")) {
+    return new Response(authMd(domain, BRAND.name), { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
+  }
+  if (p === "/agent/identity") {
+    if (req.method !== "POST") return Response.json({ error: "method_not_allowed" }, { status: 405, headers: { Allow: "POST" } });
+    const ip = req.headers.get("CF-Connecting-IP") || "unknown";
+    const r = await registerAgent(env, await formOrJson(req), ip);
+    if (r.status === 201) console.log(`agent signup: registered ${String(r.body.api_key_name)} scope=${String(r.body.scope)}`);
+    return Response.json(r.body, { status: r.status, headers: NO_STORE });
+  }
+  if (p === "/oauth2/token") {
+    if (req.method !== "POST") return Response.json({ error: "method_not_allowed" }, { status: 405, headers: { Allow: "POST" } });
+    const b = await formOrJson(req);
+    const grant = String(b.grant_type || "");
+    if (grant !== CLAIM_GRANT && grant !== DEVICE_GRANT) return Response.json({ error: "unsupported_grant_type" }, { status: 400, headers: NO_STORE });
+    const r = await pollToken(env, String(b.claim_token || b.device_code || ""));
+    if (r.status === 200) console.log(`agent signup: key issued scope=${String(r.body.scope)}`);
+    return Response.json(r.body, { status: r.status, headers: NO_STORE });
+  }
+  if (p === "/oauth2/revoke") {
+    if (req.method !== "POST") return Response.json({ error: "method_not_allowed" }, { status: 405, headers: { Allow: "POST" } });
+    const b = await formOrJson(req);
+    await revokeAgentTokenValue(env, String(b.token || ""));
+    return new Response(null, { status: 200, headers: NO_STORE }); // RFC 7009: 200 whether or not it existed
+  }
+  return null;
+}
+
+/** Owner side of agent sign-up on <DOMAIN>: look up a code, approve (own kingdom) or deny. Humans only. */
+async function handleAgentConnect(req: Request, env: Env, url: URL, user: VerifiedIdentity & { isOwnerUser: boolean }): Promise<Response> {
+  if (user.via !== "session" && user.via !== "access" && user.via !== "ops_token") return Response.json({ error: "sign in" }, { status: 403 });
+  if (req.method === "GET") {
+    const r = await lookupClaim(env, user.email, url.searchParams.get("code") || "");
+    return Response.json(r.body, { status: r.status, headers: NO_STORE });
+  }
+  if (req.method !== "POST") return Response.json({ error: "method_not_allowed" }, { status: 405 });
+  // CSRF: cookie sessions must come from this origin with a JSON body.
+  const origin = req.headers.get("Origin");
+  if (user.via === "session" && origin !== url.origin) return Response.json({ error: "bad origin" }, { status: 403 });
+  if (!(req.headers.get("Content-Type") || "").includes("application/json")) return Response.json({ error: "json body required" }, { status: 415 });
+  const b = (await req.json().catch(() => ({}))) as { code?: string; approve?: boolean; scopes?: string[] };
+  const r = await decideClaim(env, { tenant_id: user.tenant_id, email: user.email }, String(b.code || ""), b.approve === true, b.scopes);
+  if (r.status === 200) console.log(`agent signup: claim ${r.body.approved ? "approved" : "denied"} by tenant ${user.tenant_id}`);
+  return Response.json(r.body, { status: r.status, headers: NO_STORE });
 }
 
 async function handleAgentTokens(

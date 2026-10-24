@@ -14,6 +14,7 @@
 //! ABI: no wasm-bindgen. workers-rs would pull wasm-bindgen and a JS glue entry, which cannot
 //! host the Agents SDK Agent class.
 
+pub mod agent_auth;
 pub mod durable;
 pub mod limiter;
 pub mod mcp;
@@ -279,4 +280,9 @@ pub extern "C" fn memory_shape(ptr: *const u8, len: usize) -> u64 {
 #[no_mangle]
 pub extern "C" fn memory_op(ptr: *const u8, len: usize) -> u64 {
     call(ptr, len, memory::op_json)
+}
+
+#[no_mangle]
+pub extern "C" fn agent_op(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, agent_auth::op_json)
 }

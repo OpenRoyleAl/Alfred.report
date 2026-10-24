@@ -15,6 +15,73 @@ import { nextBindState } from "../src/alfred/bind.ts";
 import { senderAuthenticated } from "../src/lib/mail-auth.ts";
 import { durableOp, searchFuse, searchQuota } from "../src/alfred/core.ts";
 import { fetchPublicPage } from "../apps/missions/src/durable.ts";
+import { testD1 } from "../src/lib/test-d1.ts";
+import { decideClaim, lookupClaim, pollToken, registerAgent } from "../src/lib/agent-auth.ts";
+import { revokeAgentTokenValue, verifyAgentToken } from "../src/lib/agent-tokens.ts";
+
+/** One agent sign-up scenario on a fresh in-memory D1; returns what the expectation compares. */
+async function agentScenario(name: string): Promise<Record<string, unknown>> {
+  const env = { DB: testD1(), DOMAIN: "alfred.report" } as any;
+  const king = { tenant_id: "kingdom-eval", email: "king@example.com" };
+  const reg = async (b: Record<string, unknown> = {}, ip = "198.51.100.1") => registerAgent(env, { login_hint: "king@example.com", ...b }, ip);
+  const unthrottle = () => env.DB.prepare("UPDATE alfred_report_agent_claims SET last_poll_at = NULL").run();
+  const r = await reg({ scope: "missions:read memory:read" });
+  const code = (r.body.claim as any)?.user_code as string;
+  const ct = String(r.body.claim_token);
+  switch (name) {
+    case "happy": {
+      const pending = (await pollToken(env, ct)).body.error;
+      await decideClaim(env, king, code, true, ["missions:read"]);
+      await unthrottle();
+      const t = await pollToken(env, ct);
+      const v = await verifyAgentToken(env, String(t.body.access_token));
+      return { pending, status: t.status, tenant: v?.tenant_id, scopes: v?.scopes };
+    }
+    case "replay": {
+      await decideClaim(env, king, code, true, ["missions:read"]);
+      await unthrottle();
+      await pollToken(env, ct);
+      return { second: (await pollToken(env, ct)).body.error };
+    }
+    case "scope_escalation": {
+      const d = await decideClaim(env, king, code, true, ["memory:write", "ask"]);
+      return { status: d.status };
+    }
+    case "brute_force": {
+      for (let i = 0; i < 5; i++) await lookupClaim(env, "mallory@example.com", "BCDF-GHJK");
+      return { status: (await lookupClaim(env, "mallory@example.com", code)).status };
+    }
+    case "expired": {
+      await env.DB.prepare("UPDATE alfred_report_agent_claims SET expires_at = 1").run();
+      return { poll: (await pollToken(env, ct)).body.error, approve: (await decideClaim(env, king, code, true, ["missions:read"])).status };
+    }
+    case "rate_ip": {
+      for (let i = 0; i < 4; i++) await reg({ login_hint: `a${i}@example.com` });
+      return { status: (await reg({ login_hint: "z@example.com" })).status };
+    }
+    case "revoked": {
+      await decideClaim(env, king, code, true, ["missions:read"]);
+      await unthrottle();
+      const tok = String((await pollToken(env, ct)).body.access_token);
+      await revokeAgentTokenValue(env, tok);
+      return { valid: Boolean(await verifyAgentToken(env, tok)) };
+    }
+    case "hashed": {
+      await decideClaim(env, king, code, true, ["missions:read"]);
+      await unthrottle();
+      const tok = String((await pollToken(env, ct)).body.access_token);
+      const dump = JSON.stringify([
+        (await env.DB.prepare("SELECT * FROM alfred_report_agent_claims").all()).results,
+        (await env.DB.prepare("SELECT * FROM alfred_report_agent_tokens").all()).results,
+      ]);
+      return { leaked: [tok, ct, code, code.replace("-", "")].some((x) => dump.includes(x)) };
+    }
+    case "bad_hint":
+      return { status: (await reg({ login_hint: "root" })).status };
+    default:
+      throw new Error(`unknown agent scenario ${name}`);
+  }
+}
 
 type Fixture = {
   id: string;
@@ -217,6 +284,13 @@ async function runCheck(f: Fixture): Promise<void> {
     case "search_quota": {
       const q = searchQuota(input as never);
       if (q.exa !== Boolean(expect.exa)) throw new Error(`exa=${q.exa} ${q.reason}`);
+      return;
+    }
+    case "agent_flow": {
+      const got = await agentScenario(String(input.scenario));
+      for (const [k, v] of Object.entries(expect)) {
+        if (JSON.stringify(got[k]) !== JSON.stringify(v)) throw new Error(`${k}: got ${JSON.stringify(got[k])}, want ${JSON.stringify(v)}`);
+      }
       return;
     }
     case "one_engine": {

@@ -46,6 +46,7 @@ interface Exports {
   review_mission(ptr: number, len: number): bigint;
   durable_board_id(ptr: number, len: number): bigint;
   durable_op(ptr: number, len: number): bigint;
+  agent_op(ptr: number, len: number): bigint;
   memory_profile(ptr: number, len: number): bigint;
   memory_query(ptr: number, len: number): bigint;
   memory_store(ptr: number, len: number): bigint;
@@ -306,6 +307,11 @@ export function memoryStorePlan(input: { mission_id: string; objective: string; 
 export function memoryShape(input: { answer: string; candidates: Array<{ id: string; summary: string; score: number }>; budget_tokens?: number | null; confidence?: Record<string, number> }): MemoryShape {
   return callJson("memory_shape", input);
 }
+/** Agent sign-up decisions (agent_auth.rs): codes, registration, rate limits, poll states, grants, notice. */
+export function agentOp<T>(op: "user_code" | "normalize" | "register" | "rate" | "poll" | "grant" | "notice" | "limits", args: unknown): T {
+  return callJson<T>("agent_op", { op, args });
+}
+
 /** Durable engine helpers (durable.rs op_json): tool_load (progressive disclosure), tool_ok, legacy (Pi rows). */
 export function durableOp<T>(op: "tool_load" | "tool_ok" | "legacy", args: unknown): T {
   return callJson<T>("durable_op", { op, args });

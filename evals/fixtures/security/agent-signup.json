@@ -1,0 +1,83 @@
+[
+  {
+    "id": "agent-signup-replay",
+    "check": "agent_flow",
+    "input": {
+      "scenario": "replay"
+    },
+    "expect": {
+      "second": "invalid_grant"
+    }
+  },
+  {
+    "id": "agent-signup-scope_escalation",
+    "check": "agent_flow",
+    "input": {
+      "scenario": "scope_escalation"
+    },
+    "expect": {
+      "status": 400
+    }
+  },
+  {
+    "id": "agent-signup-brute_force",
+    "check": "agent_flow",
+    "input": {
+      "scenario": "brute_force"
+    },
+    "expect": {
+      "status": 429
+    }
+  },
+  {
+    "id": "agent-signup-expired",
+    "check": "agent_flow",
+    "input": {
+      "scenario": "expired"
+    },
+    "expect": {
+      "poll": "expired_token",
+      "approve": 404
+    }
+  },
+  {
+    "id": "agent-signup-rate_ip",
+    "check": "agent_flow",
+    "input": {
+      "scenario": "rate_ip"
+    },
+    "expect": {
+      "status": 429
+    }
+  },
+  {
+    "id": "agent-signup-revoked",
+    "check": "agent_flow",
+    "input": {
+      "scenario": "revoked"
+    },
+    "expect": {
+      "valid": false
+    }
+  },
+  {
+    "id": "agent-signup-hashed",
+    "check": "agent_flow",
+    "input": {
+      "scenario": "hashed"
+    },
+    "expect": {
+      "leaked": false
+    }
+  },
+  {
+    "id": "agent-signup-bad_hint",
+    "check": "agent_flow",
+    "input": {
+      "scenario": "bad_hint"
+    },
+    "expect": {
+      "status": 400
+    }
+  }
+]

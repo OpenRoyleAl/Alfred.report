@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Connect an agent · Alfred</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/ds.css?v=1" />
+  <link rel="stylesheet" href="/site.css?v=2" />
+  <style>
+    main { max-width: 36rem; margin: 3rem auto; padding: 0 1.25rem; }
+    input[type=text] { font: inherit; font-size: 1.5rem; letter-spacing: .15em; text-transform: uppercase; width: 100%; padding: .5rem; }
+    .card { border: 1px solid currentColor; border-radius: .5rem; padding: 1rem; margin: 1rem 0; }
+    .row { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
+    .muted { opacity: .7; }
+    li { margin: .5rem 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Connect an agent</h1>
+  <p class="muted">An agent asked to use your kingdom through the MCP. Enter the code it gave you. Only approve agents you started yourself.</p>
+  <form id="find"><input id="code" type="text" autocomplete="off" placeholder="XXXX-XXXX" maxlength="12" /><div class="row"><button type="submit">Continue</button></div></form>
+  <div id="claim" class="card" hidden>
+    <p><strong id="c-name"></strong> <span class="muted">from</span> <span id="c-client"></span></p>
+    <p class="muted">Registered for <span id="c-hint"></span>. Choose what it may do:</p>
+    <div id="c-scopes"></div>
+    <div class="row"><button id="approve">Approve</button><button id="deny">Deny</button></div>
+  </div>
+  <p id="msg" role="status"></p>
+  <h2>Connected agents</h2>
+  <ul id="agents"><li class="muted">Loading…</li></ul>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const say = (t) => { $("msg").textContent = t; };
+const LABEL = { "missions:read": "Read missions and The Report", "missions:write": "Create missions", "ask": "Ask Alfred (runs missions)", "report:read": "Read The Report", "spend:read": "Read today's spend", "memory:read": "Read your memory", "memory:write": "Change your memory" };
+let current = "";
+async function find(code) {
+  say(""); $("claim").hidden = true;
+  const r = await fetch("/api/alfred/agent-connect?code=" + encodeURIComponent(code), { credentials: "same-origin" });
+  const j = await r.json();
+  if (!r.ok) { say(j.error || "Not found"); return; }
+  current = code;
+  $("c-name").textContent = j.api_key_name; $("c-client").textContent = j.client_name; $("c-hint").textContent = j.login_hint;
+  const box = $("c-scopes"); box.replaceChildren();
+  for (const s of j.scopes) {
+    const l = document.createElement("label"); l.style.display = "block";
+    const c = document.createElement("input"); c.type = "checkbox"; c.checked = true; c.value = s;
+    l.append(c, " " + (LABEL[s] || s) + " "); const k = document.createElement("code"); k.textContent = s; l.append(k);
+    box.append(l);
+  }
+  $("claim").hidden = false;
+}
+async function decide(approve) {
+  const scopes = [...document.querySelectorAll("#c-scopes input:checked")].map((c) => c.value);
+  const r = await fetch("/api/alfred/agent-connect", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: current, approve, scopes }) });
+  const j = await r.json();
+  $("claim").hidden = true;
+  say(r.ok ? (approve ? "Approved. The agent will pick up its key on its next check." : "Denied.") : (j.error || "Failed"));
+  load();
+}
+async function load() {
+  const r = await fetch("/api/alfred/agent-tokens", { credentials: "same-origin" });
+  const ul = $("agents"); ul.replaceChildren();
+  if (!r.ok) { ul.textContent = "Could not load."; return; }
+  const live = ((await r.json()).tokens || []).filter((t) => !t.revoked_at);
+  if (!live.length) { const li = document.createElement("li"); li.className = "muted"; li.textContent = "None."; ul.append(li); return; }
+  for (const t of live) {
+    const li = document.createElement("li");
+    const b = document.createElement("button"); b.textContent = "Revoke";
+    b.onclick = async () => { if (!confirm("Revoke " + t.name + "?")) return; await fetch("/api/alfred/agent-tokens/" + t.id, { method: "DELETE", credentials: "same-origin" }); load(); };
+    const s = document.createElement("span"); s.textContent = `${t.name} · ${t.scopes} · last used ${t.last_used_at || "never"} `;
+    li.append(s, b); ul.append(li);
+  }
+}
+$("find").onsubmit = (e) => { e.preventDefault(); find($("code").value.trim()); };
+$("approve").onclick = () => decide(true);
+$("deny").onclick = () => decide(false);
+const pre = new URLSearchParams(location.search).get("code");
+if (pre) { $("code").value = pre; find(pre); }
+load();
+</script>
+</body>
+</html>

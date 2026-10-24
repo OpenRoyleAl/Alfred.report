@@ -3,7 +3,7 @@
  * Metadata only, taken from the signup itself (Rust notice.rs builds the record); nothing from
  * inside the new kingdom is ever read here. Shown in the owner's Report attention list.
  */
-import { memoryOp } from "../alfred/core.ts";
+import { agentOp, memoryOp } from "../alfred/core.ts";
 
 export interface OwnerNotice { id: string; kind: string; tenant_id: string; text: string; at: number }
 
@@ -29,6 +29,21 @@ export async function noticeNewUser(db: D1Database | undefined, u: { tenant_id: 
       .run();
   } catch (err) {
     console.error(`owner notice failed: ${(err as Error).message}`);
+  }
+}
+
+/** A new agent connected to a kingdom (agent sign-up): name, client, scopes, kingdom. Metadata only. */
+export async function noticeAgent(db: D1Database | undefined, a: { tenant_id: string; api_key_name: string; client_name: string; scopes: string[] }): Promise<void> {
+  if (!db) return;
+  try {
+    const n = agentOp<{ kind: string; tenant_id: string; text: string }>("notice", a);
+    await ensure(db);
+    await db
+      .prepare(`INSERT INTO alfred_report_owner_notices (id, kind, tenant_id, email, name, method, text, at) VALUES (?, ?, ?, NULL, ?, 'agent-signup', ?, ?)`)
+      .bind(crypto.randomUUID(), n.kind, n.tenant_id, a.api_key_name.slice(0, 60), n.text, Date.now())
+      .run();
+  } catch (err) {
+    console.error(`agent notice failed: ${(err as Error).message}`);
   }
 }
 

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "agent-signup-happy",
+    "check": "agent_flow",
+    "input": {
+      "scenario": "happy"
+    },
+    "expect": {
+      "pending": "authorization_pending",
+      "status": 200,
+      "tenant": "kingdom-eval",
+      "scopes": [
+        "missions:read"
+      ]
+    }
+  }
+]

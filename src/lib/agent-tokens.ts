@@ -32,16 +32,16 @@ export interface AgentTokenRow {
   revoked_at: string | null;
 }
 
-let ready = false;
+const ready = new WeakSet<D1Database>();
 async function ensure(db: D1Database): Promise<void> {
-  if (ready) return;
+  if (ready.has(db)) return;
   await db.batch([
     db.prepare(
       `CREATE TABLE IF NOT EXISTS ${TABLE} (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), last_used_at TEXT, revoked_at TEXT)`
     ),
     db.prepare(`CREATE INDEX IF NOT EXISTS ${TABLE}_tenant ON ${TABLE}(tenant_id)`),
   ]);
-  ready = true;
+  ready.add(db);
 }
 
 async function sha256Hex(s: string): Promise<string> {
@@ -106,5 +106,13 @@ export async function revokeAgentToken(env: Env, id: string, tenant_id?: string)
   const r = tenant_id
     ? await env.DB.prepare(`UPDATE ${TABLE} SET revoked_at = datetime('now') WHERE id = ? AND tenant_id = ? AND revoked_at IS NULL`).bind(id, tenant_id).run()
     : await env.DB.prepare(`UPDATE ${TABLE} SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`).bind(id).run();
+  return (r.meta.changes ?? 0) > 0;
+}
+
+/** RFC 7009 revoke by the token value itself (the agent revoking its own key). */
+export async function revokeAgentTokenValue(env: Env, token: string): Promise<boolean> {
+  if (!mcpTokenOk(token)) return false;
+  await ensure(env.DB);
+  const r = await env.DB.prepare(`UPDATE ${TABLE} SET revoked_at = datetime('now') WHERE token_hash = ? AND revoked_at IS NULL`).bind(await sha256Hex(token)).run();
   return (r.meta.changes ?? 0) > 0;
 }

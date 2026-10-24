@@ -267,7 +267,9 @@ pub fn consolidate(v: &Value) -> Value {
         let title: String = m["objective"].as_str().unwrap_or("").split_whitespace().take(14).collect::<Vec<_>>().join(" ");
         let ev = m["evidence"].as_str().unwrap_or("");
         let url = regex_lite::Regex::new(r"https?://[^\s)\]>\x22']+").expect("url").find(ev).map(|x| x.as_str().to_string()).unwrap_or_default();
-        let ans: String = m["answer"].as_str().unwrap_or("").split_whitespace().take(40).collect::<Vec<_>>().join(" ");
+        // Strip mem:<id> refs: a later mission would see them in recall and cite ids it never recalled.
+        let raw = regex_lite::Regex::new(MEM_REF).expect("mem ref regex").replace_all(m["answer"].as_str().unwrap_or(""), "a memory").to_string();
+        let ans: String = raw.split_whitespace().take(40).collect::<Vec<_>>().join(" ");
         lines.push(format!("- {title}: {ans}{}", if url.is_empty() { String::new() } else { format!(" (source {url})") }));
         if lines.len() >= 25 {
             break;
@@ -431,7 +433,7 @@ mod tests {
         assert_eq!(iso_week(1_792_800_000_000), "2026-W43");
         assert_eq!(iso_week(1_735_689_600_000), "2025-W01"); // 2025-01-01
         let v = json!({ "now": 1_792_800_000_000i64, "missions": [
-            { "objective": "Check Agent Memory docs", "answer": "Limits are listed", "evidence": "fetched https://developers.cloudflare.com/agent-memory/ ok", "verdict": "pass", "memory_status": "recalled 1/2; stored (session dm-1)" },
+            { "objective": "Check Agent Memory docs", "answer": "Limits are listed per mem:01M0RWH2SGDZJRBQ6S82RH8999", "evidence": "fetched https://developers.cloudflare.com/agent-memory/ ok", "verdict": "pass", "memory_status": "recalled 1/2; stored (session dm-1)" },
             { "objective": "Failed one", "answer": "x", "verdict": "fail", "memory_status": "not stored: fail" },
             { "objective": "Passed not stored token=abc123", "answer": "y", "verdict": "pass", "memory_status": "not stored: no evidence" } ],
             "confidence": [{ "id": ID, "confidence": 0.25 }] });
@@ -440,7 +442,7 @@ mod tests {
         assert_eq!(r["session_id"], "weekly-2026-W43");
         assert_eq!(r["count"], 1);
         let c = r["content"].as_str().unwrap();
-        assert!(c.contains("source https://developers.cloudflare.com/agent-memory/") && c.contains(ID) && !c.contains("Failed one"));
+        assert!(c.contains("source https://developers.cloudflare.com/agent-memory/") && c.contains(ID) && !c.contains("Failed one") && !c.contains("mem:"));
         assert_eq!(consolidate(&json!({ "now": 0, "missions": [] }))["store"], false);
     }
 

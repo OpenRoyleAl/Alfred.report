@@ -359,7 +359,7 @@ pub fn plan(p: PlanIn) -> Result<Value, String> {
     let models: Vec<&Task> = tasks.iter().filter(|t| t.name == "model").collect();
     if let Some(failed) = models.iter().rev().find(|t| t.status == "failed") {
         if failed.attempts >= MAX_ATTEMPTS {
-            return Ok(json!({ "action": "fail", "error": format!("model failed {} times: {}", failed.attempts, failed.output.clone().unwrap_or_default()) }));
+            return Ok(json!({ "action": "fail", "reason": format!("model failed {} times: {}", failed.attempts, failed.output.clone().unwrap_or_default()) }));
         }
     }
     let mut messages = vec![
@@ -402,7 +402,7 @@ pub fn plan(p: PlanIn) -> Result<Value, String> {
                     return Ok(json!({ "action": "finish", "answer": answer, "evidence": evidence, "uncited": bad }));
                 }
                 messages.push(json!({ "role": "user", "content": correction(&bad) }));
-                return Ok(json!({ "action": "call_model", "messages": messages, "max_tokens": 900 }));
+                return Ok(json!({ "action": "call_model", "messages": messages, "max_tokens": 2400 }));
             }
             Some("tool") if tool_calls < MAX_STEPS => {
                 return Ok(json!({ "action": "run_tool", "name": reply["name"], "args": reply["args"], "replay_safe": reply["replay_safe"] }))
@@ -413,12 +413,12 @@ pub fn plan(p: PlanIn) -> Result<Value, String> {
     }
     let done_models = models.iter().filter(|t| t.status == "done").count();
     if done_models > MAX_STEPS + 1 {
-        return Ok(json!({ "action": "fail", "error": "step limit reached without a final answer" }));
+        return Ok(json!({ "action": "fail", "reason": "step limit reached without a final answer" }));
     }
     if tool_calls >= MAX_STEPS || done_models >= MAX_STEPS {
         messages.push(json!({ "role": "user", "content": "Step limit reached. Reply now with {\"final\": ...} using what you have." }));
     }
-    Ok(json!({ "action": "call_model", "messages": messages, "max_tokens": 900 }))
+    Ok(json!({ "action": "call_model", "messages": messages, "max_tokens": 2400 }))
 }
 
 fn plan_history(query: &str, tasks: &[Task]) -> Value {
@@ -427,7 +427,7 @@ fn plan_history(query: &str, tasks: &[Task]) -> Value {
     match (rank, model) {
         (None, _) => json!({ "action": "run_tool", "name": "history_rank", "args": { "query": query }, "replay_safe": true }),
         (Some(_), Some(m)) if m.status == "done" => json!({ "action": "finish", "answer": m.output.clone().unwrap_or_default().trim(), "evidence": "earlier missions", "uncited": [] }),
-        (Some(_), Some(m)) if m.attempts >= MAX_ATTEMPTS => json!({ "action": "fail", "error": "history model failed" }),
+        (Some(_), Some(m)) if m.attempts >= MAX_ATTEMPTS => json!({ "action": "fail", "reason": "history model failed" }),
         (Some(r), _) => json!({
             "action": "call_model",
             "max_tokens": 500,
@@ -796,5 +796,23 @@ mod tests {
         assert!(fetch_url_ok("http://foo.localhost/").is_err());
         assert!(fetch_url_ok("http://metadata.google.internal/").is_err());
         assert_eq!(html_text("<p>Hi&amp;<script>x()</script> <b>there</b></p>", 100), "Hi& there");
+    }
+
+    #[test]
+    fn exhausted_model_fails_without_abi_error_key() {
+        let t = Task { id: "m:1".into(), seq: 1, name: "model".into(), input: serde_json::json!({}), output: Some("empty model reply".into()), status: "failed".into(), attempts: 3 };
+        let r = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![t], tenant_label: String::new(), lessons: vec![], memory: vec![] }).unwrap();
+        assert_eq!(r["action"], "fail");
+        assert!(r.get("error").is_none(), "an `error` key is read as an ABI failure by callJson");
+    }
+
+    #[test]
+    fn memory_cites_must_be_recalled() {
+        let mem = vec![MemItem { id: "01M5NWHV8THM89B2X95YJXJNQE".into(), summary: "Report at 07:15".into() }];
+        let fin = |txt: &str| Task { id: "m:1".into(), seq: 1, name: "model".into(), input: serde_json::json!({}), output: Some(format!("{{\"final\":\"{txt}\",\"evidence\":\"earlier memory\"}}")), status: "done".into(), attempts: 1 };
+        let ok = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![fin("07:15 per mem:01M5NWHV8THM89B2X95YJXJNQE")], tenant_label: String::new(), lessons: vec![], memory: mem.clone() }).unwrap();
+        assert_eq!(ok["action"], "finish");
+        let bad = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![fin("07:15 per mem:01M0RWH2SGDZJRBQ6S82RH823B")], tenant_label: String::new(), lessons: vec![], memory: mem }).unwrap();
+        assert_eq!(bad["action"], "call_model");
     }
 }

@@ -97,6 +97,9 @@ export interface MissionView {
   verdict: string | null;
   review: ReviewResult | null;
   interrupted: number;
+  /** Agent Memory: recalled ids this mission may cite (mem:<id>), and what happened on recall/store. */
+  memory_ids: string[];
+  memory_status: string | null;
   tasks?: Array<Record<string, unknown>>;
 }
 
@@ -369,7 +372,7 @@ export class DurableEngine {
           break;
         }
         if (plan.action === "fail") {
-          this.sql.exec(`UPDATE dm_missions SET status = 'failed', error = ?, finished_at = ? WHERE id = ?`, plan.error.slice(0, 2000), Date.now(), id);
+          this.sql.exec(`UPDATE dm_missions SET status = 'failed', error = ?, finished_at = ? WHERE id = ?`, plan.reason.slice(0, 2000), Date.now(), id);
           if (String(m.kind) === "mission") await this.reviewOf(id);
           break;
         }
@@ -623,7 +626,7 @@ export class DurableEngine {
   private async callModel(input: Record<string, unknown>, missionId: string): Promise<string> {
     const r = await this.h.env.AI.run(
       DEEPSEEK_FLASH as never,
-      { messages: input.messages, max_tokens: Number(input.max_tokens) || 900 } as never,
+      { messages: input.messages, max_tokens: Number(input.max_tokens) || 2400 } as never,
       { gateway: { id: gatewayId(this.h.env), metadata: { app: "alfred-report", engine: "durable", mission: missionId } } } as never
     );
     const logId = (this.h.env.AI as unknown as { aiGatewayLogId?: string | null }).aiGatewayLogId ?? null;
@@ -733,5 +736,7 @@ function viewOf(m: Row, interrupted = 0): MissionView {
     verdict: m.verdict == null ? null : String(m.verdict),
     review: m.review == null ? null : (JSON.parse(String(m.review)) as ReviewResult),
     interrupted,
+    memory_ids: m.memory == null ? [] : (JSON.parse(String(m.memory)) as Array<{ id: string }>).map((x) => x.id),
+    memory_status: m.memory_status == null ? null : String(m.memory_status),
   };
 }

@@ -228,7 +228,7 @@ export type DurablePlan =
   | { action: "call_model"; messages: Array<{ role: string; content: string }>; max_tokens: number }
   | { action: "run_tool"; name: string; args: Record<string, unknown>; replay_safe: boolean }
   | { action: "finish"; answer: string; evidence: string; uncited: string[] }
-  | { action: "fail"; error: string }
+  | { action: "fail"; reason: string }
   | { action: "resume"; task_id: string; name: string };
 
 export function durableCreate(input: {

@@ -297,8 +297,40 @@ pub fn uncited(answer: &str, evidence: &str, tasks: &[Task]) -> Vec<String> {
 }
 
 /// Parsed model reply: a tool call or a final answer (plain prose counts as final).
+/// Models often put raw newlines/tabs inside JSON strings (invalid JSON). Escape control
+/// characters that sit inside string literals so the reply still parses.
+fn escape_controls_in_strings(t: &str) -> String {
+    let mut out = String::with_capacity(t.len() + 16);
+    let (mut in_str, mut esc) = (false, false);
+    for c in t.chars() {
+        if in_str {
+            if esc {
+                esc = false;
+                out.push(c);
+                continue;
+            }
+            match c {
+                '\\' => { esc = true; out.push(c); }
+                '"' => { in_str = false; out.push(c); }
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+                c => out.push(c),
+            }
+        } else {
+            if c == '"' {
+                in_str = true;
+            }
+            out.push(c);
+        }
+    }
+    out
+}
+
 pub fn parse_reply(text: &str) -> Value {
-    let t = text.trim();
+    let fixed = escape_controls_in_strings(text.trim());
+    let t = fixed.as_str();
     let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
     let t = t.strip_suffix("```").unwrap_or(t).trim();
     // Whole reply, else the first JSON object embedded in prose (models sometimes add text or repeat it).
@@ -322,6 +354,20 @@ pub fn parse_reply(text: &str) -> Value {
         }
     }
     json!({ "type": "final", "answer": text.trim(), "evidence": "" })
+}
+
+#[cfg(test)]
+mod parse_tests {
+    use super::*;
+    #[test]
+    fn raw_newlines_inside_json_strings_still_parse() {
+        let r = parse_reply("{\"final\":\"line one\n\nline two\",\"evidence\":\"https://example.org/a\n mem:x\"}");
+        assert_eq!(r["type"], "final");
+        assert_eq!(r["answer"], "line one\n\nline two");
+        assert_eq!(r["evidence"], "https://example.org/a\n mem:x");
+        let t = parse_reply("{\"tool\":\"web_fetch\",\"args\":{\"url\":\"https://example.org\"}}");
+        assert_eq!(t["type"], "tool");
+    }
 }
 
 fn correction(bad: &[String]) -> String {

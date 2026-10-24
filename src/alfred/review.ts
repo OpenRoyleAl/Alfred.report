@@ -8,7 +8,16 @@
  * and completion without evidence. A run with any blocking flag is quarantined: it is
  * stored for inspection but NEVER becomes a lesson.
  */
-import type { ToolEvent } from "./guards";
+/** One tool step as the review sees it (durable dm_tasks row). */
+export interface ToolEvent {
+  mission_id: string;
+  tool: string;
+  args_hash: string;
+  ok: boolean;
+  blocked: string | null;
+  ms: number;
+  at: number;
+}
 import { reviewCore } from "./core.ts";
 
 export interface GatewayLogSummary {

@@ -42,6 +42,8 @@ export interface DurableCreateIn {
   requireEvidence?: boolean;
   /** Owner debug only (the Alfred DO drops it for non-owners). */
   debugSearch?: "force-exa" | null;
+  /** Verified caller is the default king (owner-only tools). Set by the Alfred DO, never by a client. */
+  owner?: boolean;
 }
 
 async function call<T>(env: Env, path: string, init: { method?: string; body?: unknown; query?: Record<string, string> } = {}): Promise<T> {
@@ -61,7 +63,6 @@ async function call<T>(env: Env, path: string, init: { method?: string; body?: u
   return data;
 }
 
-export const isDurableId = (id: string) => /^dm-[0-9a-f]{16}(~h\d+)?$/.test(id);
 
 export function durableCreate(env: Env, tenant: string, a: DurableCreateIn) {
   return call<{ missionId: string; requestId: string; duplicate: boolean; status: string; runAt: number }>(env, "/durable/missions", {
@@ -92,6 +93,20 @@ export function durableMemoryHealth(env: Env, tenant: string) {
 
 export function durableHistory(env: Env, tenant: string, query: string, requestId?: string | null) {
   return call<DurableMission & { used: string[] }>(env, "/durable/history", { method: "POST", body: { tenant, query, requestId: requestId ?? null } });
+}
+
+/** Front door: one durable mission run inline (web chat, ORAL, MCP ask). */
+export function durableAsk(env: Env, tenant: string, a: DurableCreateIn) {
+  return call<DurableMission>(env, "/durable/ask", { method: "POST", body: { tenant, ...a } });
+}
+
+/** One-time move of retired Pi missions into the durable engine (idempotent by id). */
+export function durableImportLegacy(env: Env, tenant: string, missions: unknown[], lessons: unknown[]) {
+  return call<{ imported: number; skipped: number; lessons: number }>(env, "/durable/import-legacy", { method: "POST", body: { tenant, missions, lessons } });
+}
+
+export function durableForgetLesson(env: Env, tenant: string, missionId: string) {
+  return call<{ deleted: number }>(env, `/durable/lessons/${encodeURIComponent(missionId)}`, { method: "DELETE", query: { tenant } });
 }
 
 export async function durableLessons(env: Env, tenant: string, limit = 20): Promise<Array<Record<string, unknown>>> {

@@ -6,6 +6,7 @@
  */
 import { BRAND, FLOW, PLATFORM_ROLE, instanceBrand, wakeWord } from "../brand.ts";
 import { speakReport, type TheReport } from "./report.ts";
+import { gatewayId } from "./gateway.ts";
 import { parseUtterance } from "../../apps/oral/src/wake.ts";
 import { CANCELLED, decideTurn } from "../../apps/oral/src/turn.ts";
 
@@ -44,7 +45,7 @@ function aiText(r: unknown): string {
 }
 
 export async function voiceTurn(
-  o: { ai: Ai; alfred: AlfredVoiceRpc; domain: string; isOwner: boolean; askLimit: number; requestId?: string | null },
+  o: { ai: Ai; alfred: AlfredVoiceRpc; domain: string; isOwner: boolean; askLimit: number; requestId?: string | null; gatewayId?: string },
   transcript: string,
   pending?: string
 ): Promise<VoiceTurnResult> {
@@ -83,7 +84,7 @@ export async function voiceTurn(
       { role: "user", content: transcript.slice(0, 2000) },
     ],
     max_tokens: 300,
-  } as never);
+  } as never, { gateway: { id: gatewayId({ CLOUDFLARE_GATEWAY_ID: o.gatewayId }), metadata: { app: "alfred-report", lane: "voice" } } } as never);
   return { action: "chat", text: aiText(r).trim() || "Sorry, I didn't catch that.", pending };
 }
 

@@ -45,6 +45,7 @@ interface Exports {
   durable_html_text(ptr: number, len: number): bigint;
   review_mission(ptr: number, len: number): bigint;
   durable_board_id(ptr: number, len: number): bigint;
+  durable_op(ptr: number, len: number): bigint;
   memory_profile(ptr: number, len: number): bigint;
   memory_query(ptr: number, len: number): bigint;
   memory_store(ptr: number, len: number): bigint;
@@ -246,7 +247,7 @@ export function durableCreate(input: {
 }): DurableCreate {
   return callJson("durable_create", input);
 }
-export function durablePlan(input: { goal: string; kind: string; tasks: DurableTask[]; tenant_label?: string; lessons?: string[]; memory?: Array<{ id: string; summary: string }> }): DurablePlan {
+export function durablePlan(input: { goal: string; kind: string; tasks: DurableTask[]; tenant_label?: string; lessons?: string[]; memory?: Array<{ id: string; summary: string }>; owner?: boolean }): DurablePlan {
   return callJson("durable_plan", input);
 }
 export function durableRecover(tasks: DurableTask[]): { retry: string[]; interrupt: string[]; fail: string[] } {
@@ -318,6 +319,11 @@ export function memoryStorePlan(input: { mission_id: string; objective: string; 
 export function memoryShape(input: { answer: string; candidates: Array<{ id: string; summary: string; score: number }>; budget_tokens?: number | null; confidence?: Record<string, number> }): MemoryShape {
   return callJson("memory_shape", input);
 }
+/** Durable engine helpers (durable.rs op_json): tool_load (progressive disclosure), tool_ok, legacy (Pi rows). */
+export function durableOp<T>(op: "tool_load" | "tool_ok" | "legacy", args: unknown): T {
+  return callJson<T>("durable_op", { op, args });
+}
+
 export function memoryOp<T>(op: "forget" | "remember" | "export" | "uncited" | "confidence" | "consolidate" | "notice", args: unknown): T {
   return callJson<T>("memory_op", { op, args });
 }

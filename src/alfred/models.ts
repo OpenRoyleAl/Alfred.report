@@ -1,22 +1,8 @@
 /**
- * Model routing for Alfred — AI Gateway Auto Router with a Workers AI floor.
- *
- * - Default model: `cloudflare/auto` on the account's gateway (default id from src/brand.ts RESOURCES.gateway).
- *   Auto Router picks per turn; `cf-aig-session-id` pins a model for a turn (prompt cache).
- * - The candidate pool is restricted with `cf-aig-allowed-models` / `cf-aig-allowed-providers`
- *   (docs: ai-gateway/features/auto-router). Default pool = Workers AI models only, because
- *   BYOK provider plans are exhausted; widen it per account via vars.
- * - Floor: if the router call fails before producing output, pi-ai's client-side fallback
- *   walks WORKERS_AI_FLOOR (Workers AI via env.AI.run — no keys, always available).
- *
- * `cloudflare/auto` is not in pi-ai's catalog, so we declare it as a Cloudflare model object
- * (api "cloudflare-ai"): the provider then calls env.AI.run("cloudflare/auto", ..., { gateway }),
- * which is exactly the documented Auto Router binding call. The provider is wrapped so a Pi
- * session (which stores provider + id) can resolve the model again after eviction.
+ * Model routing for Alfred: one gateway (alfred-report), the primary Workers AI model first,
+ * then AI Gateway Auto Router, then the Workers AI floor. Every call goes through env.AI.run with
+ * the gateway option, so every request lands in the same gateway logs. No client-side SDK.
  */
-import { createModels } from "@earendil-works/pi-ai/models";
-import type { Api, Model } from "@earendil-works/pi-ai";
-import { createAI } from "agents/models/pi-ai";
 import { BRAND } from "../brand.ts";
 import {
   LIMITER,
@@ -139,58 +125,25 @@ export async function runPrimary(
   }
 }
 
-export function createAlfredModels(env: ModelEnv) {
-  const floor = floorModels(env);
-  const ai = createAI({
-    binding: env.AI,
-    id: gatewayId(env),
-    headers: routerHeaders(env),
-    fallback: modelsFloor(floor, true, primaryModel(env)) as never,
-    metadata: { app: BRAND.slug },
-  } as never);
-
-  const base = ai(floor[0] as never) as Model<Api>;
-  const autoModel: Model<Api> = {
-    ...base,
-    id: AUTO_MODEL_ID,
-    name: "Cloudflare Auto Router",
-    contextWindow: 128_000,
-    maxTokens: 8_192,
-    reasoning: true,
-  };
-
-  const primary = primaryModel(env);
-  const primaryDecl: Model<Api> | null = primary
-    ? { ...base, id: primary, name: primary, contextWindow: primary === DEEPSEEK_FLASH ? 1_000_000 : base.contextWindow, maxTokens: 16_384 }
-    : null;
-  const inner = ai.provider;
-  const provider = Object.create(inner) as typeof inner;
-  Object.defineProperty(provider, "getModels", {
-    value: () => {
-      const listed = inner.getModels();
-      const extra = [autoModel, ...(primaryDecl && !listed.some((m) => m.id === primaryDecl.id) ? [primaryDecl] : [])];
-      return [...listed, ...extra];
-    },
-  });
-
-  const models = createModels();
-  models.setProvider(provider);
-
-  // Missions default: the primary Workers AI model (DeepSeek V4.1 Flash) with the floor as
-  // pi-ai's fallback chain (429 / capacity -> next Workers AI model). Auto Router only when
-  // MISSIONS_MODEL=auto, so a turn never lands on a paid provider by surprise.
-  const missionModel = primaryDecl ? (ai(primaryDecl as never) as Model<Api>) : (ai(autoModel as never) as Model<Api>);
-  return {
-    ai,
-    models,
-    missionModel,
-    autoModel: ai(autoModel as never) as Model<Api>,
-    floorModel: base,
-    gateway: gatewayId(env),
-  };
+/** Auto Router (`cloudflare/auto`) on the gateway, pool restricted by cf-aig-allowed-* headers. */
+async function runAuto(env: ModelEnv, system: string, user: string, opts: { maxTokens?: number; sessionId?: string }) {
+  try {
+    const r = await env.AI.run(
+      AUTO_MODEL_ID as never,
+      { messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: opts.maxTokens ?? 400 } as never,
+      {
+        gateway: { id: gatewayId(env), metadata: { app: BRAND.slug } },
+        extraHeaders: { ...routerHeaders(env), ...(opts.sessionId ? { "cf-aig-session-id": opts.sessionId } : {}) },
+      } as never
+    );
+    const { text, tokens } = textOf(r);
+    return text.trim() ? { text, model: AUTO_MODEL_ID, totalTokens: tokens } : null;
+  } catch {
+    return null;
+  }
 }
 
-/** One-shot completion helper (KISS chat lane): Auto Router first, Workers AI floor on failure. */
+/** One-shot completion helper (KISS chat lane, missions LLM): primary, then Auto Router, then the floor. */
 export async function completeText(
   env: ModelEnv,
   system: string,
@@ -202,22 +155,11 @@ export async function completeText(
     const direct = await runPrimary(env, primary, system, user, opts);
     if (direct) return direct;
   }
-  const { ai, autoModel } = createAlfredModels(env);
-  const reply = await ai.completeSimple(
-    autoModel as never,
-    { systemPrompt: system, messages: [{ role: "user", content: user, timestamp: Date.now() }] } as never,
-    { maxTokens: opts.maxTokens ?? 400, sessionId: opts.sessionId } as never
-  );
-  const r = reply as unknown as {
-    content: Array<{ type: string; text?: string }>;
-    model?: string;
-    usage?: { totalTokens?: number; input?: number; output?: number };
-  };
-  const text = r.content.filter((p) => p.type === "text").map((p) => p.text || "").join("");
-  const usage = r.usage || {};
-  return {
-    text,
-    model: r.model || AUTO_MODEL_ID,
-    totalTokens: usage.totalTokens ?? (usage.input || 0) + (usage.output || 0),
-  };
+  const auto = await runAuto(env, system, user, opts);
+  if (auto) return auto;
+  for (const m of modelsFloor(floorModels(env), true, primary)) {
+    const r = await runPrimary(env, m, system, user, opts);
+    if (r) return r;
+  }
+  throw new Error("all models failed (primary, auto router, floor)");
 }

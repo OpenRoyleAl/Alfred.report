@@ -737,6 +737,7 @@ async function handleDurable(req: Request, env: Env, url: URL): Promise<Response
       if (newMissionsHeld(env) && !meteringBootstrapOverride(req)) return holdNewMissionsResponse();
       const r = await stub.durableCreate({
         tenant,
+        owner: body.owner === true,
         objective: String(body.objective ?? ""),
         requestId: typeof body.requestId === "string" ? body.requestId : null,
         fallback: Array.isArray(body.fallback) ? body.fallback.map(String).slice(0, 8) : [],
@@ -762,6 +763,28 @@ async function handleDurable(req: Request, env: Env, url: URL): Promise<Response
       if (q.length < 3) return Response.json({ error: "query required" }, { status: 400 });
       return Response.json(await stub.durableHistory(tenant, q, typeof body.requestId === "string" ? body.requestId : null));
     }
+    if (url.pathname === "/durable/ask" && req.method === "POST") {
+      // Front door (web chat, ORAL, MCP ask): one durable mission run inline and returned.
+      if (newMissionsHeld(env) && !meteringBootstrapOverride(req)) return holdNewMissionsResponse();
+      return Response.json(
+        await stub.durableAsk({
+          tenant,
+          owner: body.owner === true,
+          objective: String(body.objective ?? ""),
+          requestId: typeof body.requestId === "string" ? body.requestId : null,
+          fallback: Array.isArray(body.fallback) ? body.fallback.map(String).slice(0, 8) : [],
+          source: String(body.source ?? "web"),
+          requireEvidence: body.requireEvidence === true,
+        })
+      );
+    }
+    if (url.pathname === "/durable/import-legacy" && req.method === "POST") {
+      const ms = Array.isArray(body.missions) ? (body.missions as Array<Record<string, unknown>>).slice(0, 2000) : [];
+      const ls = Array.isArray(body.lessons) ? (body.lessons as Array<Record<string, unknown>>).slice(0, 2000) : [];
+      return Response.json(await stub.durableImportLegacy(tenant, ms, ls));
+    }
+    const fl = url.pathname.match(/^\/durable\/lessons\/([A-Za-z0-9~:_-]{4,160})$/);
+    if (fl && req.method === "DELETE") return Response.json(await stub.durableForgetLesson(fl[1]));
     if (url.pathname === "/durable/lessons" && req.method === "GET") {
       return Response.json({ lessons: await stub.durableLessons(Number(url.searchParams.get("limit")) || 20) });
     }

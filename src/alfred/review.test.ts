@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { collectLogIds, reviewMission, type GatewayLogSummary } from "./review.ts";
-import type { ToolEvent } from "./guards.ts";
+import type { ToolEvent } from "./review.ts";
 
 const log = (over: Partial<GatewayLogSummary> = {}): GatewayLogSummary => ({
   id: "l", model: "@cf/zai-org/glm-5.2", success: true, status: 200, tokens_in: 100, tokens_out: 50, cost: 0, duration: 10, ...over,

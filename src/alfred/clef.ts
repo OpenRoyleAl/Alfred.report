@@ -214,3 +214,42 @@ export function doneState(objective: string, finalText: string, evidence: string
     evidence: evidence ? evidence.slice(0, 4000) : "(none supplied)",
   };
 }
+
+// ─── Gates used outside the model loop (front-door route, ops escalate, done-gate health) ───
+// Failure policy: route falls back to "mission", escalate fails closed, done returns null.
+export interface ClefGates {
+  route(prompt: string, audio?: ClefAudio[]): Promise<RouteDecision>;
+  escalate(action: string, context?: string): Promise<EscalateDecision>;
+  done(objective: string, finalText: string, evidence: string | null): Promise<DoneDecision | null>;
+}
+
+export function clefGates(env: ClefEnv): ClefGates {
+  return {
+    async route(prompt, audio) {
+      try {
+        const out = await runClef(env, { state: prompt.slice(0, 12000), questions: routeQuestions(), ...(audio?.length ? { audio } : {}) });
+        return decideRoute(out.answers);
+      } catch {
+        return { route: "mission", confidence: 0, needsWeb: false, fallback: true };
+      }
+    },
+    async escalate(action, context) {
+      try {
+        const out = await runClef(env, { state: { action: action.slice(0, 2000), context: (context ?? "").slice(0, 6000) }, questions: escalateQuestions() });
+        return decideEscalate(out.answers);
+      } catch {
+        return { escalate: true, p: 1, risk: 3, reason: "clef unavailable (fail closed)" };
+      }
+    },
+    async done(objective, finalText, evidence) {
+      try {
+        const out = await runClef(env, { state: doneState(objective, finalText, evidence), questions: doneQuestions() });
+        return decideDone(out.answers);
+      } catch (err) {
+        console.error(`clef done gate failed: ${(err as Error).message}`);
+        return null;
+      }
+    },
+  };
+}
+

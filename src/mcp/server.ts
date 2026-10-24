@@ -30,7 +30,7 @@ interface AlfredRpc {
     opts: { requireEvidence?: boolean; requestId?: string | null; source?: "mcp"; fallback?: string[]; delaySeconds?: number | null }
   ): Promise<{ missionId: string }>;
   consumeQuota(kind: string, limit: number): Promise<{ ok: boolean; used: number; limit: number }>;
-  ask(prompt: string): Promise<unknown>;
+  ask(prompt: string, opts?: { source?: "mcp"; requestId?: string | null }): Promise<unknown>;
   report(limit?: number): Promise<{ items: unknown[] }>;
 }
 
@@ -88,7 +88,7 @@ export async function executeMCPTool(name: string, args: Record<string, unknown>
       const s = await bound();
       const q = await s.consumeQuota("ask", quota(env.SANDBOX_ASKS_PER_DAY));
       if (!q.ok) throw new Error(`quota: ${q.used}/${q.limit} asks today`);
-      return s.ask(prompt);
+      return s.ask(prompt, { source: "mcp", requestId: typeof args.requestId === "string" && args.requestId ? args.requestId : null });
     }
     case "report":
       return (await bound()).report();

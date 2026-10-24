@@ -3,13 +3,16 @@
 ```
 browser / phone ──> web Worker (alfred-report, src/index.ts)
                       ├─ Access / Google sign-in -> tenant id
-                      ├─ Alfred DO (one per tenant): Pi harness, tools, mission loop, reviews, lessons
+                      ├─ Alfred DO (one per tenant): front door only (bind, quota, Clef route/escalate, Clairic, The Report)
                       │    tools: web_search (Ceramic -> Exa Lite -> Exa auto router), web_fetch, cf_docs_search,
                       │           memory (Agent Memory), missions, knowledge graph (owner), Clef, Clairic
                       ├─ /api/missions/* ── MISSIONS service binding ──> Missions Worker
                       └─ email(): owner forward -> Clairic -> mission
 
 Missions Worker (alfred-report-missions, apps/missions)
+  ├─ the ONE agent loop: durable engine (Rust plan in durable.rs; web chat, ORAL, MCP, email, schedules)
+  │    core tools in the prompt; deferred tools (cf docs, memory, knowledge graph) load via tool_load
+  │    subagents kept: Clef review (verification) and history_search (parallel, throwaway)
   ├─ AlfredMissions DO, missions + evidence gates (D1), knowledge graph (D1 + Vectorize + R2)
   ├─ BriefingWorkflow (08:00 UTC), MaintenanceWorkflow (02:00 UTC), changelog watch (6h)
   └─ /a2a/* for external field agents (bearer), owner wake webhook
@@ -33,7 +36,7 @@ Exa 10 rps and DeepSeek 20 rpm limiters, model floor / primary / 429 / completio
 The Report builder and spoken form, MCP token format + scope parse + tool allow-list.
 
 **TypeScript (stays):** Agents SDK Durable Objects (`Alfred`, `AlfredMissions`, `AlfredOral`),
-`routeAgentRequest`, pi-ai / `env.AI.run` / Auto Router, D1 + SHA-256 token store, Secrets Store,
+`routeAgentRequest`, `env.AI.run` on the one gateway / Auto Router, D1 + SHA-256 token store, Secrets Store,
 Ceramic/Exa `fetch`, MCP JSON-RPC transport, Vite/React UI.
 
 `initCore` must run in every Worker entry (`src/index.ts`, `apps/missions/src/index.ts`,

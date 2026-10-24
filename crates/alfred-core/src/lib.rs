@@ -9,7 +9,7 @@
 //! MCP token format + scope/tool checks, sliding-window limiters.
 //!
 //! Not in Rust (needs the JS isolate / Agents SDK): Durable Objects, `routeAgentRequest`,
-//! pi-ai / `env.AI.run`, D1, Secrets Store, fetch to Ceramic/Exa, MCP JSON-RPC transport.
+//! `env.AI.run` on the gateway, D1, Secrets Store, fetch to Ceramic/Exa, MCP JSON-RPC transport.
 //!
 //! ABI: no wasm-bindgen. workers-rs would pull wasm-bindgen and a JS glue entry, which cannot
 //! host the Agents SDK Agent class.
@@ -205,6 +205,11 @@ pub extern "C" fn durable_html_text(ptr: *const u8, len: usize) -> u64 {
 #[no_mangle]
 pub extern "C" fn review_mission(ptr: *const u8, len: usize) -> u64 {
     call(ptr, len, review::review_json)
+}
+
+#[no_mangle]
+pub extern "C" fn durable_op(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::op_json)
 }
 
 #[no_mangle]

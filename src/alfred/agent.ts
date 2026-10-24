@@ -1,36 +1,34 @@
 import { recentNotices } from "../lib/owner-notices.ts";
 import { isOwnerTenantId } from "../lib/tenant.ts";
 /**
- * Alfred - the agent. A Pi Durable harness running in the `Alfred` Durable Object
- * (one object per tenant, addressed by tenant id).
+ * Alfred - the tenant's front door, one `Alfred` Durable Object per tenant (addressed by tenant id).
  *
- * Persistence: Pi stores transcripts/inbox/tasks in this object's SQLite (pi_* tables);
- * Alfred adds alfred_* tables (missions, tool events, reviews, lessons). Long-term memory
- * lives in Cloudflare Agent Memory (binding MEMORY, profile = tenant).
+ * There is one agent loop: the durable engine in the Missions Worker (crates/alfred-core/src/durable.rs
+ * + apps/missions/src/durable.ts). Web chat, ORAL, MCP, email and voice missions all run there. This
+ * object only binds the verified tenant, meters sandbox asks, runs the Clef front-door gates (route,
+ * ops escalate) and Clairic intake, and builds The Report from durable missions.
  *
- * Mission loop: new Pi session per mission -> tools behind loop guards -> end-of-mission
- * review against AI Gateway logs -> only passing runs become lessons (shown to future
- * sessions via the "lessons" prompt section; Harness²-style persistent improvement store).
+ * Subagents kept on purpose: the Clef review (verification, after every mission) and history_search
+ * (a parallel, throwaway child that returns one answer). Everything else is a tool in the one loop.
  */
-import { untrustedRule } from "./core.ts";
 import { Agent } from "agents";
-import { createRegistry, Harness, type ToolRegistration } from "@earendil-works/pi-durable";
-import { PiHarness } from "agents/harness/pi";
 import type { Env } from "../lib/env";
-import { createAlfredModels } from "./models";
-import { guardTool, type GuardStore, type ToolEvent } from "./guards";
-import { collectLogIds, reviewMission, summarizeLog, type GatewayLogSummary, type ReviewResult } from "./review";
-import { webTools } from "./extensions/web";
-import { memoryTools } from "./extensions/memory";
-import { missionTools } from "./extensions/missions";
-import { knowledgeTools } from "./extensions/knowledge";
-import { clefExtension, clefGates } from "./extensions/clef";
-import { clairicExtension } from "./extensions/clairic";
-import type { DoneDecision, RouteDecision } from "./clef";
+import { clefGates } from "./clef";
+import type { RouteDecision } from "./clef";
 import { extractMission, type IntakeSource } from "./clairic";
-import { buildReport, REPORT_LIMIT, type MissionRow, type TheReport } from "./report";
+import { buildReport, REPORT_LIMIT, type TheReport } from "./report";
 import { instanceBrand } from "../brand";
-import { durableCreate, durableGet, durableLessons, durableList, durableReportRow, isDurableId, type DurableCreateIn } from "../lib/durable-client";
+import {
+  durableAsk,
+  durableCreate,
+  durableForgetLesson,
+  durableGet,
+  durableImportLegacy,
+  durableLessons,
+  durableList,
+  durableReportRow,
+  type DurableCreateIn,
+} from "../lib/durable-client";
 import { nextBindState } from "./bind";
 
 export interface AlfredState {
@@ -38,260 +36,104 @@ export interface AlfredState {
   isOwner: boolean;
   missionsRun: number;
   lastMissionAt: number;
+  /** Retired Pi-harness missions in this object were moved to the durable engine (once). */
+  legacyMoved?: boolean;
 }
 
-const PREAMBLE = `You are Alfred, the owner's operator on Cloudflare. Be brief and concrete.
-Rules: evidence before done (close missions only with mission_complete and real evidence);
-never reveal secrets; use web_search to find pages and web_fetch to read them; use cf_docs_search for anything
-Cloudflare; do not repeat a tool call that already returned a result; when blocked, say so.`;
-
-const MAX_LOGS_PER_REVIEW = 60;
-const LESSONS_IN_PROMPT = 8;
-
-export interface AlfredDump {
-  missions: Record<string, unknown>[];
-  reviews: Record<string, unknown>[];
-  lessons: Record<string, unknown>[];
-  events: Record<string, unknown>[];
+export interface AskResult {
+  text: string;
+  status: string;
+  route: RouteDecision;
+  missionId?: string;
+  verdict?: string | null;
+  escalation?: string;
 }
 
 export class Alfred extends Agent<Env, AlfredState> {
   initialState: AlfredState = { tenantId: null, isOwner: false, missionsRun: 0, lastMissionAt: 0 };
 
-  private activeMission = "chat";
-  private evidence = new Map<string, string>();
-  private escalations = new Map<string, string>();
-  private missionQueue: Promise<unknown> = Promise.resolve();
   /** Privilege of the caller that last bound this isolate (not persisted). */
   private callerIsOwner = false;
-
-  private routing = createAlfredModels(this.env);
   private gates = clefGates(this.env);
-  registry = createRegistry();
-
-  harness = new PiHarness({
-    harness: ({ storage, context }) => {
-      this.ensureTables();
-      const tenant = this.state?.tenantId || "default";
-      const guard = this.guardStore();
-      const tools: ToolRegistration[] = [
-        ...webTools(this.env, this.exaBudget()),
-        // Prune tools that cannot work here: fewer tool schemas per request = smaller, stable prefix.
-        ...(this.env.MEMORY ? memoryTools(this.env, tenant, () => this.activeMission) : []),
-        ...missionTools(this.env, tenant, (id, ev) => this.evidence.set(this.activeMission, `${id}: ${ev}`)),
-        ...(this.state?.isOwner
-          ? knowledgeTools(this.env.DB, () => this.callerIsOwner)
-          : []),
-      ].map((t) => guardTool(t, guard));
-
-      this.registry.install({
-        name: "alfred",
-        sections: [
-          { key: "preamble", render: () => PREAMBLE, tag: false },
-          { key: "untrusted", render: () => untrustedRule() },
-          { key: "today", render: () => new Date().toISOString().slice(0, 10) },
-          { key: "lessons", render: () => this.lessonsText() },
-        ],
-        tools,
-      });
-      // Clef decision gates and Clairic extraction, each its own extension (loop guards apply too).
-      for (const ext of [
-        clefExtension(this.env, { onEscalate: (action, reason) => this.escalations.set(this.activeMission, `${reason}: ${action.slice(0, 300)}`) }, this.gates),
-        clairicExtension(this.env),
-      ]) {
-        this.registry.install({ ...ext, tools: (ext.tools ?? []).map((t) => guardTool(t, guard)) });
-      }
-      return Harness.open(storage, { models: this.routing.models, registry: this.registry }, context);
-    },
-    defaults: { model: this.routing.missionModel, thinkingLevel: "low" },
-  });
-
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    this.lifecycle.use(this.harness);
-  }
-
-  // ─── Setup ──────────────────────────────────────────────────────
 
   /** Bind this object to a verified tenant (called by the Worker after auth). Idempotent. */
   async bind(tenantId: string, isOwner: boolean): Promise<void> {
     const next = nextBindState(this.state, tenantId, isOwner);
     this.callerIsOwner = isOwner;
-    if (this.state.tenantId === next.tenantId && this.state.isOwner === next.isOwner) return;
-    this.setState({ ...this.state, ...next });
-  }
-
-  /** Owner-tenant consolidation: everything needed to copy this object's missions elsewhere. */
-  async exportMissions(): Promise<AlfredDump> {
-    this.ensureTables();
-    return {
-      missions: this.sql<Record<string, unknown>>`SELECT * FROM alfred_missions`,
-      reviews: this.sql<Record<string, unknown>>`SELECT * FROM alfred_reviews`,
-      lessons: this.sql<Record<string, unknown>>`SELECT * FROM alfred_lessons`,
-      events: this.sql<Record<string, unknown>>`SELECT * FROM alfred_tool_events`,
-    };
-  }
-
-  /** Copy missions in (idempotent: a mission id already here is skipped with its events). Owner only. */
-  async importMissions(d: AlfredDump): Promise<{ missions: number; skipped: number }> {
-    if (!this.state.isOwner) throw new Error("owner only");
-    this.ensureTables();
-    const have = new Set(this.sql<{ id: string }>`SELECT id FROM alfred_missions`.map((r) => r.id));
-    const fresh = new Set<string>();
-    for (const m of d.missions) {
-      const id = String(m.id);
-      if (have.has(id)) continue;
-      fresh.add(id);
-      this.sql`INSERT INTO alfred_missions (id, session, objective, status, final_text, verdict, started_at, finished_at)
-        VALUES (${id}, ${m.session as string}, ${m.objective as string}, ${m.status as string}, ${m.final_text as string}, ${m.verdict as string}, ${m.started_at as number}, ${m.finished_at as number})`;
-    }
-    for (const r of d.reviews) if (fresh.has(String(r.mission_id)))
-      this.sql`INSERT OR IGNORE INTO alfred_reviews VALUES (${r.mission_id as string}, ${r.verdict as string}, ${r.review as string}, ${r.at as number})`;
-    for (const l of d.lessons) if (fresh.has(String(l.mission_id)))
-      this.sql`INSERT OR IGNORE INTO alfred_lessons VALUES (${l.id as string}, ${l.mission_id as string}, ${l.lesson as string}, ${l.at as number})`;
-    for (const e of d.events) if (fresh.has(String(e.mission_id)))
-      this.sql`INSERT INTO alfred_tool_events VALUES (${e.mission_id as string}, ${e.tool as string}, ${e.args_hash as string}, ${e.ok as number}, ${e.blocked as string}, ${e.ms as number}, ${e.at as number})`;
-    return { missions: fresh.size, skipped: d.missions.length - fresh.size };
-  }
-
-  private ensureTables() {
-    this.sql`CREATE TABLE IF NOT EXISTS alfred_missions (
-      id TEXT PRIMARY KEY, session TEXT, objective TEXT, status TEXT,
-      final_text TEXT, verdict TEXT, started_at INTEGER, finished_at INTEGER)`;
-    this.sql`CREATE TABLE IF NOT EXISTS alfred_tool_events (
-      mission_id TEXT, tool TEXT, args_hash TEXT, ok INTEGER, blocked TEXT, ms INTEGER, at INTEGER)`;
-    this.sql`CREATE TABLE IF NOT EXISTS alfred_reviews (mission_id TEXT PRIMARY KEY, verdict TEXT, review TEXT, at INTEGER)`;
-    this.sql`CREATE TABLE IF NOT EXISTS alfred_lessons (id TEXT PRIMARY KEY, mission_id TEXT, lesson TEXT, at INTEGER)`;
-  }
-
-  private guardStore(): GuardStore {
-    return {
-      missionId: () => this.activeMission,
-      record: (e: ToolEvent) => {
-        this.sql`INSERT INTO alfred_tool_events VALUES (${e.mission_id}, ${e.tool}, ${e.args_hash}, ${e.ok ? 1 : 0}, ${e.blocked}, ${e.ms}, ${e.at})`;
-      },
-      events: (missionId: string, tool?: string) => {
-        const rows = tool
-          ? this.sql<Record<string, unknown>>`SELECT * FROM alfred_tool_events WHERE mission_id = ${missionId} AND tool = ${tool} ORDER BY at`
-          : this.sql<Record<string, unknown>>`SELECT * FROM alfred_tool_events WHERE mission_id = ${missionId} ORDER BY at`;
-        return rows.map((r) => ({
-          mission_id: String(r.mission_id),
-          tool: String(r.tool),
-          args_hash: String(r.args_hash),
-          ok: Number(r.ok) === 1,
-          blocked: (r.blocked as string | null) ?? null,
-          ms: Number(r.ms),
-          at: Number(r.at),
-        }));
-      },
-    };
-  }
-
-  /** Daily Exa escalation counter persisted in this object's SQLite. */
-  private exaBudget() {
-    const day = () => new Date().toISOString().slice(0, 10);
-    return {
-      used: () => {
-        this.sql`CREATE TABLE IF NOT EXISTS alfred_search_usage (day TEXT PRIMARY KEY, exa INTEGER)`;
-        const [r] = this.sql<{ exa: number }>`SELECT exa FROM alfred_search_usage WHERE day = ${day()}`;
-        return r ? Number(r.exa) : 0;
-      },
-      spend: () => {
-        this.sql`CREATE TABLE IF NOT EXISTS alfred_search_usage (day TEXT PRIMARY KEY, exa INTEGER)`;
-        this.sql`INSERT INTO alfred_search_usage VALUES (${day()}, 1) ON CONFLICT(day) DO UPDATE SET exa = exa + 1`;
-      },
-    };
-  }
-
-  private lessonsText(): string | undefined {
-    this.ensureTables();
-    const rows = this.sql<{ lesson: string }>`SELECT lesson FROM alfred_lessons ORDER BY at DESC LIMIT ${LESSONS_IN_PROMPT}`;
-    if (!rows.length) return undefined;
-    return rows.map((r) => `- ${r.lesson}`).join("\n");
-  }
-
-  // ─── Missions ───────────────────────────────────────────────────
-
-  /** Run one mission end to end (serialized per tenant) and return its review. */
-  async runMission(objective: string, opts: { requireEvidence?: boolean } = {}) {
-    const run = this.missionQueue.then(() => this.runMissionInner(objective, opts));
-    this.missionQueue = run.catch(() => undefined);
-    return run;
+    if (this.state.tenantId !== next.tenantId || this.state.isOwner !== next.isOwner) this.setState({ ...this.state, ...next });
+    if (!this.state.legacyMoved) await this.moveLegacy();
   }
 
   /**
-   * Start a mission. New missions run on the durable engine in the Missions Worker (receipt-
-   * idempotent by requestId, survive eviction, DeepSeek on the alfred-report gateway).
-   * `engine: "pi"` keeps the in-object Pi harness path (Clef review + lessons).
+   * One-time migration: missions the retired Pi harness kept in this object's SQLite (alfred_*)
+   * move into the durable engine with their ids, verdicts and lessons, so The Report and old links
+   * keep working with one engine. Idempotent on the durable side; retried on the next bind on error.
    */
-  async startMission(
-    objective: string,
-    opts: { requireEvidence?: boolean; requestId?: string | null; source?: DurableCreateIn["source"]; fallback?: string[]; delaySeconds?: number | null; runAt?: number | null; engine?: "durable" | "pi"; debugStepDelayMs?: number; debugSearch?: "force-exa" | null } = {}
-  ): Promise<{ missionId: string; requestId?: string; duplicate?: boolean; status?: string; engine: string; runAt?: number }> {
-    if (opts.engine !== "pi" && this.env.MISSIONS) {
-      if (!this.state.tenantId) throw new Error("unbound");
-      const r = await durableCreate(this.env, this.state.tenantId, {
-        objective,
-        requestId: opts.requestId ?? null,
-        fallback: opts.requestId ? [] : opts.fallback ?? [opts.source ?? "web", objective, crypto.randomUUID()],
-        source: opts.source ?? "web",
-        delaySeconds: opts.delaySeconds ?? null,
-        runAt: opts.runAt ?? null,
-        debugStepDelayMs: this.callerIsOwner ? opts.debugStepDelayMs : 0,
-        requireEvidence: opts.requireEvidence ?? false,
-        debugSearch: this.callerIsOwner && opts.debugSearch === "force-exa" ? "force-exa" : null,
-      });
-      return { ...r, engine: "durable" };
+  private async moveLegacy(): Promise<void> {
+    if (!this.state.tenantId || !this.env.MISSIONS) return;
+    try {
+      const has = (t: string) => this.sql<{ n: number }>`SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = ${t}`[0]?.n;
+      let missions: Record<string, unknown>[] = [];
+      let lessons: Record<string, unknown>[] = [];
+      if (has("alfred_missions")) {
+        const reviewed = Boolean(has("alfred_reviews"));
+        missions = reviewed
+          ? this.sql<Record<string, unknown>>`SELECT m.*, r.review AS review FROM alfred_missions m LEFT JOIN alfred_reviews r ON r.mission_id = m.id`
+          : this.sql<Record<string, unknown>>`SELECT * FROM alfred_missions`;
+        if (has("alfred_lessons")) lessons = this.sql<Record<string, unknown>>`SELECT * FROM alfred_lessons`;
+      }
+      if (missions.length || lessons.length) {
+        const r = await durableImportLegacy(this.env, this.state.tenantId, missions, lessons);
+        console.log(`legacy pi missions moved for ${this.state.tenantId}: ${JSON.stringify(r)} of ${missions.length}`);
+      }
+      this.setState({ ...this.state, legacyMoved: true });
+    } catch (err) {
+      console.warn("legacy move failed (retried next bind)", String((err as Error)?.message || err).slice(0, 200));
     }
-    return { ...(await this.startPiMission(objective, opts)), engine: "pi" };
   }
 
-  /** Legacy Pi-harness mission (fire-and-forget). */
-  private async startPiMission(objective: string, opts: { requireEvidence?: boolean } = {}): Promise<{ missionId: string }> {
-    const missionId = crypto.randomUUID();
-    const run = this.missionQueue.then(() => this.runMissionInner(objective, opts, missionId));
-    this.missionQueue = run.catch(() => undefined);
-    this.ctx.waitUntil(run.catch(() => undefined));
-    return { missionId };
+  private tenant(): string {
+    if (!this.state.tenantId) throw new Error("unbound");
+    return this.state.tenantId;
+  }
+
+  // ─── Missions (all on the durable engine) ───────────────────────
+
+  async startMission(
+    objective: string,
+    opts: { requireEvidence?: boolean; requestId?: string | null; source?: DurableCreateIn["source"]; fallback?: string[]; delaySeconds?: number | null; runAt?: number | null; debugStepDelayMs?: number; debugSearch?: "force-exa" | null } = {}
+  ): Promise<{ missionId: string; requestId?: string; duplicate?: boolean; status?: string; engine: "durable"; runAt?: number }> {
+    const r = await durableCreate(this.env, this.tenant(), {
+      objective,
+      requestId: opts.requestId ?? null,
+      fallback: opts.requestId ? [] : opts.fallback ?? [opts.source ?? "web", objective, crypto.randomUUID()],
+      source: opts.source ?? "web",
+      delaySeconds: opts.delaySeconds ?? null,
+      runAt: opts.runAt ?? null,
+      debugStepDelayMs: this.callerIsOwner ? opts.debugStepDelayMs : 0,
+      requireEvidence: opts.requireEvidence ?? false,
+      debugSearch: this.callerIsOwner && opts.debugSearch === "force-exa" ? "force-exa" : null,
+      owner: this.callerIsOwner,
+    });
+    return { ...r, engine: "durable" };
   }
 
   async getMission(id: string) {
-    if (isDurableId(id) && this.state.tenantId && this.env.MISSIONS) {
-      const d = await durableGet(this.env, this.state.tenantId, id);
-      return d ? { ...d, engine: "durable", final_text: d.answer } : null;
-    }
-    this.ensureTables();
-    const [m] = this.sql<Record<string, unknown>>`SELECT * FROM alfred_missions WHERE id = ${id}`;
-    const [r] = this.sql<{ review: string }>`SELECT review FROM alfred_reviews WHERE mission_id = ${id}`;
-    return m ? { ...m, review: r ? JSON.parse(r.review) : null } : null;
+    const d = await durableGet(this.env, this.tenant(), id);
+    return d ? { ...d, engine: "durable", final_text: d.answer } : null;
   }
 
-  /** The Report (what WAKE returns): recent missions with their review + mission-done gate. */
+  /** The Report (what WAKE returns): recent durable missions with their review + mission-done gate. */
   async report(limit = REPORT_LIMIT): Promise<TheReport> {
-    this.ensureTables();
-    let durable: MissionRow[] = [];
-    if (this.state.tenantId && this.env.MISSIONS) {
-      try {
-        durable = (await durableList(this.env, this.state.tenantId, limit)).map(durableReportRow);
-      } catch (err) {
-        console.warn("durable list failed", String((err as Error)?.message || err).slice(0, 200));
-      }
+    let rows: ReturnType<typeof durableReportRow>[] = [];
+    try {
+      rows = (await durableList(this.env, this.tenant(), limit)).map(durableReportRow);
+    } catch (err) {
+      console.warn("durable list failed", String((err as Error)?.message || err).slice(0, 200));
     }
-    const rows = this.sql<Record<string, unknown>>`SELECT m.id, m.objective, m.status, m.verdict, m.started_at, m.finished_at, r.review
-      FROM alfred_missions m LEFT JOIN alfred_reviews r ON r.mission_id = m.id ORDER BY m.started_at DESC LIMIT ${limit}`;
-    const missions: MissionRow[] = rows.map((r) => ({
-      id: String(r.id),
-      objective: String(r.objective ?? ""),
-      status: String(r.status ?? ""),
-      verdict: r.verdict == null ? null : String(r.verdict),
-      started_at: Number(r.started_at ?? 0),
-      finished_at: r.finished_at == null ? null : Number(r.finished_at),
-      review: r.review ? (JSON.parse(String(r.review)) as ReviewResult) : null,
-    }));
-    const merged = [...missions, ...durable].sort((a, b) => b.started_at - a.started_at).slice(0, limit);
-    const report = buildReport(instanceBrand(this.env.DOMAIN || ""), merged, Date.now(), limit);
+    const report = buildReport(instanceBrand(this.env.DOMAIN || ""), rows, Date.now(), limit);
     // Kingdom model: only the default king's Report lists who joined (signup metadata only).
-    if (this.state.tenantId && (await isOwnerTenantId(this.env as never, this.state.tenantId))) {
+    if (await isOwnerTenantId(this.env as never, this.tenant())) {
       try {
         for (const n of await recentNotices(this.env.DB)) report.attention.push(n.text);
       } catch (err) {
@@ -302,11 +144,9 @@ export class Alfred extends Agent<Env, AlfredState> {
   }
 
   /** Owner: drop the lesson a mission produced (keeps a bad run out of self-improvement). */
-  forgetLesson(missionId: string): { deleted: number } {
-    this.ensureTables();
-    const before = this.sql<{ n: number }>`SELECT COUNT(*) AS n FROM alfred_lessons WHERE mission_id = ${missionId}`[0]?.n ?? 0;
-    this.sql`DELETE FROM alfred_lessons WHERE mission_id = ${missionId}`;
-    return { deleted: Number(before) };
+  async forgetLesson(missionId: string): Promise<{ deleted: number }> {
+    if (!this.callerIsOwner) throw new Error("owner only");
+    return durableForgetLesson(this.env, this.tenant(), missionId);
   }
 
   /** Clef mission-done gate health from inside this object (null = unavailable). */
@@ -315,147 +155,38 @@ export class Alfred extends Agent<Env, AlfredState> {
   }
 
   async listLessons(limit = 20) {
-    this.ensureTables();
-    const pi = this.sql<Record<string, unknown>>`SELECT * FROM alfred_lessons ORDER BY at DESC LIMIT ${limit}`;
-    let durable: Array<Record<string, unknown>> = [];
-    if (this.state.tenantId && this.env.MISSIONS) {
-      try {
-        durable = (await durableLessons(this.env, this.state.tenantId, limit)).map((l) => ({ ...l, engine: "durable" }));
-      } catch {
-        durable = [];
-      }
-    }
-    return [...pi, ...durable].sort((a, b) => Number(b.at) - Number(a.at)).slice(0, limit);
+    return (await durableLessons(this.env, this.tenant(), limit)).map((l) => ({ ...l, engine: "durable" }));
   }
 
-  private async runMissionInner(objective: string, opts: { requireEvidence?: boolean }, missionId = crypto.randomUUID()) {
-    this.ensureTables();
-    const session = await this.harness.sessions.create();
-    // Pin the mission model on every new session (defaults alone do not override a stored host model).
-    await session.setModel(this.routing.missionModel);
-    const now = Date.now();
-    this.sql`INSERT INTO alfred_missions VALUES (${missionId}, ${String(session.id)}, ${objective}, 'running', NULL, NULL, ${now}, NULL)`;
-    this.activeMission = missionId;
-    let status = "unanswered";
-    let finalText = "";
-    let messages: unknown = [];
-    try {
-      const result = await session.prompt(`Mission ${missionId}:\n${objective}`, { operationId: missionId });
-      status = result.status;
-      finalText = result.text ?? "";
-      messages = result.messages;
-    } catch (err) {
-      finalText = `error: ${(err as Error).message}`;
-    } finally {
-      this.activeMission = "chat";
-    }
+  // ─── Front door ─────────────────────────────────────────────────
 
-    const clefDone = status === "done" ? await this.doneGate(objective, finalText, this.evidence.get(missionId) ?? null) : null;
-    const review = await this.review(missionId, status, finalText, messages, opts.requireEvidence ?? false, clefDone);
-    this.sql`UPDATE alfred_missions SET status = ${status}, final_text = ${finalText.slice(0, 8000)},
-      verdict = ${review.verdict}, finished_at = ${Date.now()} WHERE id = ${missionId}`;
-    this.setState({ ...this.state, missionsRun: this.state.missionsRun + 1, lastMissionAt: Date.now() });
-    return { missionId, status, text: finalText, review };
-  }
-
-  /** Clef mission-done gate (extension "clef"). null = Clef unavailable (non-blocking flag in review). */
-  private doneGate(objective: string, finalText: string, evidence: string | null): Promise<DoneDecision | null> {
-    return this.gates.done(objective, finalText, evidence);
-  }
-
-  private async review(
-    missionId: string,
-    status: string,
-    finalText: string,
-    messages: unknown,
-    requireEvidence: boolean,
-    clefDone: DoneDecision | null = null
-  ): Promise<ReviewResult> {
-    const logIds = collectLogIds(messages).slice(0, MAX_LOGS_PER_REVIEW);
-    const gateway = this.env.AI.gateway(this.routing.gateway);
-    const logs: GatewayLogSummary[] = [];
-    let missing = 0;
-    // Gateway logs land a few seconds after the request: retry the misses before flagging them.
-    let pending = logIds;
-    for (let attempt = 0; attempt < 4 && pending.length; attempt++) {
-      if (attempt) await new Promise((r) => setTimeout(r, 2000 * attempt));
-      const retry: string[] = [];
-      for (const id of pending) {
-        try {
-          logs.push(summarizeLog(await gateway.getLog(id)));
-        } catch {
-          retry.push(id);
-        }
-      }
-      pending = retry;
-    }
-    missing = pending.length;
-    const result = reviewMission({
-      missionId,
-      status,
-      finalText,
-      events: this.guardStore().events(missionId),
-      logs,
-      missingLogs: missing,
-      evidence: this.evidence.get(missionId) ?? null,
-      requireEvidence,
-      clefDone: status === "done" ? (clefDone ?? "unavailable") : undefined,
-      escalation: this.escalations.get(missionId) ?? null,
-    });
-    const hadEvidence = Boolean(this.evidence.get(missionId));
-    this.evidence.delete(missionId);
-    this.escalations.delete(missionId);
-    this.sql`INSERT OR REPLACE INTO alfred_reviews VALUES (${missionId}, ${result.verdict}, ${JSON.stringify(result)}, ${Date.now()})`;
-
-    if (result.lessonOk && hadEvidence) {
-      // Only passing runs that closed with real evidence (mission_complete) may teach. Keep the lesson short and factual.
-      const [m] = this.sql<{ objective: string }>`SELECT objective FROM alfred_missions WHERE id = ${missionId}`;
-      const lesson = `${(m?.objective || "").slice(0, 160)} → done in ${result.totals.requests} model call(s), ` +
-        `${result.totals.tool_calls} tool call(s) via ${result.models.join("/") || "auto"}.`;
-      this.sql`INSERT OR REPLACE INTO alfred_lessons VALUES (${crypto.randomUUID()}, ${missionId}, ${lesson}, ${Date.now()})`;
-      if (this.env.MEMORY && this.state.tenantId) {
-        try {
-          const profile = await this.env.MEMORY.getProfile(this.state.tenantId);
-          await profile.ingest(
-            [
-              { role: "user", content: `Mission: ${(m?.objective || "").slice(0, 2000)}` },
-              { role: "assistant", content: finalText.slice(0, 8000) },
-            ],
-            { sessionId: missionId.slice(0, 64) }
-          );
-        } catch {
-          /* memory is best-effort; the lesson row is already stored */
-        }
-      }
-    }
-    return result;
-  }
-
-  // ─── Chat (root session) ────────────────────────────────────────
-
-  /** Clef route gate (extension "clef"). Falls back to "mission" (guarded + reviewed) when Clef is unsure or down. */
   route(prompt: string): Promise<RouteDecision> {
     return this.gates.route(prompt);
   }
 
   /**
-   * Front door: route with Clef; chat answers inline, everything else runs as a reviewed
-   * mission. Ops requests pass the Clef escalate gate first and stop if a human must approve.
+   * Web chat, MCP ask and typed asks: Clef routes (and the ops escalate gate stops non-owners), then
+   * the one durable loop answers inline. Chat and research run without the evidence requirement.
    */
-  async ask(prompt: string): Promise<{ text: string; status: string; route: RouteDecision; missionId?: string; escalation?: string }> {
+  async ask(prompt: string, opts: { source?: DurableCreateIn["source"]; requestId?: string | null } = {}): Promise<AskResult> {
     const route = await this.route(prompt);
-    if (route.route === "chat" && !route.needsWeb) {
-      const r = await this.harness.prompt(prompt);
-      return { text: r.text ?? "", status: r.status, route };
-    }
     if (route.route === "ops") {
       const d = await this.gates.escalate(prompt); // fails closed
       if (d.escalate && !this.callerIsOwner) {
         return { text: "This needs the account owner's approval before Alfred acts.", status: "needs_approval", route, escalation: d.reason };
       }
     }
-    const m = await this.runMission(prompt, { requireEvidence: route.route !== "research" });
-    return { text: m.text, status: m.status, route, missionId: m.missionId };
+    const m = await durableAsk(this.env, this.tenant(), {
+      objective: prompt.slice(0, 4000),
+      requestId: opts.requestId ?? null,
+      fallback: opts.requestId ? [] : ["ask", prompt, crypto.randomUUID()],
+      source: opts.source ?? "web",
+      requireEvidence: route.route === "mission" || route.route === "ops",
+      owner: this.callerIsOwner,
+    });
+    this.setState({ ...this.state, missionsRun: this.state.missionsRun + 1, lastMissionAt: Date.now() });
+    const text = m.status === "done" ? m.answer ?? "" : m.status === "failed" ? `I couldn't finish that: ${m.error ?? "unknown error"}` : "Still working on it. Ask for The Report in a moment.";
+    return { text, status: m.status, route, missionId: m.id, verdict: m.verdict ?? null };
   }
 
   /** Sandbox quota: count one use of `kind` today; refuse past `limit` (owners are not limited). */
@@ -470,10 +201,7 @@ export class Alfred extends Agent<Env, AlfredState> {
     return { ok: true, used: used + 1, limit };
   }
 
-  /**
-   * Owner email forward -> mission: Clairic extracts the objective, then the mission starts.
-   * Owner-only (the Worker checks the sender before calling this).
-   */
+  /** Owner email forward -> mission: Clairic extracts the objective, then the mission starts. */
   async missionFromEmail(subject: string, body: string): Promise<{ missionId: string; objective: string }> {
     if (!this.callerIsOwner) throw new Error("owner only");
     let objective = "";
@@ -489,10 +217,7 @@ export class Alfred extends Agent<Env, AlfredState> {
     return { missionId, objective };
   }
 
-  /**
-   * Owner voice command (ORAL) -> mission draft. The objective is the owner's own words; Clairic
-   * reads the typed fields so ORAL can read back the uncertain ones before "Go Max AI!" starts it.
-   */
+  /** Owner voice command (ORAL) -> mission draft; Clairic flags the uncertain fields. */
   async draftFromVoice(transcript: string): Promise<{ objective: string; needsReview: string[]; due: string | null }> {
     if (!this.callerIsOwner) throw new Error("owner only");
     const objective = transcript.trim().slice(0, 4000);

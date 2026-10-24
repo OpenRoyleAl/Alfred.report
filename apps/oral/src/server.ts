@@ -6,6 +6,7 @@ import { createWorkersAI } from "workers-ai-provider";
 import { BRAND, FLOW, PLATFORM_ROLE, instanceBrand, wakeWord } from "../../../src/brand.ts";
 import { speakReport, type TheReport } from "../../../src/alfred/report.ts";
 import { isOwnerTenantId } from "../../../src/lib/tenant.ts";
+import { gatewayId } from "../../../src/alfred/gateway.ts";
 import { parseUtterance, wakeKeyterms } from "./wake.ts";
 import { CANCELLED, decideTurn } from "./turn.ts";
 
@@ -87,7 +88,8 @@ export class AlfredOral extends VoiceAgent<Env> {
       const q = await (await this.alfred()).consumeQuota("ask", sandboxLimit(this.env.SANDBOX_ASKS_PER_DAY));
       if (!q.ok) return `You've used today's ${q.limit} sandbox questions. Try again tomorrow.`;
     }
-    const workersai = createWorkersAI({ binding: this.env.AI });
+    // Same single gateway as every other model call (logs, caching, rate limits).
+    const workersai = createWorkersAI({ binding: this.env.AI, gateway: { id: gatewayId(this.env as never) } });
     const result = streamText({
       model: workersai("@cf/moonshotai/kimi-k2.6"),
       system: systemPrompt(domain),

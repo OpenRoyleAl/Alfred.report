@@ -1,0 +1,103 @@
+[
+ {
+  "id": "one-loop-kg-hidden-from-other-kingdoms",
+  "check": "plan_prompt",
+  "input": {
+   "owner": false
+  },
+  "expect": {
+   "omits": [
+    "kg_search",
+    "kg_create",
+    "kg_link"
+   ]
+  }
+ },
+ {
+  "id": "one-loop-kg-refused-for-other-kingdoms",
+  "check": "tool_ok",
+  "input": {
+   "name": "kg_create",
+   "owner": false
+  },
+  "expect": {
+   "ok": false
+  }
+ },
+ {
+  "id": "one-loop-kg-allowed-for-owner",
+  "check": "tool_ok",
+  "input": {
+   "name": "kg_search",
+   "owner": true
+  },
+  "expect": {
+   "ok": true
+  }
+ },
+ {
+  "id": "one-loop-tool-load-no-owner-leak",
+  "check": "tool_load",
+  "input": {
+   "names": [
+    "kg_create"
+   ],
+   "owner": false
+  },
+  "expect": {
+   "contains": "unknown tool"
+  }
+ },
+ {
+  "id": "one-loop-kg-call-is-bad-tool",
+  "check": "durable_plan",
+  "input": {
+   "goal": "g",
+   "kind": "mission",
+   "owner": false,
+   "tasks": [
+    {
+     "id": "t1",
+     "seq": 1,
+     "name": "model",
+     "status": "done",
+     "attempts": 1,
+     "output": "{\"tool\":\"kg_create\",\"args\":{\"title\":\"x\"}}"
+    }
+   ]
+  },
+  "expect": {
+   "action": "call_model"
+  }
+ },
+ {
+  "id": "one-loop-redirect-to-metadata-refused",
+  "check": "fetch_redirect",
+  "input": {
+   "url": "https://example.com/r",
+   "location": "http://169.254.169.254/latest/meta-data"
+  },
+  "expect": {
+   "ok": false
+  }
+ },
+ {
+  "id": "one-loop-redirect-public-ok",
+  "check": "fetch_redirect",
+  "input": {
+   "url": "https://example.com/r",
+   "location": "https://example.org/x"
+  },
+  "expect": {
+   "ok": true
+  }
+ },
+ {
+  "id": "one-loop-no-pi-harness",
+  "check": "one_engine",
+  "input": {
+   "pattern": "pi-durable|harness/pi|@earendil-works"
+  },
+  "expect": {}
+ }
+]

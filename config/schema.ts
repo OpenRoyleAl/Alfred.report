@@ -41,7 +41,7 @@ export const SCHEMA = {
   ACCESS_AUD: { kind: "var", apps: ["web", "oral"], required: true, description: "AUD tag of the Access application in front of the instance.", example: "<access aud tag>" },
 
   // models and search
-  CLOUDFLARE_GATEWAY_ID: { kind: "var", apps: ["web", "missions"], default: RESOURCES.gateway, description: "AI Gateway id. Every model and search call goes through it; provider keys (Exa, BYOK LLMs) live on the gateway." },
+  CLOUDFLARE_GATEWAY_ID: { kind: "var", apps: ["web", "missions", "oral"], default: RESOURCES.gateway, description: "AI Gateway id. Every model and search call goes through it; provider keys (Exa, BYOK LLMs) live on the gateway." },
   AUTO_ALLOWED_MODELS: { kind: "var", apps: ["web", "missions"], description: "Auto Router candidate models (cf-aig-allowed-models). Default: the Workers AI pool in src/alfred/models.ts." },
   AUTO_ALLOWED_PROVIDERS: { kind: "var", apps: ["web", "missions"], description: "Auto Router providers (cf-aig-allowed-providers)." },
   WORKERS_AI_FLOOR: { kind: "var", apps: ["web", "missions"], description: "Comma list of @cf/ models tried when the routed call fails." },

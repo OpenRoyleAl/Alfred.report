@@ -30,7 +30,7 @@ Apps: `web` = deploy/web (src/index.ts), `missions` = apps/missions, `oral` = ap
 | `OWNER_EMAILS` | web, missions, oral | yes |  | Comma-separated owner emails. Owners forward email and start missions; every other signed-in user gets a limited sandbox tenant. |
 | `ACCESS_TEAM_DOMAIN` | web, oral | yes |  | Cloudflare Access team domain used to verify sign-in JWTs. |
 | `ACCESS_AUD` | web, oral | yes |  | AUD tag of the Access application in front of the instance. |
-| `CLOUDFLARE_GATEWAY_ID` | web, missions |  | `alfred-report` | AI Gateway id. Every model and search call goes through it; provider keys (Exa, BYOK LLMs) live on the gateway. |
+| `CLOUDFLARE_GATEWAY_ID` | web, missions, oral |  | `alfred-report` | AI Gateway id. Every model and search call goes through it; provider keys (Exa, BYOK LLMs) live on the gateway. |
 | `AUTO_ALLOWED_MODELS` | web, missions |  |  | Auto Router candidate models (cf-aig-allowed-models). Default: the Workers AI pool in src/alfred/models.ts. |
 | `AUTO_ALLOWED_PROVIDERS` | web, missions |  |  | Auto Router providers (cf-aig-allowed-providers). |
 | `WORKERS_AI_FLOOR` | web, missions |  |  | Comma list of @cf/ models tried when the routed call fails. |

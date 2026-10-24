@@ -1,7 +1,7 @@
 /// <reference path="./wasm.d.ts" />
 import coreWasm from "./alfred/wasm/alfred_core.wasm";
 import { initCore, navAppRedirect } from "./alfred/core.ts";
-import { clefGates } from "./alfred/extensions/clef";
+import { clefGates } from "./alfred/clef";
 import { Alfred } from "./alfred/orchestrator";
 import type { Env } from "./lib/env";
 import { secretGet } from "./lib/secret";
@@ -529,34 +529,13 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
     return handleAgentTokens(req, env, url, user);
   }
 
-  // ─── Alfred (Pi harness in the tenant's Durable Object) ──────────
+  // ─── Alfred (front door; every mission runs on the durable engine) ──────────
   if (url.pathname.startsWith("/api/alfred/")) {
     await stub.bind(tenant_id, user.isOwner);
     // Sandbox tenants (every signed-in non-owner): chat/ask within a daily quota only.
     const ownerOnly = req.method === "POST" && (url.pathname === "/api/alfred/missions" || url.pathname === "/api/alfred/intake");
     if (ownerOnly && !user.isOwner) {
       return Response.json({ error: "sandbox", message: "Missions and intake are for the instance owner. Your sandbox can ask." }, { status: 403 });
-    }
-    if (url.pathname === "/api/alfred/adopt-legacy-owner" && req.method === "POST") {
-      // One-time, idempotent: copy missions from the encoded-email owner tenants (used between the
-      // tenant-id change and the owner-tenant fix) into the single owner tenant. Sources are kept;
-      // a mission id already present is skipped, so re-running never duplicates.
-      if (!user.isOwner) return Response.json({ error: "owner only" }, { status: 403 });
-      const { tenantFromEmail: enc, ownerEmails } = await import("./lib/access.ts");
-      type Dump = { missions: unknown[] };
-      const target = stub as unknown as { importMissions(d: Dump): Promise<{ missions: number; skipped: number }> };
-      const out: Record<string, unknown> = {};
-      for (const e of ownerEmails(env)) {
-        const src = enc(e);
-        if (src === tenant_id) continue;
-        try {
-          const dump = await (env.ALFRED.getByName(src) as unknown as { exportMissions(): Promise<Dump> }).exportMissions();
-          out[src] = { found: dump.missions.length, ...(await target.importMissions(dump)) };
-        } catch (err) {
-          out[src] = { error: String((err as Error)?.message || err).slice(0, 300) };
-        }
-      }
-      return Response.json({ into: tenant_id, from: out });
     }
     if (url.pathname === "/api/alfred/voice" && req.method === "POST") {
       // In-app voice for the signed-in user (wake word -> The Report; owner: draft + Go Max AI!).
@@ -579,7 +558,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
       text = text.trim().slice(0, 4000);
       if (!text) return Response.json({ error: "text or audio required", heard: "" }, { status: 400 });
       const out = await voiceTurn(
-        { ai: env.AI, alfred: stub as never, domain: env.DOMAIN || "", isOwner: user.isOwner, askLimit: sandboxLimit(env.SANDBOX_ASKS_PER_DAY, 30), requestId },
+        { ai: env.AI, gatewayId: env.CLOUDFLARE_GATEWAY_ID, alfred: stub as never, domain: env.DOMAIN || "", isOwner: user.isOwner, askLimit: sandboxLimit(env.SANDBOX_ASKS_PER_DAY, 30), requestId },
         text,
         pending
       );
@@ -596,7 +575,6 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
         requestId?: string;
         delaySeconds?: number;
         runAt?: string | number;
-        engine?: "durable" | "pi";
         debugStepDelayMs?: number;
         debugSearch?: string;
       };
@@ -605,7 +583,6 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
       const headerId = req.headers.get("Idempotency-Key") || req.headers.get("X-Request-Id") || undefined;
       const runAt = typeof body.runAt === "string" ? Date.parse(body.runAt) : typeof body.runAt === "number" ? body.runAt : null;
       if (runAt !== null && !Number.isFinite(runAt)) return Response.json({ error: "runAt must be ISO time or epoch ms" }, { status: 400 });
-      if (body.wait && body.engine === "pi") return Response.json(await stub.runMission(objective, { requireEvidence: body.requireEvidence ?? false }));
       try {
         const r = await stub.startMission(objective, {
           requireEvidence: body.requireEvidence ?? false,
@@ -613,11 +590,10 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
           source: "web",
           delaySeconds: typeof body.delaySeconds === "number" ? body.delaySeconds : null,
           runAt,
-          engine: body.engine,
           debugStepDelayMs: typeof body.debugStepDelayMs === "number" ? body.debugStepDelayMs : 0,
           debugSearch: body.debugSearch === "force-exa" ? "force-exa" : null,
         });
-        if (!body.wait || r.engine !== "durable") return Response.json(r, { status: r.duplicate ? 200 : 202 });
+        if (!body.wait) return Response.json(r, { status: r.duplicate ? 200 : 202 });
         const until = Date.now() + 90_000;
         for (;;) {
           const m = (await stub.getMission(r.missionId)) as { status?: string } | null;
@@ -672,7 +648,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
       if (!prompt) return Response.json({ error: "prompt required" }, { status: 400 });
       const q = await stub.consumeQuota("ask", sandboxLimit(env.SANDBOX_ASKS_PER_DAY, 30));
       if (!q.ok) return Response.json({ error: "quota", used: q.used, limit: q.limit }, { status: 429 });
-      return Response.json(await stub.ask(prompt));
+      return Response.json(await stub.ask(prompt, { requestId: req.headers.get("Idempotency-Key") }));
     }
     if (url.pathname === "/api/alfred/intake" && req.method === "POST") {
       // Clairic extraction. Body: {kind:"email",subject?,body} | {kind:"voice",transcript?|audioBase64?}
@@ -737,10 +713,9 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
     await stub.bind(tenant_id, user.isOwner);
     const q = await stub.consumeQuota("ask", sandboxLimit(env.SANDBOX_ASKS_PER_DAY, 30));
     if (!q.ok) return Response.json({ error: "quota", used: q.used, limit: q.limit }, { status: 429 });
-    return stub.fetch(new Request("https://internal/chat", {
-      method: "POST",
-      body: JSON.stringify({ message }),
-    }));
+    // Same one loop as /api/alfred/ask (the old DO fetch handler was the retired Pi harness).
+    const r = await stub.ask(message, { requestId: req.headers.get("Idempotency-Key") });
+    return Response.json({ reply: r.text, ...r });
   }
 
   // GBP — owner-only (service-account access to the instance's Business Profile).

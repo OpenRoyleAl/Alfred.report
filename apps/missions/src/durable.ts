@@ -26,13 +26,15 @@ import {
   untrustedWrap,
   durableHtmlText,
   modelsText,
+  durableOp,
   type DurableTask,
 } from "../../../src/alfred/core.ts";
-import { DEEPSEEK_FLASH, deepseekLimiter, gatewayId } from "../../../src/alfred/models";
-import { reviewMission, summarizeLog, type GatewayLogSummary, type ReviewResult } from "../../../src/alfred/review";
-import { decideDone, doneQuestions, doneState, runClef, type DoneDecision } from "../../../src/alfred/clef";
-import { createRoutedSearch, type ExaBudget } from "../../../src/alfred/search";
-import { createExaLiteSearch } from "../../../src/alfred/exa-lite";
+import * as kg from "./lib/db.ts";
+import { DEEPSEEK_FLASH, deepseekLimiter, gatewayId } from "../../../src/alfred/models.ts";
+import { reviewMission, summarizeLog, type GatewayLogSummary, type ReviewResult } from "../../../src/alfred/review.ts";
+import { decideDone, doneQuestions, doneState, runClef, type DoneDecision } from "../../../src/alfred/clef.ts";
+import { createRoutedSearch, type ExaBudget } from "../../../src/alfred/search.ts";
+import { createExaLiteSearch } from "../../../src/alfred/exa-lite.ts";
 import { createAIWebSearch, type WebSearchSource } from "agents/websearch";
 import type { SecretValue } from "../../../src/lib/secret";
 
@@ -61,6 +63,8 @@ export interface DurableEnv {
   /** Version metadata binding: the Worker version id this isolate runs (recorded on every task). */
   CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
   MEMORY?: AMNamespace;
+  /** Missions D1 (knowledge graph: records / edges / observations), owner-only tools. */
+  DB?: D1Database;
 }
 
 export interface CreateArgs {
@@ -77,6 +81,8 @@ export interface CreateArgs {
   debugSearch?: "force-exa" | null;
   /** Owner debug only: sleep before each step so an eviction can land mid-mission. */
   debugStepDelayMs?: number;
+  /** Caller is the default king: owner-only tools (knowledge graph) are offered. Set by the web Worker. */
+  owner?: boolean;
 }
 
 export interface MissionView {
@@ -145,7 +151,10 @@ export class DurableEngine {
   private inflight = new Set<string>();
   private ticking: Promise<void> | null = null;
 
-  constructor(private h: DurableHost) {}
+  private h: DurableHost;
+  constructor(h: DurableHost) {
+    this.h = h;
+  }
 
   private get sql() {
     return this.h.ctx.storage.sql;
@@ -186,6 +195,7 @@ export class DurableEngine {
       ["debug_search", "TEXT"],
       ["memory", "TEXT"],
       ["memory_status", "TEXT"],
+      ["owner", "INTEGER NOT NULL DEFAULT 0"],
     ] as const)
       if (!m.has(c)) this.sql.exec(`ALTER TABLE dm_missions ADD COLUMN ${c} ${ddl}`);
     const t = cols("dm_tasks");
@@ -268,10 +278,10 @@ export class DurableEngine {
       }
       this.sql.exec(`INSERT INTO dm_receipts VALUES (?, ?, ?, ?, ?)`, a.tenant, c.request_id, c.mission_id, c.source, now);
       this.sql.exec(
-        `INSERT INTO dm_missions (id, tenant, objective, kind, source, status, request_id, run_at, created_at, debug_delay_ms, require_evidence, debug_search)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO dm_missions (id, tenant, objective, kind, source, status, request_id, run_at, created_at, debug_delay_ms, require_evidence, debug_search, owner)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         c.mission_id, a.tenant, c.objective, c.kind, c.source, c.status, c.request_id, c.run_at, now, debug, a.requireEvidence ? 1 : 0,
-        a.debugSearch === "force-exa" ? "force-exa" : null
+        a.debugSearch === "force-exa" ? "force-exa" : null, a.owner ? 1 : 0
       );
       return { missionId: c.mission_id, requestId: c.request_id, duplicate: false, status: c.status, runAt: c.run_at };
     });
@@ -366,7 +376,7 @@ export class DurableEngine {
         const tasks = this.tasksOf(id);
         const lessons = String(m.kind) === "mission" ? this.rows(`SELECT lesson FROM dm_lessons ORDER BY at DESC LIMIT 5`).map((r) => String(r.lesson)) : [];
         const memory = String(m.kind) === "mission" ? await this.recallOnce(id, m) : [];
-        const plan = durablePlan({ goal: String(m.objective), kind: String(m.kind), tasks, tenant_label: String(m.tenant), lessons, memory });
+        const plan = durablePlan({ goal: String(m.objective), kind: String(m.kind), tasks, tenant_label: String(m.tenant), lessons, memory, owner: Number(m.owner) === 1 });
         if (plan.action === "finish") {
           this.sql.exec(
             `UPDATE dm_missions SET status = 'done', answer = ?, evidence = ?, uncited = ?, finished_at = ? WHERE id = ?`,
@@ -606,7 +616,40 @@ export class DurableEngine {
   }
 
   private async runTool(name: string, input: Record<string, unknown>, taskId: string, mission: Row): Promise<string> {
+    const owner = Number(mission.owner) === 1;
+    // Defense in depth: the planner already refuses these, the executor refuses them again.
+    if (name !== "model" && name !== "history_rank" && !durableOp<{ ok: boolean }>("tool_ok", { name, owner }).ok) throw new Error(`tool ${name} not available here`);
+    const tenant = String(mission.tenant);
+    const out = (v: unknown) => JSON.stringify(v).slice(0, 12000);
     switch (name) {
+      case "tool_load":
+        return durableOp<{ text: string }>("tool_load", { names: Array.isArray(input.names) ? input.names : [input.name].filter(Boolean), owner }).text;
+      case "cf_docs_search":
+        return cfDocsSearch(String(input.query || ""));
+      case "memory_recall": {
+        const query = String(input.query || "").trim().slice(0, 1000);
+        if (query.length < 3) throw new Error("query required");
+        const r = await (await kingdom(this.h.env, tenant)).recall(query, { responseLength: "short" } as never);
+        return (r as { count?: number; answer?: string }).count ? String((r as { answer?: string }).answer ?? "") : "No matching memories.";
+      }
+      case "memory_remember": {
+        const content = String(input.content || "").trim().slice(0, 4000);
+        if (!content) throw new Error("content required");
+        const m = await (await kingdom(this.h.env, tenant)).remember({ content, sessionId: String(mission.id).slice(0, 64) });
+        return `remembered ${m.id}`;
+      }
+      case "kg_search":
+        return out((await kg.searchRecords(this.kgDb(), String(input.query || "").slice(0, 300), Math.min(50, Number(input.limit) || 20))).map((r) => ({ id: r.id, type: r.type, title: r.title, status: r.status })));
+      case "kg_get":
+        return out((await kg.getRecord(this.kgDb(), String(input.id || ""))) ?? { error: "not found" });
+      case "kg_create": {
+        const r = await kg.createRecord(this.kgDb(), { type: String(input.type || "note") as never, title: String(input.title || "").slice(0, 300), content: input.content == null ? null : String(input.content).slice(0, 20000) });
+        return out({ id: r.id, type: r.type, title: r.title });
+      }
+      case "kg_link":
+        return out(await kg.createEdge(this.kgDb(), String(input.source_id || ""), String(input.target_id || ""), String(input.relation || "references").slice(0, 60)));
+      case "kg_observe":
+        return out(await kg.createObservation(this.kgDb(), { record_id: String(input.record_id || ""), signal: String(input.signal || "").slice(0, 2000), source: "alfred", confidence: 1 }));
       case "model":
         return this.callModel(input, String(mission.id));
       case "web_search": {
@@ -679,6 +722,60 @@ export class DurableEngine {
     return { ...this.get(c.missionId, false)!, used, status: v.status };
   }
 
+  /**
+   * The front door (web chat, ORAL, MCP ask): one durable mission run inline to its end, then
+   * returned. Same loop, tools, fencing, citation check and Clef review as every other mission;
+   * receipt-idempotent, and if this isolate dies the alarm finishes it.
+   */
+  async ask(a: CreateArgs, waitMs = 110_000): Promise<MissionView> {
+    const c = await this.create(a);
+    const run = this.run(c.missionId);
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), waitMs));
+    await Promise.race([run, timeout]);
+    await this.rearm();
+    return this.get(c.missionId, false)!;
+  }
+
+  /** One-time move of retired Pi-harness missions + lessons into this engine (idempotent). */
+  importLegacy(tenant: string, missions: Array<Record<string, unknown>>, lessons: Array<Record<string, unknown>>): { imported: number; skipped: number; lessons: number } {
+    this.ensure();
+    const r = durableOp<{ rows: Array<Record<string, SqlStorageValue>>; skipped: number }>("legacy", { tenant, missions });
+    let imported = 0;
+    let lessonsIn = 0;
+    this.h.ctx.storage.transactionSync(() => {
+      for (const x of r.rows) {
+        const before = this.rows(`SELECT 1 FROM dm_missions WHERE id = ?`, x.id as string).length;
+        if (before) continue;
+        this.sql.exec(
+          `INSERT OR IGNORE INTO dm_receipts VALUES (?, ?, ?, ?, ?)`, tenant, x.request_id, x.id, "pi-import", x.created_at
+        );
+        this.sql.exec(
+          `INSERT OR IGNORE INTO dm_missions (id, tenant, objective, kind, source, status, answer, error, request_id, run_at, created_at, started_at, finished_at, verdict, review, memory, memory_status)
+           VALUES (?, ?, ?, 'mission', 'pi-import', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'imported from the Pi engine')`,
+          x.id, tenant, x.objective, x.status, x.answer ?? null, x.error ?? null, x.request_id, x.run_at, x.created_at, x.started_at, x.finished_at,
+          x.verdict ?? (x.status === "done" ? "unreviewed" : "fail"),
+          typeof x.review === "string" ? x.review : x.review == null ? JSON.stringify({ verdict: x.verdict ?? "unreviewed", flags: ["imported from the Pi engine"] }) : JSON.stringify(x.review)
+        );
+        imported++;
+      }
+      for (const l of lessons) {
+        const id = String(l.id ?? "");
+        if (!id) continue;
+        this.sql.exec(`INSERT OR IGNORE INTO dm_lessons VALUES (?, ?, ?, ?)`, `pi:${id}`.slice(0, 80), String(l.mission_id ?? ""), String(l.lesson ?? "").slice(0, 600), Number(l.at ?? 0));
+        lessonsIn++;
+      }
+    });
+    return { imported, skipped: r.skipped + (r.rows.length - imported), lessons: lessonsIn };
+  }
+
+  /** Owner: drop the lesson a mission produced (keeps a bad run out of self-improvement). */
+  forgetLesson(missionId: string): { deleted: number } {
+    this.ensure();
+    const n = Number(this.rows(`SELECT COUNT(*) AS n FROM dm_lessons WHERE mission_id = ?`, missionId)[0]?.n ?? 0);
+    this.sql.exec(`DELETE FROM dm_lessons WHERE mission_id = ?`, missionId);
+    return { deleted: n };
+  }
+
   private async callModel(input: Record<string, unknown>, missionId: string): Promise<string> {
     const r = await this.h.env.AI.run(
       DEEPSEEK_FLASH as never,
@@ -690,6 +787,11 @@ export class DurableEngine {
     const { text } = modelsText(r);
     if (!text.trim()) throw new Error("empty model reply");
     return text;
+  }
+
+  private kgDb(): D1Database {
+    if (!this.h.env.DB) throw new Error("knowledge graph unavailable");
+    return this.h.env.DB;
   }
 
   private currentTask = "";
@@ -745,6 +847,26 @@ export class DurableEngine {
     if (!forceExa) this.searchSource = source;
     return source;
   }
+}
+
+/** Same public endpoint the `cf docs search` CLI calls (no login). Results limited to developers.cloudflare.com. */
+export const CF_DOCS_SEARCH_URL = "https://ai-search.developers.cloudflare.com/api/ai-search/search";
+export async function cfDocsSearch(query: string, doFetch: typeof fetch = fetch): Promise<string> {
+  const q = query.trim().slice(0, 512);
+  if (q.length < 2) throw new Error("query required");
+  const res = await doFetch(CF_DOCS_SEARCH_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: q }], stream: false, ai_search_options: { retrieval: { metadata_only: true, max_num_results: 5 } } }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`cf docs search failed (HTTP ${res.status})`);
+  const body = (await res.json()) as { result?: { chunks?: Array<{ item?: { key?: string; metadata?: { title?: string; description?: string } } }> } };
+  const items = (body.result?.chunks || [])
+    .slice(0, 5)
+    .map((c) => ({ title: c.item?.metadata?.title || "Untitled", url: new URL(c.item?.key || "", "https://developers.cloudflare.com/").href, description: (c.item?.metadata?.description || "").slice(0, 300) }))
+    .filter((r) => r.url.startsWith("https://developers.cloudflare.com/"));
+  return `Cloudflare docs results (leads only: open with web_fetch before citing):\n${items.map((r, n) => `${n + 1}. ${r.title}\n   ${r.url}\n   ${r.description}`).join("\n") || "(no results)"}`;
 }
 
 function hashOf(s: string): string {

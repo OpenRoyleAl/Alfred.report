@@ -13,6 +13,8 @@ import { googleRedirectUri } from "../src/lib/google-auth.ts";
 import { checkPassword, makePasswordHash } from "../src/lib/kiss.ts";
 import { nextBindState } from "../src/alfred/bind.ts";
 import { senderAuthenticated } from "../src/lib/mail-auth.ts";
+import { durableOp } from "../src/alfred/core.ts";
+import { fetchPublicPage } from "../apps/missions/src/durable.ts";
 
 type Fixture = {
   id: string;
@@ -166,6 +168,50 @@ async function runCheck(f: Fixture): Promise<void> {
     case "nav_app": {
       const r = navAppRedirect(String(input.path), String(input.search || ""), Boolean(input.signedIn), Boolean(input.owner));
       if (r.location !== expect.location) throw new Error(`got ${r.location}`);
+      return;
+    }
+    case "plan_prompt": {
+      // Progressive disclosure: what the one loop's system prompt shows a caller.
+      const r = durablePlan({ goal: "g", kind: "mission", tasks: [], owner: Boolean(input.owner) }) as { messages?: Array<{ content: string }> };
+      const sys = String(r.messages?.[0]?.content ?? "");
+      for (const c of (expect.contains as string[]) ?? []) if (!sys.includes(c)) throw new Error(`prompt missing ${c}`);
+      for (const c of (expect.omits as string[]) ?? []) if (sys.includes(c)) throw new Error(`prompt leaked ${c}`);
+      return;
+    }
+    case "tool_load": {
+      const t = durableOp<{ text: string }>("tool_load", input).text;
+      if (expect.contains && !t.includes(String(expect.contains))) throw new Error(`got ${t.slice(0, 120)}`);
+      return;
+    }
+    case "tool_ok": {
+      const ok = durableOp<{ ok: boolean }>("tool_ok", input).ok;
+      if (ok !== Boolean(expect.ok)) throw new Error(`ok=${ok}`);
+      return;
+    }
+    case "legacy_rows": {
+      const r = durableOp<{ rows: Array<Record<string, unknown>>; skipped: number }>("legacy", input);
+      if (r.rows.length !== expect.rows || r.skipped !== expect.skipped) throw new Error(`rows ${r.rows.length} skipped ${r.skipped}`);
+      if (expect.status && r.rows[0]?.status !== expect.status) throw new Error(`status ${r.rows[0]?.status}`);
+      return;
+    }
+    case "fetch_redirect": {
+      // web_fetch in the one loop: a public page that redirects to an internal host must be refused.
+      const hop = (async (u: RequestInfo | URL) =>
+        String(u) === String(input.url) ? new Response(null, { status: 302, headers: { Location: String(input.location) } }) : new Response("ok")) as typeof fetch;
+      let ok = true;
+      try {
+        await fetchPublicPage(String(input.url), hop);
+      } catch {
+        ok = false;
+      }
+      if (ok !== Boolean(expect.ok)) throw new Error(`ok=${ok}`);
+      return;
+    }
+    case "one_engine": {
+      // Structural: no source file may load the retired Pi harness again.
+      const { execSync } = await import("node:child_process");
+      const hits = execSync(`grep -rlE "${String(input.pattern)}" src apps/missions/src apps/oral/src --include=*.ts --include=*.tsx || true`, { cwd: join(root, "..") }).toString().trim();
+      if (hits) throw new Error(`found in ${hits.replace(/\n/g, ", ")}`);
       return;
     }
     default:

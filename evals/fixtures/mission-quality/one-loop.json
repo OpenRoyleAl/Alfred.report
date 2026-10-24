@@ -1,0 +1,200 @@
+[
+ {
+  "id": "one-loop-core-tools-full",
+  "check": "plan_prompt",
+  "input": {
+   "owner": false
+  },
+  "expect": {
+   "contains": [
+    "- web_fetch: Fetch a public",
+    "- history_search:",
+    "- tool_load:"
+   ]
+  }
+ },
+ {
+  "id": "one-loop-deferred-tools-short",
+  "check": "plan_prompt",
+  "input": {
+   "owner": false
+  },
+  "expect": {
+   "contains": [
+    "- cf_docs_search: search live Cloudflare docs",
+    "- memory_recall:"
+   ],
+   "omits": [
+    "Search live Cloudflare developer documentation",
+    "Recall what is known about a topic"
+   ]
+  }
+ },
+ {
+  "id": "one-loop-owner-sees-kg",
+  "check": "plan_prompt",
+  "input": {
+   "owner": true
+  },
+  "expect": {
+   "contains": [
+    "- kg_search:",
+    "- kg_create:"
+   ]
+  }
+ },
+ {
+  "id": "one-loop-tool-load-full-spec",
+  "check": "tool_load",
+  "input": {
+   "names": [
+    "cf_docs_search",
+    "memory_recall"
+   ],
+   "owner": false
+  },
+  "expect": {
+   "contains": "Search live Cloudflare developer documentation"
+  }
+ },
+ {
+  "id": "one-loop-chat-finishes-in-one-step",
+  "check": "durable_plan",
+  "input": {
+   "goal": "say hi",
+   "kind": "mission",
+   "tasks": [
+    {
+     "id": "t1",
+     "seq": 1,
+     "name": "model",
+     "status": "done",
+     "attempts": 1,
+     "output": "{\"final\":\"Hi.\",\"evidence\":\"\"}"
+    }
+   ]
+  },
+  "expect": {
+   "action": "finish",
+   "answerContains": "Hi."
+  }
+ },
+ {
+  "id": "one-loop-deferred-tool-runs",
+  "check": "durable_plan",
+  "input": {
+   "goal": "cf workers limits",
+   "kind": "mission",
+   "tasks": [
+    {
+     "id": "t1",
+     "seq": 1,
+     "name": "model",
+     "status": "done",
+     "attempts": 1,
+     "output": "{\"tool\":\"cf_docs_search\",\"args\":{\"query\":\"workers limits\"}}"
+    }
+   ]
+  },
+  "expect": {
+   "action": "run_tool"
+  }
+ },
+ {
+  "id": "one-loop-pi-history-migrates",
+  "check": "legacy_rows",
+  "input": {
+   "tenant": "hans",
+   "missions": [
+    {
+     "id": "0b6f7c3e-1111-4222-8333-944445555666",
+     "objective": "o",
+     "status": "done",
+     "final_text": "a",
+     "verdict": "pass",
+     "started_at": 5,
+     "finished_at": 9
+    },
+    {
+     "id": "bad id;"
+    }
+   ]
+  },
+  "expect": {
+   "rows": 1,
+   "skipped": 1,
+   "status": "done"
+  }
+ },
+ {
+  "id": "one-loop-chat-ask-thin-evidence-not-fail",
+  "check": "review",
+  "input": {
+   "missionId": "m1",
+   "status": "done",
+   "finalText": "51",
+   "events": [],
+   "logs": [
+    {
+     "id": "l",
+     "model": "x",
+     "success": true,
+     "status": 200,
+     "tokens_in": 100,
+     "tokens_out": 5,
+     "cost": 0,
+     "duration": 1
+    }
+   ],
+   "missingLogs": 0,
+   "evidence": null,
+   "uncited": [],
+   "requireEvidence": false,
+   "clefDone": {
+    "done": false,
+    "pDone": 0.9,
+    "pEvidence": 0.29
+   }
+  },
+  "expect": {
+   "verdict": "pass",
+   "lessonOk": false,
+   "flag": "clef_thin_evidence"
+  }
+ },
+ {
+  "id": "one-loop-mission-thin-evidence-fails",
+  "check": "review",
+  "input": {
+   "missionId": "m1",
+   "status": "done",
+   "finalText": "51",
+   "events": [],
+   "logs": [
+    {
+     "id": "l",
+     "model": "x",
+     "success": true,
+     "status": 200,
+     "tokens_in": 100,
+     "tokens_out": 5,
+     "cost": 0,
+     "duration": 1
+    }
+   ],
+   "missingLogs": 0,
+   "evidence": "x",
+   "uncited": [],
+   "requireEvidence": true,
+   "clefDone": {
+    "done": false,
+    "pDone": 0.9,
+    "pEvidence": 0.29
+   }
+  },
+  "expect": {
+   "verdict": "fail",
+   "flag": "clef_not_done"
+  }
+ }
+]

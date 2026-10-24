@@ -2,6 +2,9 @@
 //! Ported from src/alfred/review.ts so both engines share one decision. A run with any
 //! blocking flag is quarantined and NEVER becomes a lesson; `lesson_ok` additionally needs
 //! evidence and no interrupted step.
+/// Clef mission-done threshold (same as src/alfred/clef.ts decideDone).
+const DONE_P: f64 = 0.7;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -122,6 +125,13 @@ pub fn review(i: ReviewIn) -> Value {
     }
     match &i.clef_done {
         Some(Value::String(s)) if s == "unavailable" => flags.push(flag("clef_unavailable", false, "mission-done gate could not run".into())),
+        // Chat / research asks (no evidence required): Clef judges "done" alone; thin evidence is
+        // shown but does not fail the run. Lessons still need evidence (lessonOk below).
+        Some(v @ Value::Object(_)) if v["done"] == Value::Bool(false) && !i.require_evidence && v["pDone"].as_f64().unwrap_or(0.0) >= DONE_P => flags.push(flag(
+            "clef_thin_evidence",
+            false,
+            format!("clef done p={:.2}, evidence p={:.2} (evidence not required)", v["pDone"].as_f64().unwrap_or(0.0), v["pEvidence"].as_f64().unwrap_or(0.0)),
+        )),
         Some(v @ Value::Object(_)) if v["done"] == Value::Bool(false) => flags.push(flag(
             "clef_not_done",
             true,
@@ -210,6 +220,21 @@ mod tests {
         let mut b = base();
         b.evidence = None;
         assert_eq!(review(b)["lessonOk"], false);
+    }
+    #[test]
+    fn chat_without_evidence_requirement_passes_on_done() {
+        let mut b = base();
+        b.require_evidence = false;
+        b.clef_done = Some(json!({ "done": false, "pDone": 0.9, "pEvidence": 0.29 }));
+        assert_ne!(review(b)["verdict"], "fail");
+        let mut b = base();
+        b.require_evidence = false;
+        b.clef_done = Some(json!({ "done": false, "pDone": 0.4, "pEvidence": 0.9 }));
+        assert_eq!(review(b)["verdict"], "fail");
+        let mut b = base();
+        b.require_evidence = true;
+        b.clef_done = Some(json!({ "done": false, "pDone": 0.9, "pEvidence": 0.29 }));
+        assert_eq!(review(b)["verdict"], "fail");
     }
     #[test]
     fn clef_not_done_blocks() {

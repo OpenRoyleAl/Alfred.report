@@ -63,6 +63,21 @@ export class AlfredMissions extends Agent<Env, OrchestratorState> {
     return this.engine.history(tenant, query, requestId);
   }
 
+  async durableAsk(a: CreateArgs) {
+    await this.engine.wake("rpc");
+    return this.engine.ask(a);
+  }
+
+  async durableImportLegacy(tenant: string, missions: Array<Record<string, unknown>>, lessons: Array<Record<string, unknown>>) {
+    await this.engine.wake("rpc");
+    return this.engine.importLegacy(tenant, missions, lessons);
+  }
+
+  async durableForgetLesson(missionId: string) {
+    await this.engine.wake("rpc");
+    return this.engine.forgetLesson(missionId);
+  }
+
   async durableLessons(limit = 20) {
     await this.engine.wake("rpc");
     return this.engine.lessons(limit);

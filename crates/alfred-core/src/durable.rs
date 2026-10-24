@@ -16,20 +16,67 @@ pub const MAX_SCHEDULE_MS: f64 = 30.0 * 24.0 * 3600.0 * 1000.0;
 pub struct ToolSpec {
     pub name: &'static str,
     pub replay_safe: bool,
+    /// One line shown in every prompt (progressive disclosure: the full spec loads on demand).
+    pub short: &'static str,
     pub description: &'static str,
     pub args: &'static str,
+    /// Deferred: only `short` is in the system prompt until the model calls tool_load for it.
+    pub deferred: bool,
+    /// Owner (default king) only: the knowledge graph is not tenant-scoped.
+    pub owner_only: bool,
 }
 
+const fn core(name: &'static str, replay_safe: bool, short: &'static str, description: &'static str, args: &'static str) -> ToolSpec {
+    ToolSpec { name, replay_safe, short, description, args, deferred: false, owner_only: false }
+}
+const fn deferred(name: &'static str, replay_safe: bool, owner_only: bool, short: &'static str, description: &'static str, args: &'static str) -> ToolSpec {
+    ToolSpec { name, replay_safe, short, description, args, deferred: true, owner_only }
+}
+
+/// The one tool catalog for every Alfred loop (web chat, ORAL, MCP, scheduled missions).
 /// Replay-safe = rerunning after an eviction cannot double a side effect.
 pub const TOOLS: &[ToolSpec] = &[
-    ToolSpec { name: "web_search", replay_safe: true, description: "Search the web (cheapest provider first). Returns titles, snippets and URLs: leads to open with web_fetch, not sources.", args: r#"{"query":"..."}"# },
-    ToolSpec { name: "web_fetch", replay_safe: true, description: "Fetch a public http(s) URL and read its text.", args: r#"{"url":"https://..."}"# },
-    ToolSpec { name: "history_search", replay_safe: true, description: "Search this tenant's past missions for what was already found. Returns one answer.", args: r#"{"query":"..."}"# },
-    ToolSpec { name: "note_save", replay_safe: false, description: "Save a short note to this tenant's mission notes (a write; not repeated after an interruption).", args: r#"{"text":"..."}"# },
+    core("web_search", true, "search the web (leads only)", "Search the web (cheapest provider first). Returns titles, snippets and URLs: leads to open with web_fetch, not sources.", r#"{"query":"..."}"#),
+    core("web_fetch", true, "read a public URL", "Fetch a public http(s) URL and read its text.", r#"{"url":"https://..."}"#),
+    core("history_search", true, "search this tenant's past missions", "Search this tenant's past missions for what was already found. Returns one answer.", r#"{"query":"..."}"#),
+    core("tool_load", true, "load the full usage of listed tools", "Load the full description and args of one or more deferred tools before calling them.", r#"{"names":["..."]}"#),
+    deferred("note_save", false, false, "save a mission note", "Save a short note to this tenant's mission notes (a write; not repeated after an interruption).", r#"{"text":"..."}"#),
+    deferred("cf_docs_search", true, false, "search live Cloudflare docs", "Search live Cloudflare developer documentation (current betas, changelog, APIs). Returns up to 5 results with title, description and url. Read one with web_fetch.", r#"{"query":"..."}"#),
+    deferred("memory_recall", true, false, "ask long-term memory a question", "Recall what is known about a topic from this tenant's long-term memory (Agent Memory). Returns a grounded answer; it is context, cite it as memory, not as a web source.", r#"{"query":"..."}"#),
+    deferred("memory_remember", false, false, "store one lasting fact", "Store one durable fact, decision or instruction about the owner or their work in long-term memory (a write).", r#"{"content":"..."}"#),
+    deferred("kg_search", true, true, "search the knowledge graph", "Keyword search over knowledge-graph records (matters, people, orgs, decisions...). Returns id, type, title, status.", r#"{"query":"...","limit":20}"#),
+    deferred("kg_get", true, true, "read one knowledge-graph record", "Get a knowledge-graph record by id.", r#"{"id":"..."}"#),
+    deferred("kg_create", false, true, "create a knowledge-graph record", "Create a knowledge-graph record. type is one of matter, task, note, person, org, place, asset, chore, instinct, decision, briefing, daybook, commitment.", r#"{"type":"note","title":"...","content":"..."}"#),
+    deferred("kg_link", false, true, "link two knowledge-graph records", "Link two records with a typed relation (assigned_to, part_of, references, ...).", r#"{"source_id":"...","target_id":"...","relation":"..."}"#),
+    deferred("kg_observe", false, true, "log an observation on a record", "Log an observation about a record (audit trail).", r#"{"record_id":"...","signal":"..."}"#),
 ];
 
 pub fn tool(name: &str) -> Option<&'static ToolSpec> {
     TOOLS.iter().find(|t| t.name == name)
+}
+
+/// A tool this caller may use (owner-only tools are invisible to other kingdoms).
+pub fn tool_for(name: &str, owner: bool) -> Option<&'static ToolSpec> {
+    tool(name).filter(|t| owner || !t.owner_only)
+}
+
+fn spec_line(t: &ToolSpec) -> String {
+    format!("- {}: {} args {}", t.name, t.description, t.args)
+}
+
+/// tool_load: the full spec of each requested deferred tool this caller may use (pure, replay-safe).
+pub fn tool_load(names: &[String], owner: bool) -> String {
+    let mut out: Vec<String> = vec![];
+    for n in names.iter().take(8) {
+        match tool_for(n.trim(), owner) {
+            Some(t) => out.push(spec_line(t)),
+            None => out.push(format!("- {}: unknown tool", n.chars().take(60).collect::<String>())),
+        }
+    }
+    if out.is_empty() {
+        return "No tool names given. Pass {\"names\":[...]} from the deferred list.".into();
+    }
+    format!("Loaded tools (call them as {{\"tool\":\"<name>\",\"args\":{{...}}}}):\n{}", out.join("\n"))
 }
 
 /// Internal steps that are not model-callable tools.
@@ -197,6 +244,9 @@ pub struct PlanIn {
     /// Recalled Agent Memory for this mission (already budget-trimmed in memory::shape_recall).
     #[serde(default)]
     pub memory: Vec<MemItem>,
+    /// Caller is the default king (owner-only tools are offered and accepted).
+    #[serde(default)]
+    pub owner: bool,
 }
 
 #[derive(Deserialize, Clone)]
@@ -206,7 +256,7 @@ pub struct MemItem {
     pub summary: String,
 }
 
-fn system_prompt(lessons: &[String], memory: &[MemItem]) -> String {
+fn system_prompt(lessons: &[String], memory: &[MemItem], owner: bool) -> String {
     let mut s = String::from(
         "You are Alfred, running a durable mission step by step. Each reply must be exactly one JSON object and nothing else.\n\
 To use a tool: {\"tool\":\"<name>\",\"args\":{...}}\n\
@@ -216,8 +266,14 @@ Sources: only cite a URL or name a source (\"according to ...\") if you opened i
     );
     s.push_str(crate::untrusted::RULE);
     s.push_str("\nTools:\n");
-    for t in TOOLS {
-        s.push_str(&format!("- {}: {} args {}\n", t.name, t.description, t.args));
+    for t in TOOLS.iter().filter(|t| !t.deferred) {
+        s.push_str(&spec_line(t));
+        s.push('\n');
+    }
+    // Progressive disclosure: deferred tools are one short line each; tool_load returns the full spec.
+    s.push_str("More tools (load first with tool_load, e.g. {\"tool\":\"tool_load\",\"args\":{\"names\":[\"cf_docs_search\"]}}):\n");
+    for t in TOOLS.iter().filter(|t| t.deferred && (owner || !t.owner_only)) {
+        s.push_str(&format!("- {}: {}\n", t.name, t.short));
     }
     if !lessons.is_empty() {
         s.push_str("Lessons from earlier reviewed missions:\n");
@@ -329,6 +385,11 @@ fn escape_controls_in_strings(t: &str) -> String {
 }
 
 pub fn parse_reply(text: &str) -> Value {
+    parse_reply_for(text, true)
+}
+
+/// Parse with the caller's tool set: an owner-only tool from another kingdom is a bad tool.
+pub fn parse_reply_for(text: &str, owner: bool) -> Value {
     let fixed = escape_controls_in_strings(text.trim());
     let t = fixed.as_str();
     let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
@@ -342,7 +403,7 @@ pub fn parse_reply(text: &str) -> Value {
     if let Some(v) = candidate.filter(|v| v.is_object()) {
         if let Some(name) = v.get("tool").and_then(Value::as_str) {
             let args = v.get("args").cloned().filter(Value::is_object).unwrap_or_else(|| json!({}));
-            return match tool(name) {
+            return match tool_for(name, owner) {
                 Some(spec) => json!({ "type": "tool", "name": spec.name, "args": args, "replay_safe": spec.replay_safe }),
                 None => json!({ "type": "bad_tool", "name": name }),
             };
@@ -409,7 +470,7 @@ pub fn plan(p: PlanIn) -> Result<Value, String> {
         }
     }
     let mut messages = vec![
-        json!({ "role": "system", "content": system_prompt(&p.lessons, &p.memory) }),
+        json!({ "role": "system", "content": system_prompt(&p.lessons, &p.memory, p.owner) }),
         json!({ "role": "user", "content": format!("Mission{}:\n{}", if p.tenant_label.is_empty() { String::new() } else { format!(" for {}", p.tenant_label) }, p.goal) }),
     ];
     let mut tool_calls = 0usize;
@@ -437,7 +498,7 @@ pub fn plan(p: PlanIn) -> Result<Value, String> {
     }
     let last = tasks.iter().rev().find(|t| !(t.name == "model" && t.status == "failed"));
     if let Some(l) = last.filter(|l| l.name == "model" && l.status == "done") {
-        let reply = parse_reply(l.output.as_deref().unwrap_or(""));
+        let reply = parse_reply_for(l.output.as_deref().unwrap_or(""), p.owner);
         match reply["type"].as_str() {
             Some("final") => {
                 let answer = reply["answer"].as_str().unwrap_or("");
@@ -554,7 +615,78 @@ pub fn next_alarm(a: AlarmIn) -> Value {
 // ─── Tools helpers ────────────────────────────────────────────────
 
 pub fn catalog() -> Value {
-    Value::Array(TOOLS.iter().map(|t| json!({ "name": t.name, "replay_safe": t.replay_safe, "description": t.description })).collect())
+    Value::Array(
+        TOOLS
+            .iter()
+            .map(|t| json!({ "name": t.name, "replay_safe": t.replay_safe, "description": t.description, "short": t.short, "deferred": t.deferred, "owner_only": t.owner_only }))
+            .collect(),
+    )
+}
+
+// ─── Legacy Pi missions -> durable rows ───────────────────────────
+
+/// One mission row from the retired Pi harness (alfred_missions + alfred_reviews) mapped to a
+/// dm_missions row. The id is kept so old links still resolve; request_id `pi:<id>` keeps the
+/// import idempotent (INSERT OR IGNORE on the primary key and the receipt).
+pub fn legacy_row(v: &Value, tenant: &str) -> Result<Value, String> {
+    let id = v["id"].as_str().unwrap_or("").trim();
+    if id.len() < 8 || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("legacy id invalid".into());
+    }
+    let objective: String = v["objective"].as_str().unwrap_or("").chars().take(4000).collect();
+    let started = v["started_at"].as_f64().unwrap_or(0.0);
+    let finished = v["finished_at"].as_f64();
+    let raw = v["status"].as_str().unwrap_or("");
+    // Pi statuses: done | unanswered | error | running (a run that never finished).
+    let status = if raw == "done" { "done" } else { "failed" };
+    let text = v["final_text"].as_str().unwrap_or("");
+    let (answer, error) = if status == "done" { (Some(text.chars().take(12000).collect::<String>()), None) } else { (None, Some(format!("pi run {}: {}", if raw.is_empty() { "unknown" } else { raw }, text.chars().take(1800).collect::<String>()))) };
+    Ok(json!({
+        "id": id,
+        "tenant": tenant,
+        "objective": if objective.trim().is_empty() { "(legacy mission)".to_string() } else { objective },
+        "kind": "mission",
+        "source": "pi-import",
+        "status": status,
+        "answer": answer,
+        "error": error,
+        "request_id": format!("pi:{id}"),
+        "run_at": started,
+        "created_at": started,
+        "started_at": started,
+        "finished_at": finished.unwrap_or(started),
+        "verdict": v["verdict"].clone(),
+        "review": v["review"].clone(),
+    }))
+}
+
+pub fn op_json(input: &str) -> Result<String, String> {
+    let v: Value = parse(input)?;
+    let a = &v["args"];
+    let out = match v["op"].as_str().unwrap_or("") {
+        "tool_load" => {
+            let names: Vec<String> = a["names"].as_array().map(|x| x.iter().filter_map(|n| n.as_str().map(String::from)).collect()).unwrap_or_default();
+            json!({ "text": tool_load(&names, a["owner"].as_bool().unwrap_or(false)) })
+        }
+        "tool_ok" => json!({ "ok": tool_for(a["name"].as_str().unwrap_or(""), a["owner"].as_bool().unwrap_or(false)).is_some() }),
+        "legacy" => {
+            let tenant = a["tenant"].as_str().unwrap_or("");
+            if tenant.is_empty() {
+                return Err("tenant required".into());
+            }
+            let mut rows = vec![];
+            let mut skipped = 0;
+            for m in a["missions"].as_array().cloned().unwrap_or_default() {
+                match legacy_row(&m, tenant) {
+                    Ok(r) => rows.push(r),
+                    Err(_) => skipped += 1,
+                }
+            }
+            json!({ "rows": rows, "skipped": skipped })
+        }
+        other => return Err(format!("unknown durable op: {other}")),
+    };
+    Ok(out.to_string())
 }
 
 fn host_not_allowed(host: &str) -> bool {
@@ -732,7 +864,7 @@ mod tests {
 
     #[test]
     fn planner_walks_model_tool_final() {
-        let p = |tasks| plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks, tenant_label: String::new(), lessons: vec![], memory: vec![] }).unwrap();
+        let p = |tasks| plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks, tenant_label: String::new(), lessons: vec![], memory: vec![], owner: false }).unwrap();
         assert_eq!(p(vec![])["action"], "call_model");
         let r = p(vec![t(1, "model", "done", r#"{"tool":"web_fetch","args":{"url":"https://a.b"}}"#)]);
         assert_eq!(r["action"], "run_tool");
@@ -757,7 +889,7 @@ mod tests {
 
     #[test]
     fn unread_sources_are_sent_back_once_then_flagged() {
-        let p = |tasks| plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks, tenant_label: String::new(), lessons: vec![], memory: vec![] }).unwrap();
+        let p = |tasks| plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks, tenant_label: String::new(), lessons: vec![], memory: vec![], owner: false }).unwrap();
         let cite = r#"{"final":"Lima has 10M people (https://en.wikipedia.org/wiki/Lima).","evidence":""}"#;
         let r = p(vec![t(1, "model", "done", cite)]);
         assert_eq!(r["action"], "call_model");
@@ -847,18 +979,49 @@ mod tests {
     #[test]
     fn exhausted_model_fails_without_abi_error_key() {
         let t = Task { id: "m:1".into(), seq: 1, name: "model".into(), input: serde_json::json!({}), output: Some("empty model reply".into()), status: "failed".into(), attempts: 3 };
-        let r = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![t], tenant_label: String::new(), lessons: vec![], memory: vec![] }).unwrap();
+        let r = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![t], tenant_label: String::new(), lessons: vec![], memory: vec![], owner: false }).unwrap();
         assert_eq!(r["action"], "fail");
         assert!(r.get("error").is_none(), "an `error` key is read as an ABI failure by callJson");
+    }
+
+    #[test]
+    fn progressive_disclosure_and_owner_tools() {
+        let sys = system_prompt(&[], &[], false);
+        assert!(sys.contains("- web_fetch: Fetch a public"));
+        assert!(sys.contains("- cf_docs_search: search live Cloudflare docs"));
+        assert!(!sys.contains("Search live Cloudflare developer documentation"), "deferred spec must not be in the prompt");
+        assert!(!sys.contains("kg_search"), "owner-only tools are hidden from other kingdoms");
+        assert!(system_prompt(&[], &[], true).contains("- kg_search:"));
+        assert!(tool_load(&["cf_docs_search".into()], false).contains("Search live Cloudflare developer documentation"));
+        assert!(tool_load(&["kg_create".into()], false).contains("unknown tool"));
+        let call = r#"{"tool":"kg_search","args":{"query":"x"}}"#;
+        assert_eq!(parse_reply_for(call, false)["type"], "bad_tool");
+        assert_eq!(parse_reply_for(call, true)["type"], "tool");
+        assert!(!replay_safe("memory_remember") && !replay_safe("kg_create") && replay_safe("tool_load"));
+        let r = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![t(1, "model", "done", call)], tenant_label: String::new(), lessons: vec![], memory: vec![], owner: false }).unwrap();
+        assert_eq!(r["action"], "call_model");
+        assert!(r["messages"].to_string().contains("Unknown tool") && r["messages"].to_string().contains("kg_search"));
+    }
+
+    #[test]
+    fn legacy_pi_rows_map_and_validate() {
+        let ok = legacy_row(&json!({"id":"0b6f7c3e-1111-4222-8333-944445555666","objective":"o","status":"done","final_text":"a","verdict":"pass","started_at":5.0,"finished_at":9.0}), "hans").unwrap();
+        assert_eq!(ok["status"], "done");
+        assert_eq!(ok["request_id"], "pi:0b6f7c3e-1111-4222-8333-944445555666");
+        assert_eq!(ok["source"], "pi-import");
+        let bad = legacy_row(&json!({"id":"0b6f7c3e-1111-4222-8333-944445555667","status":"unanswered","final_text":"error: x","started_at":5.0}), "hans").unwrap();
+        assert_eq!(bad["status"], "failed");
+        assert!(bad["answer"].is_null());
+        assert!(legacy_row(&json!({"id":"x'; DROP"}), "hans").is_err());
     }
 
     #[test]
     fn memory_cites_must_be_recalled() {
         let mem = vec![MemItem { id: "01M5NWHV8THM89B2X95YJXJNQE".into(), summary: "Report at 07:15".into() }];
         let fin = |txt: &str| Task { id: "m:1".into(), seq: 1, name: "model".into(), input: serde_json::json!({}), output: Some(format!("{{\"final\":\"{txt}\",\"evidence\":\"earlier memory\"}}")), status: "done".into(), attempts: 1 };
-        let ok = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![fin("07:15 per mem:01M5NWHV8THM89B2X95YJXJNQE")], tenant_label: String::new(), lessons: vec![], memory: mem.clone() }).unwrap();
+        let ok = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![fin("07:15 per mem:01M5NWHV8THM89B2X95YJXJNQE")], tenant_label: String::new(), lessons: vec![], memory: mem.clone(), owner: false }).unwrap();
         assert_eq!(ok["action"], "finish");
-        let bad = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![fin("07:15 per mem:01M0RWH2SGDZJRBQ6S82RH823B")], tenant_label: String::new(), lessons: vec![], memory: mem }).unwrap();
+        let bad = plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks: vec![fin("07:15 per mem:01M0RWH2SGDZJRBQ6S82RH823B")], tenant_label: String::new(), lessons: vec![], memory: mem, owner: false }).unwrap();
         assert_eq!(bad["action"], "call_model");
     }
 }

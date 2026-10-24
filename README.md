@@ -10,7 +10,7 @@ Alfred.report! is the platform and Sovereign Custodian behind every instance.
 
 | Part | Folder | What it does |
 |---|---|---|
-| Web | `src/`, `public/`, `deploy/web/` | Site, sign-in (Cloudflare Access / Google), per-user sandbox tenants, the `Alfred` agent (Pi harness in a Durable Object), MCP, owner email forwards. |
+| Web | `src/`, `public/`, `deploy/web/` | Site, sign-in (Cloudflare Access / Google), per-user sandbox tenants, the `Alfred` front-door Durable Object (missions run on the durable engine), MCP, owner email forwards. |
 | Missions | `apps/missions/` | Missions, evidence gates, knowledge graph (D1, Vectorize, R2), daily briefing and nightly maintenance (Workflows). |
 | ORAL | `apps/oral/` | Voice: Workers AI speech-to-text and text-to-speech, continuous listening for the wake word. |
 

@@ -76,7 +76,7 @@ async function voiceEndpoint(req: Request, env: Env, url: URL, id: { tenant: str
   const alfred = env.ALFRED.getByName(id.tenant) as unknown as AlfredVoiceRpc;
   await alfred.bind(id.tenant, id.isOwner);
   const out = await voiceTurn(
-    { ai: env.AI, alfred, domain: env.DOMAIN || "", isOwner: id.isOwner, askLimit: sandboxLimit(env.SANDBOX_ASKS_PER_DAY) },
+    { ai: env.AI, gatewayId: (env as { CLOUDFLARE_GATEWAY_ID?: string }).CLOUDFLARE_GATEWAY_ID, alfred, domain: env.DOMAIN || "", isOwner: id.isOwner, askLimit: sandboxLimit(env.SANDBOX_ASKS_PER_DAY) },
     text,
     pending
   );

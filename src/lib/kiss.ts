@@ -6,6 +6,8 @@
 import type { Env } from "./env";
 import { secretGet } from "./secret";
 import { completeText } from "../alfred/models";
+import { isOwnerEmail } from "./access.ts";
+import { ownerTenant } from "./tenant.ts";
 
 export const KISS_COOKIE = "alfred_kiss";
 export const NEURON_CAP = 10_000;
@@ -16,6 +18,8 @@ export type KissUser = {
   name: string;
   tenant_id: string;
   billing_paid: number;
+  /** Row created by Google sign-in (verified email). */
+  google?: boolean;
 };
 
 function todayUtc(): string {
@@ -187,16 +191,23 @@ export async function readSession(req: Request, env: Env): Promise<KissUser | nu
     if (expect !== sig) return null;
     await ensureKissSchema(env.DB);
     const row = await env.DB.prepare(
-      "SELECT email, name, tenant_id, billing_paid FROM kiss_users WHERE email = ?"
+      "SELECT email, name, tenant_id, billing_paid, pass_salt FROM kiss_users WHERE email = ?"
     )
       .bind(email.toLowerCase())
-      .first<{ email: string; name: string; tenant_id: string; billing_paid: number }>();
+      .first<{ email: string; name: string; tenant_id: string; billing_paid: number; pass_salt: string }>();
+    const owner = isOwnerEmail(env, email);
+    // Owner emails always land on the ONE owner tenant (existing data), never a new/paywalled one.
+    // A row-less owner session can only come from Google sign-in (password signup creates a row).
+    if (owner && (!row || row.pass_salt === "google")) {
+      return { email: email.toLowerCase(), name: row?.name || "", tenant_id: await ownerTenant(env), billing_paid: 1, google: true };
+    }
     if (!row) return null;
     return {
       email: row.email,
       name: row.name,
       tenant_id: row.tenant_id,
       billing_paid: row.billing_paid,
+      google: row.pass_salt === "google",
     };
   } catch {
     return null;
@@ -219,6 +230,8 @@ export async function signup(
     .bind(e)
     .first();
   if (existing) return { error: "Account exists — sign in", status: 409 };
+  // Owner emails sign in with Google/Access only (a password signup would be an unverified claim).
+  if (isOwnerEmail(env, e)) return { error: "Account exists — sign in with Google", status: 409 };
   let tenant_id = handle?.trim() ? normalizeHandle(handle) : tenantFromEmail(e);
   const avail = await nameAvailable(env, tenant_id);
   if (!avail.ok) return { error: avail.error || "That name is taken.", status: 409 };

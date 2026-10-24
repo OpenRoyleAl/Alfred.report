@@ -10,6 +10,7 @@ import { MISSIONS_SYSTEM } from "./prompts";
 import * as db from "./lib/db";
 import { createChatClient } from "./lib/llm";
 import type { WorkerResult } from "./types";
+import { DurableEngine, type CreateArgs } from "./durable";
 
 // ─── AlfredMissions State ────────────────────────────────────────
 
@@ -22,8 +23,59 @@ export interface OrchestratorState {
 // ─── AlfredMissions (Think Agent) ────────────────────────────────
 
 export class AlfredMissions extends Agent<Env, OrchestratorState> {
+  private engine = new DurableEngine({
+    ctx: this.ctx,
+    env: this.env as never,
+    schedule: (when, cb) => this.schedule(when, cb),
+    listSchedules: () => this.listSchedules() as never,
+    cancelSchedule: (id) => this.cancelSchedule(id),
+  });
+
   async onStart() {
     await primeSecrets(this.env);
+    // Rebuild the alarm from stored tasks on every wake (tenant instances only use the engine).
+    await this.engine.wake("start");
+  }
+
+  // ─── Durable missions (per-tenant instance "tenant:<id>"; see ./durable.ts) ───
+
+  /** Agents SDK schedule callback. Idempotent: nothing due -> no-op. */
+  async durableWake(): Promise<void> {
+    await this.engine.tick();
+  }
+
+  async durableCreate(a: CreateArgs) {
+    return this.engine.create(a);
+  }
+
+  async durableGet(id: string) {
+    await this.engine.wake("rpc");
+    return this.engine.get(id);
+  }
+
+  async durableList(limit = 20) {
+    await this.engine.wake("rpc");
+    return this.engine.list(limit);
+  }
+
+  async durableHistory(tenant: string, query: string, requestId?: string | null) {
+    await this.engine.wake("rpc");
+    return this.engine.history(tenant, query, requestId);
+  }
+
+  async durableLessons(limit = 20) {
+    await this.engine.wake("rpc");
+    return this.engine.lessons(limit);
+  }
+
+  async durableStats() {
+    await this.engine.wake("rpc");
+    return { ...this.engine.stats(), schedules: (await this.listSchedules()).filter((s) => s.callback === "durableWake") };
+  }
+
+  /** Owner debug (ops-authenticated route): evict this instance mid-mission. */
+  async durableDebugAbort(): Promise<void> {
+    this.ctx.abort("durable debug eviction");
   }
 
   initialState = {

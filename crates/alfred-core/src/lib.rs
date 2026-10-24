@@ -14,10 +14,13 @@
 //! ABI: no wasm-bindgen. workers-rs would pull wasm-bindgen and a JS glue entry, which cannot
 //! host the Agents SDK Agent class.
 
+pub mod durable;
 pub mod limiter;
 pub mod mcp;
 pub mod models;
+pub mod nav;
 pub mod report;
+pub mod review;
 pub mod search;
 
 use std::alloc::{alloc as raw_alloc, dealloc as raw_dealloc, Layout};
@@ -155,6 +158,56 @@ pub extern "C" fn mcp_scopes(ptr: *const u8, len: usize) -> u64 {
     call(ptr, len, mcp::scopes_catalog_json)
 }
 
+#[no_mangle]
+pub extern "C" fn durable_create(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::create_json)
+}
+
+#[no_mangle]
+pub extern "C" fn durable_plan(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::plan_json)
+}
+
+#[no_mangle]
+pub extern "C" fn durable_recover(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::recover_json)
+}
+
+#[no_mangle]
+pub extern "C" fn durable_next_alarm(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::next_alarm_json)
+}
+
+#[no_mangle]
+pub extern "C" fn durable_rank(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::rank_json)
+}
+
+#[no_mangle]
+pub extern "C" fn durable_catalog(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::catalog_json)
+}
+
+#[no_mangle]
+pub extern "C" fn durable_fetch_check(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::fetch_check_json)
+}
+
+#[no_mangle]
+pub extern "C" fn durable_html_text(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::html_text_json)
+}
+
+#[no_mangle]
+pub extern "C" fn review_mission(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, review::review_json)
+}
+
+#[no_mangle]
+pub extern "C" fn durable_board_id(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, durable::board_id_json)
+}
+
 /// Take a slot on limiter `id` at `now_ms`. Returns 0 when taken, else ms to wait.
 #[no_mangle]
 pub extern "C" fn limiter_take(id: u32, now_ms: f64) -> f64 {
@@ -177,4 +230,14 @@ pub extern "C" fn limiter_cooldown(id: u32, until_ms: f64) {
 #[no_mangle]
 pub extern "C" fn limiter_config(id: u32, cap: u32, window_ms: f64) {
     limiter::config(id, cap, window_ms)
+}
+
+#[no_mangle]
+pub extern "C" fn nav_app_redirect(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, nav::app_redirect_json)
+}
+
+#[no_mangle]
+pub extern "C" fn nav_safe_next(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, nav::safe_next_json)
 }

@@ -20,13 +20,15 @@ const config = defineConfig({
     entrypoint: "src/worker.ts",
     workersDev: false,
     observability: { enabled: true },
-    // Worker first: every request (page, assets, agent socket) passes the Access check in worker.ts.
+    // Worker first: every request (page, assets, agent socket) needs a voice agent token (worker.ts).
     assets: { notFoundHandling: "single-page-application", runWorkerFirst: true },
     triggers: [triggers.fetch({ pattern: `oral.${DOMAIN}/*`, zone: ZONE })],
     env: {
       ...schemaEnv(acct, "oral"),
       AI: bindings.ai({ dev: { remote: true } }),
       ASSETS: bindings.assets(),
+      // Web D1: agent tokens (hashed, revocable) and the owner tenant lookup.
+      DB: bindings.d1({ name: acct.req("WEB_D1_NAME"), id: acct.get("WEB_D1_ID") }),
       [DO.binding]: bindings.durableObject({ worker: NAME, exportName: DO.className }),
       // The tenant's Alfred agent lives in the web Worker: The Report and voice missions read/write it.
       [ALFRED.binding]: bindings.durableObject({ worker: acct.req("WEB_WORKER_NAME"), exportName: ALFRED.className }),

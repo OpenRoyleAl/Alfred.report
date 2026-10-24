@@ -34,11 +34,11 @@ Apps: `web` = deploy/web (src/index.ts), `missions` = apps/missions, `oral` = ap
 | `AUTO_ALLOWED_MODELS` | web, missions |  |  | Auto Router candidate models (cf-aig-allowed-models). Default: the Workers AI pool in src/alfred/models.ts. |
 | `AUTO_ALLOWED_PROVIDERS` | web, missions |  |  | Auto Router providers (cf-aig-allowed-providers). |
 | `WORKERS_AI_FLOOR` | web, missions |  |  | Comma list of @cf/ models tried when the routed call fails. |
-| `EXA_KEY_ALIAS` | web |  |  | Alias of the Exa key in AI Gateway Provider Keys. Set it to let the search router escalate to Exa; unset means Ceramic only. |
-| `EXA_CUSTOM_PROVIDER` | web |  | `exa` | Slug of the AI Gateway custom provider for Exa's own API (base_url https://api.exa.ai, BYOK alias EXA_KEY_ALIAS). Enables the Exa Lite tier ($4/1k) between Ceramic and Exa auto. |
-| `SEARCH_EXA_DAILY_LIMIT` | web |  | `200` | Max Exa escalations per day per instance; past it the router stays on Ceramic. |
+| `EXA_KEY_ALIAS` | web, missions |  |  | Alias of the Exa key in AI Gateway Provider Keys. Set it to let the search router escalate to Exa; unset means Ceramic only. |
+| `EXA_CUSTOM_PROVIDER` | web, missions |  | `exa` | Slug of the AI Gateway custom provider for Exa's own API (base_url https://api.exa.ai, BYOK alias EXA_KEY_ALIAS). Enables the Exa Lite tier ($4/1k) between Ceramic and Exa auto. |
+| `SEARCH_EXA_DAILY_LIMIT` | web, missions |  | `200` | Max Exa escalations per day per instance; past it the router stays on Ceramic. |
 | `MISSIONS_MODEL` | web, missions |  |  | Primary mission/coding model (Workers AI id) tried before Auto Router. Default DeepSeek V4.1 Flash; "auto" = Auto Router only. |
-| `CLEF_MODEL` | web |  | `clef` | Clef model for the route/escalate/done gates: clef, clef-flash or clef-omni (audio/video input always uses clef-omni). |
+| `CLEF_MODEL` | web, missions |  | `clef` | Clef model for the route/escalate/done gates: clef, clef-flash or clef-omni (audio/video input always uses clef-omni). |
 | `SANDBOX_ASKS_PER_DAY` | web, oral |  | `30` | Asks per day for a non-owner sandbox tenant (typed asks and ORAL voice turns share it). |
 | `HOLD_NEW_MISSIONS` | missions |  | `0` | "1" refuses new missions (ops override header X-Alfred-Override: metering-bootstrap). |
 | `STRIPE_PRICE_USD_99` | web |  |  | Stripe price id, USD plan. |
@@ -71,8 +71,8 @@ Apps: `web` = deploy/web (src/index.ts), `missions` = apps/missions, `oral` = ap
 | `MISSIONS_WORKER_NAME` | web, missions |  | `alfred-report-missions` | Missions Worker name (bound into web as MISSIONS). |
 | `ORAL_WORKER_NAME` | oral |  | `alfred-report-oral` | ORAL (voice) Worker name. |
 | `AGENT_MEMORY_NAMESPACE` | web, missions |  | `alfred-report` | Agent Memory namespace (owner seed: scripts/seed-memory.mjs). |
-| `WEB_D1_NAME` | web |  | `alfred-report` | Web D1 database name. |
-| `WEB_D1_ID` | web |  |  | Web D1 database id (pin after the first deploy). |
+| `WEB_D1_NAME` | web, oral |  | `alfred-report` | Web D1 database name. |
+| `WEB_D1_ID` | web, oral |  |  | Web D1 database id (pin after the first deploy). |
 | `MISSIONS_D1_NAME` | missions |  | `alfred-report-command` | Missions D1 database name. |
 | `MISSIONS_D1_ID` | missions |  |  | Missions D1 database id (pin after the first deploy). |
 | `MISSIONS_KV_ID` | missions |  |  | Missions KV namespace id (pin after the first deploy). |

@@ -76,6 +76,8 @@ const config = PHASE === "transfer-out" ? legacyConfig() : defineConfig({
       BRIEFING_WORKFLOW: bindings.workflow({ name: `${NAME}-briefing`, worker: NAME, exportName: "BriefingWorkflow" }),
       MAINTENANCE_WORKFLOW: bindings.workflow({ name: `${NAME}-maintenance`, worker: NAME, exportName: "MaintenanceWorkflow" }),
       AI: bindings.ai({}),
+      // Version id of the running deploy, recorded on every durable task (proves resume across deploys).
+      CF_VERSION_METADATA: bindings.versionMetadata(),
     },
     exports: {
       ...doExports,

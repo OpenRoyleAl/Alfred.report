@@ -21,7 +21,7 @@ export interface MissionRow {
   review: ReviewResult | null;
 }
 
-export type Outcome = "success" | "fail" | "running";
+export type Outcome = "success" | "fail" | "running" | "partial";
 
 export interface ReportItem {
   id: string;
@@ -37,7 +37,7 @@ export interface TheReport {
   brand: string;
   generatedAt: number;
   items: ReportItem[];
-  counts: { success: number; fail: number; running: number };
+  counts: { success: number; fail: number; running: number; partial: number };
   synopsis: string;
   attention: string[];
 }

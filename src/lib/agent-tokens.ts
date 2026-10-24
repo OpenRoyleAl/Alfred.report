@@ -1,10 +1,11 @@
 /**
  * Per-tenant scoped bearer tokens for agents that call Alfred's MCP (mcp.<DOMAIN>).
  * Only a SHA-256 hash is stored (D1); the token is shown once at mint time.
- * Tokens are accepted by the MCP endpoint only, never by the rest of the API.
+ * Tokens are accepted by the MCP endpoint and (scope `voice`) by ORAL, never by the rest of the API.
  */
 import { mcpParseScopes, mcpTokenOk } from "../alfred/core.ts";
-import type { Env } from "./env";
+/** Only the D1 binding is needed (keeps this importable from the ORAL Worker). */
+type Env = { DB: D1Database };
 
 export const AGENT_SCOPES = [
   "missions:read",
@@ -13,6 +14,7 @@ export const AGENT_SCOPES = [
   "report:read",
   "spend:read",
   "memory:read",
+  "voice", // ORAL (oral.<DOMAIN>): devices/agents/Siri Shortcuts; not accepted by MCP tools
 ] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 export const TOKEN_PREFIX = "art_";

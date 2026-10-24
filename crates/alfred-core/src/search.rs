@@ -97,7 +97,7 @@ pub fn pick_better<'a>(a: &'a [Item], b: &'a [Item]) -> &'a [Item] {
 #[derive(Deserialize)]
 pub struct PlanIn {
     pub query: String,
-    /// "start" | "after_ceramic" | "after_lite" | "after_exa"
+    /// "start" | "after_ceramic" | "after_lite" | "after_exa" | "after_deep" | "after_fallback"
     pub stage: String,
     #[serde(default)]
     pub items: Vec<Item>,
@@ -129,7 +129,12 @@ pub fn plan(i: &PlanIn) -> Plan {
     let exa_ok = i.has_exa && i.under_cap;
     let lite_ok = i.has_lite && i.under_cap;
     match i.stage.as_str() {
-        "start" if exa_ok && wants_deep(&i.query) => p("exa", "deep_intent", "throw", None, Some("after_exa")),
+        // Deep intent goes straight to Exa auto. If that call fails, fall back to Ceramic once
+        // (never back to Exa) instead of failing the whole search.
+        "start" if exa_ok && wants_deep(&i.query) => p("exa", "deep_intent", "continue", None, Some("after_deep")),
+        "after_deep" if i.failed => p("ceramic", "deep_failed", "continue", None, Some("after_fallback")),
+        "after_deep" => p("return", "deep_intent", "continue", Some("exa"), None),
+        "after_fallback" => p("return", "deep_failed", "continue", Some("ceramic"), None),
         "start" => p("ceramic", "default", "continue", None, Some("after_ceramic")),
         "after_ceramic" if !is_thin(&i.query, &i.items) => p("return", "default", "continue", Some("ceramic"), None),
         "after_ceramic" if lite_ok => p("exa-lite", "ceramic_thin", "continue", None, Some("after_lite")),
@@ -280,8 +285,17 @@ mod tests {
         let d = plan(&input("start", "who founded Exa and their funding", vec![]));
         assert_eq!(d.action, "exa");
         assert_eq!(d.reason, "deep_intent");
-        assert_eq!(d.on_fail, "throw");
-        assert_eq!(d.next_stage, Some("after_exa"));
+        assert_eq!(d.on_fail, "continue");
+        assert_eq!(d.next_stage, Some("after_deep"));
+        // Exa auto failed on a deep query: one Ceramic fallback, then return (no Exa loop).
+        let mut f = input("after_deep", "who founded Exa and their funding", vec![]);
+        f.failed = true;
+        let fb = plan(&f);
+        assert_eq!((fb.action, fb.next_stage), ("ceramic", Some("after_fallback")));
+        let done = plan(&input("after_fallback", "who founded Exa and their funding", items(1, "x")));
+        assert_eq!((done.action, done.served), ("return", Some("ceramic")));
+        let ok = plan(&input("after_deep", "who founded Exa and their funding", items(5, "exa")));
+        assert_eq!((ok.action, ok.served), ("return", Some("exa")));
         let c = plan(&input("start", "weather manila", vec![]));
         assert_eq!(c.action, "ceramic");
         assert_eq!(c.on_fail, "continue");

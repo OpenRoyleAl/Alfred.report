@@ -4,7 +4,7 @@ use serde_json::json;
 
 pub const TOKEN_PREFIX: &str = "art_";
 pub const TOKEN_MIN_LEN: usize = 40;
-pub const AGENT_SCOPES: &[&str] = &["missions:read", "missions:write", "ask", "report:read", "spend:read", "memory:read"];
+pub const AGENT_SCOPES: &[&str] = &["missions:read", "missions:write", "ask", "report:read", "spend:read", "memory:read", "voice"];
 pub const SUPPORTED_PROTOCOL: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 
 #[derive(Clone, Serialize)]
@@ -36,10 +36,15 @@ pub fn tools() -> Vec<Tool> {
             name: "mission_create",
             scope: "missions:write",
             owner_only: true,
-            description: "Start an Alfred mission (owner tenant). Returns the missionId; poll mission_get.",
+            description: "Start a durable Alfred mission (owner tenant). Survives restarts; returns the missionId; poll mission_get.",
             input_schema: json!({
                 "type": "object",
-                "properties": { "objective": { "type": "string", "minLength": 3, "maxLength": 4000 }, "requireEvidence": { "type": "boolean" } },
+                "properties": {
+                    "objective": { "type": "string", "minLength": 3, "maxLength": 4000 },
+                    "requireEvidence": { "type": "boolean" },
+                    "requestId": { "type": "string", "minLength": 8, "maxLength": 128, "description": "Idempotency key: a retry with the same requestId returns the same mission (one run)." },
+                    "delaySeconds": { "type": "number", "minimum": 0, "maximum": 2592000, "description": "Defer the mission (durable schedule)." }
+                },
                 "required": ["objective"]
             }),
         },
@@ -69,6 +74,17 @@ pub fn tools() -> Vec<Tool> {
             owner_only: false,
             description: "Recall this tenant's memory rows.",
             input_schema: json!({ "type": "object", "properties": { "limit": { "type": "number", "minimum": 1, "maximum": 50 } } }),
+        },
+        Tool {
+            name: "history_search",
+            scope: "memory:read",
+            owner_only: false,
+            description: "Search this tenant's earlier missions (a durable subagent). Returns only the final answer and the mission ids it used.",
+            input_schema: json!({
+                "type": "object",
+                "properties": { "query": { "type": "string", "minLength": 3, "maxLength": 1000 }, "requestId": { "type": "string", "minLength": 8, "maxLength": 128 } },
+                "required": ["query"]
+            }),
         },
     ]
 }
@@ -207,6 +223,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(names(&["report:read"], false), vec!["report"]);
+        assert_eq!(names(&["memory:read"], false), vec!["memory_recall", "history_search"]);
         assert!(!names(&["missions:write", "missions:read"], false).contains(&"mission_create".into()));
         assert!(names(&["missions:write"], true).contains(&"mission_create".into()));
     }

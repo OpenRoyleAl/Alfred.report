@@ -27,6 +27,7 @@ import type { DoneDecision, RouteDecision } from "./clef";
 import { extractMission, type IntakeSource } from "./clairic";
 import { buildReport, REPORT_LIMIT, type MissionRow, type TheReport } from "./report";
 import { instanceBrand } from "../brand";
+import { durableCreate, durableGet, durableLessons, durableList, durableReportRow, isDurableId, type DurableCreateIn } from "../lib/durable-client";
 
 export interface AlfredState {
   tenantId: string | null;
@@ -42,6 +43,13 @@ Cloudflare; do not repeat a tool call that already returned a result; when block
 
 const MAX_LOGS_PER_REVIEW = 60;
 const LESSONS_IN_PROMPT = 8;
+
+export interface AlfredDump {
+  missions: Record<string, unknown>[];
+  reviews: Record<string, unknown>[];
+  lessons: Record<string, unknown>[];
+  events: Record<string, unknown>[];
+}
 
 export class Alfred extends Agent<Env, AlfredState> {
   initialState: AlfredState = { tenantId: null, isOwner: false, missionsRun: 0, lastMissionAt: 0 };
@@ -101,6 +109,39 @@ export class Alfred extends Agent<Env, AlfredState> {
     if (this.state.tenantId === tenantId && this.state.isOwner === isOwner) return;
     if (this.state.tenantId && this.state.tenantId !== tenantId) throw new Error("tenant mismatch");
     this.setState({ ...this.state, tenantId, isOwner });
+  }
+
+  /** Owner-tenant consolidation: everything needed to copy this object's missions elsewhere. */
+  async exportMissions(): Promise<AlfredDump> {
+    this.ensureTables();
+    return {
+      missions: this.sql<Record<string, unknown>>`SELECT * FROM alfred_missions`,
+      reviews: this.sql<Record<string, unknown>>`SELECT * FROM alfred_reviews`,
+      lessons: this.sql<Record<string, unknown>>`SELECT * FROM alfred_lessons`,
+      events: this.sql<Record<string, unknown>>`SELECT * FROM alfred_tool_events`,
+    };
+  }
+
+  /** Copy missions in (idempotent: a mission id already here is skipped with its events). Owner only. */
+  async importMissions(d: AlfredDump): Promise<{ missions: number; skipped: number }> {
+    if (!this.state.isOwner) throw new Error("owner only");
+    this.ensureTables();
+    const have = new Set(this.sql<{ id: string }>`SELECT id FROM alfred_missions`.map((r) => r.id));
+    const fresh = new Set<string>();
+    for (const m of d.missions) {
+      const id = String(m.id);
+      if (have.has(id)) continue;
+      fresh.add(id);
+      this.sql`INSERT INTO alfred_missions (id, session, objective, status, final_text, verdict, started_at, finished_at)
+        VALUES (${id}, ${m.session as string}, ${m.objective as string}, ${m.status as string}, ${m.final_text as string}, ${m.verdict as string}, ${m.started_at as number}, ${m.finished_at as number})`;
+    }
+    for (const r of d.reviews) if (fresh.has(String(r.mission_id)))
+      this.sql`INSERT OR IGNORE INTO alfred_reviews VALUES (${r.mission_id as string}, ${r.verdict as string}, ${r.review as string}, ${r.at as number})`;
+    for (const l of d.lessons) if (fresh.has(String(l.mission_id)))
+      this.sql`INSERT OR IGNORE INTO alfred_lessons VALUES (${l.id as string}, ${l.mission_id as string}, ${l.lesson as string}, ${l.at as number})`;
+    for (const e of d.events) if (fresh.has(String(e.mission_id)))
+      this.sql`INSERT INTO alfred_tool_events VALUES (${e.mission_id as string}, ${e.tool as string}, ${e.args_hash as string}, ${e.ok as number}, ${e.blocked as string}, ${e.ms as number}, ${e.at as number})`;
+    return { missions: fresh.size, skipped: d.missions.length - fresh.size };
   }
 
   private ensureTables() {
@@ -168,8 +209,35 @@ export class Alfred extends Agent<Env, AlfredState> {
     return run;
   }
 
-  /** Fire-and-forget variant: returns the mission id immediately. */
-  async startMission(objective: string, opts: { requireEvidence?: boolean } = {}): Promise<{ missionId: string }> {
+  /**
+   * Start a mission. New missions run on the durable engine in the Missions Worker (receipt-
+   * idempotent by requestId, survive eviction, DeepSeek on the alfred-report gateway).
+   * `engine: "pi"` keeps the in-object Pi harness path (Clef review + lessons).
+   */
+  async startMission(
+    objective: string,
+    opts: { requireEvidence?: boolean; requestId?: string | null; source?: DurableCreateIn["source"]; fallback?: string[]; delaySeconds?: number | null; runAt?: number | null; engine?: "durable" | "pi"; debugStepDelayMs?: number; debugSearch?: "force-exa" | null } = {}
+  ): Promise<{ missionId: string; requestId?: string; duplicate?: boolean; status?: string; engine: string; runAt?: number }> {
+    if (opts.engine !== "pi" && this.env.MISSIONS) {
+      if (!this.state.tenantId) throw new Error("unbound");
+      const r = await durableCreate(this.env, this.state.tenantId, {
+        objective,
+        requestId: opts.requestId ?? null,
+        fallback: opts.requestId ? [] : opts.fallback ?? [opts.source ?? "web", objective, crypto.randomUUID()],
+        source: opts.source ?? "web",
+        delaySeconds: opts.delaySeconds ?? null,
+        runAt: opts.runAt ?? null,
+        debugStepDelayMs: this.state.isOwner ? opts.debugStepDelayMs : 0,
+        requireEvidence: opts.requireEvidence ?? false,
+        debugSearch: this.state.isOwner && opts.debugSearch === "force-exa" ? "force-exa" : null,
+      });
+      return { ...r, engine: "durable" };
+    }
+    return { ...(await this.startPiMission(objective, opts)), engine: "pi" };
+  }
+
+  /** Legacy Pi-harness mission (fire-and-forget). */
+  private async startPiMission(objective: string, opts: { requireEvidence?: boolean } = {}): Promise<{ missionId: string }> {
     const missionId = crypto.randomUUID();
     const run = this.missionQueue.then(() => this.runMissionInner(objective, opts, missionId));
     this.missionQueue = run.catch(() => undefined);
@@ -177,7 +245,11 @@ export class Alfred extends Agent<Env, AlfredState> {
     return { missionId };
   }
 
-  getMission(id: string) {
+  async getMission(id: string) {
+    if (isDurableId(id) && this.state.tenantId && this.env.MISSIONS) {
+      const d = await durableGet(this.env, this.state.tenantId, id);
+      return d ? { ...d, engine: "durable", final_text: d.answer } : null;
+    }
     this.ensureTables();
     const [m] = this.sql<Record<string, unknown>>`SELECT * FROM alfred_missions WHERE id = ${id}`;
     const [r] = this.sql<{ review: string }>`SELECT review FROM alfred_reviews WHERE mission_id = ${id}`;
@@ -185,8 +257,16 @@ export class Alfred extends Agent<Env, AlfredState> {
   }
 
   /** The Report (what WAKE returns): recent missions with their review + mission-done gate. */
-  report(limit = REPORT_LIMIT): TheReport {
+  async report(limit = REPORT_LIMIT): Promise<TheReport> {
     this.ensureTables();
+    let durable: MissionRow[] = [];
+    if (this.state.tenantId && this.env.MISSIONS) {
+      try {
+        durable = (await durableList(this.env, this.state.tenantId, limit)).map(durableReportRow);
+      } catch (err) {
+        console.warn("durable list failed", String((err as Error)?.message || err).slice(0, 200));
+      }
+    }
     const rows = this.sql<Record<string, unknown>>`SELECT m.id, m.objective, m.status, m.verdict, m.started_at, m.finished_at, r.review
       FROM alfred_missions m LEFT JOIN alfred_reviews r ON r.mission_id = m.id ORDER BY m.started_at DESC LIMIT ${limit}`;
     const missions: MissionRow[] = rows.map((r) => ({
@@ -198,7 +278,8 @@ export class Alfred extends Agent<Env, AlfredState> {
       finished_at: r.finished_at == null ? null : Number(r.finished_at),
       review: r.review ? (JSON.parse(String(r.review)) as ReviewResult) : null,
     }));
-    return buildReport(instanceBrand(this.env.DOMAIN || ""), missions, Date.now(), limit);
+    const merged = [...missions, ...durable].sort((a, b) => b.started_at - a.started_at).slice(0, limit);
+    return buildReport(instanceBrand(this.env.DOMAIN || ""), merged, Date.now(), limit);
   }
 
   /** Owner: drop the lesson a mission produced (keeps a bad run out of self-improvement). */
@@ -214,9 +295,18 @@ export class Alfred extends Agent<Env, AlfredState> {
     return this.gates.done("say hi", "hi", "replied hi");
   }
 
-  listLessons(limit = 20) {
+  async listLessons(limit = 20) {
     this.ensureTables();
-    return this.sql<Record<string, unknown>>`SELECT * FROM alfred_lessons ORDER BY at DESC LIMIT ${limit}`;
+    const pi = this.sql<Record<string, unknown>>`SELECT * FROM alfred_lessons ORDER BY at DESC LIMIT ${limit}`;
+    let durable: Array<Record<string, unknown>> = [];
+    if (this.state.tenantId && this.env.MISSIONS) {
+      try {
+        durable = (await durableLessons(this.env, this.state.tenantId, limit)).map((l) => ({ ...l, engine: "durable" }));
+      } catch {
+        durable = [];
+      }
+    }
+    return [...pi, ...durable].sort((a, b) => Number(b.at) - Number(a.at)).slice(0, limit);
   }
 
   private async runMissionInner(objective: string, opts: { requireEvidence?: boolean }, missionId = crypto.randomUUID()) {
@@ -298,7 +388,7 @@ export class Alfred extends Agent<Env, AlfredState> {
     this.escalations.delete(missionId);
     this.sql`INSERT OR REPLACE INTO alfred_reviews VALUES (${missionId}, ${result.verdict}, ${JSON.stringify(result)}, ${Date.now()})`;
 
-    if (result.verdict === "pass" && hadEvidence) {
+    if (result.lessonOk && hadEvidence) {
       // Only passing runs that closed with real evidence (mission_complete) may teach. Keep the lesson short and factual.
       const [m] = this.sql<{ objective: string }>`SELECT objective FROM alfred_missions WHERE id = ${missionId}`;
       const lesson = `${(m?.objective || "").slice(0, 160)} → done in ${result.totals.requests} model call(s), ` +
@@ -376,7 +466,7 @@ export class Alfred extends Agent<Env, AlfredState> {
       /* fall back to the subject + body below */
     }
     if (objective.length < 3) objective = `${subject}\n\n${body}`.trim().slice(0, 4000);
-    const { missionId } = await this.startMission(`Forwarded email: ${objective}`, { requireEvidence: true });
+    const { missionId } = await this.startMission(`Forwarded email: ${objective}`, { requireEvidence: true, fallback: ["email", objective] });
     return { missionId, objective };
   }
 
@@ -401,11 +491,13 @@ export class Alfred extends Agent<Env, AlfredState> {
   }
 
   /** Owner voice "Go Max AI!" -> start the drafted mission (evidence required, like email). */
-  async missionFromVoice(objective: string): Promise<{ missionId: string }> {
+  async missionFromVoice(objective: string, requestId?: string | null, source: "voice" | "siri" | "oral" = "voice"): Promise<{ missionId: string }> {
     if (!this.state.isOwner) throw new Error("owner only");
     const o = objective.trim().slice(0, 4000);
     if (o.length < 3) throw new Error("objective required");
-    return this.startMission(`Voice: ${o}`, { requireEvidence: true });
+    // A repeated "Go Max AI!" for the same draft within 10 minutes is the same request (one run).
+    const windowKey = String(Math.floor(Date.now() / 600_000));
+    return this.startMission(`Voice: ${o}`, { requireEvidence: true, requestId: requestId ?? null, source, fallback: [source, o, windowKey] });
   }
 
   /** Clairic intake: email / voice / image -> typed mission fields (uncertain ones flagged). */

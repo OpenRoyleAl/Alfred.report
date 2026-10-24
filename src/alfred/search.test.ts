@@ -100,3 +100,18 @@ test("deep intent skips lite and goes to exa auto", async () => {
   await s.search({ query: "research the competitors of cloudflare" });
   assert.deepEqual(calls, ["exa"]);
 });
+
+test("deep intent: Exa auto failing falls back to Ceramic once (no throw, no Exa loop)", async () => {
+  const calls: string[] = [];
+  const s = createRoutedSearch({
+    ceramic: src(res(1, "x"), calls, "ceramic"),
+    exaLite: src(res(5), calls, "exa-lite"),
+    exa: { async search() { calls.push("exa"); throw new Error("exa 500"); } },
+    budget: memoryBudget(),
+    exaDailyLimit: 10,
+    limiter: { async take() {} },
+  });
+  const r = await s.search({ query: "research the competitors of cloudflare" });
+  assert.deepEqual(calls, ["exa", "ceramic"]);
+  assert.equal(r.items.length, 1);
+});

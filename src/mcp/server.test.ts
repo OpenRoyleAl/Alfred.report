@@ -33,3 +33,16 @@ test("initialize negotiates protocol; notifications get 202", async () => {
   const n = await handleMCP(rpc("notifications/initialized", {}, undefined), {} as never, agent(["ask"]));
   assert.equal(n.status, 202);
 });
+
+test("TS mirrors of Rust catalogs have not drifted", async () => {
+  const { AGENT_SCOPES } = await import("../lib/agent-tokens.ts");
+  const { mcpScopes } = await import("../alfred/core.ts");
+  assert.deepEqual([...mcpScopes()], [...AGENT_SCOPES]);
+});
+
+test("owner-only mission_create is refused for a non-owner even with missions:write", async () => {
+  const res = await handleMCP(rpc("tools/call", { name: "mission_create", arguments: { objective: "abc" } }), {} as never, agent(["missions:write"]));
+  const body = (await res.json()) as { result: { isError: boolean; content: Array<{ text: string }> } };
+  assert.equal(body.result.isError, true);
+  assert.match(body.result.content[0].text, /owner tenant/);
+});

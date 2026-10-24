@@ -1,7 +1,8 @@
 import PostalMime from "postal-mime";
+import { ownerTenant } from "./tenant.ts";
 import type { Env } from "./env";
 import { BRAND, brandContext } from "../brand";
-import { isOwnerEmail, tenantFromEmail } from "./access";
+import { isOwnerEmail } from "./access";
 
 export async function ensureMailSchema(db: D1Database): Promise<void> {
   await db
@@ -60,7 +61,7 @@ export async function handleInboundEmail(message: InboundEmail, env: Env): Promi
     try {
       const parsed = await PostalMime.parse(message.raw);
       const body = (parsed.text || "").slice(0, 60_000);
-      const tenant = tenantFromEmail(message.from);
+      const tenant = await ownerTenant(env);
       const stub = env.ALFRED.getByName(tenant);
       await stub.bind(tenant, true);
       const { missionId } = await stub.missionFromEmail(subject, body);

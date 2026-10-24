@@ -21,7 +21,7 @@ export interface VerifiedIdentity {
   email: string;
   tenant_id: string;
   isOwner: boolean;
-  via: "access" | "ops_token" | "agent_token";
+  via: "access" | "ops_token" | "agent_token" | "session";
 }
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();

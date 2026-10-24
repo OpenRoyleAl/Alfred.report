@@ -44,18 +44,24 @@ export async function createMission(
     acceptance?: string[];
     state?: MissionState;
     field_agent?: string;
+    /** Deterministic id from the client requestId (see durableBoardId); a retry returns the same row. */
+    id?: string;
   }
-): Promise<Mission> {
-  const id = generateMissionId();
+): Promise<Mission & { duplicate?: boolean }> {
+  const id = data.id ?? generateMissionId();
+  if (data.id) {
+    const had = await getMission(db, data.id);
+    if (had) return { ...had, duplicate: true };
+  }
   const now = Date.now();
   const state: MissionState = data.state ?? "drafted";
   const acceptance = data.acceptance ?? [];
   const partial = { ...((data.budget as MissionBudget) ?? {}), ...(data.field_agent ? { field_agent: data.field_agent } : {}) };
   const budget = defaultMissionBudget(partial);
 
-  await db
+  const ins = await db
     .prepare(
-      `INSERT INTO missions (id, objective, state, budget, acceptance, evidence, report, created_at, updated_at)
+      `INSERT OR IGNORE INTO missions (id, objective, state, budget, acceptance, evidence, report, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
@@ -70,6 +76,10 @@ export async function createMission(
       now
     )
     .run();
+  if (data.id && ins.meta.changes === 0) {
+    const had = await getMission(db, data.id);
+    if (had) return { ...had, duplicate: true };
+  }
 
   return {
     id,
@@ -427,4 +437,14 @@ export async function gateMission(
     budget: nextBudget,
     updated_at: now,
   };
+}
+
+/** Owner archive: keep the row (audit), mark it aborted with a note so it leaves the active board. */
+export async function archiveMission(db: D1Database, id: string, note: string): Promise<Mission | null> {
+  const r = await db
+    .prepare(`UPDATE missions SET state = 'aborted', report = ?, updated_at = ? WHERE id = ?`)
+    .bind(note.slice(0, 500), Date.now(), id)
+    .run();
+  if (!r.meta.changes) return null;
+  return getMission(db, id);
 }

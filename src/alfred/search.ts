@@ -89,7 +89,8 @@ export function createRoutedSearch(opts: RouterOptions): WebSearchSource {
       let best: WebSearchResponse | null = null;
       let stage: SearchStage = "start";
       let failed = false;
-      for (;;) {
+      // Bounded: the longest Rust plan is start -> ceramic -> lite -> exa -> return (5 steps).
+      for (let step = 0; step < 8; step++) {
         const plan = searchPlan({ ...base, stage, items: best ? items(best) : [], failed, under_cap: await underCap() });
         if (plan.action === "return") {
           if (plan.served) opts.onRoute?.({ query: req.query, provider: plan.served, reason: plan.reason });
@@ -100,6 +101,7 @@ export function createRoutedSearch(opts: RouterOptions): WebSearchSource {
           stage = plan.next_stage ?? "after_ceramic";
           continue;
         }
+        if (plan.action !== "exa" && plan.action !== "exa-lite") break; // unknown action: fail safe
         const tier = plan.action;
         failed = false;
         try {
@@ -112,6 +114,7 @@ export function createRoutedSearch(opts: RouterOptions): WebSearchSource {
         }
         stage = plan.next_stage ?? (tier === "exa-lite" ? "after_lite" : "after_exa");
       }
+      return best ?? { items: [], metadata: { query: req.query } as never };
     },
   };
 }

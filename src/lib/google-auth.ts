@@ -3,7 +3,10 @@
  * No API-key hell: session cookie after Google; CF account linking is later in /start.
  */
 import type { Env } from "./env";
+import { isOwnerEmail } from "./access.ts";
+import { ownerTenant, postLoginPath } from "./tenant.ts";
 import { secretGet } from "./secret";
+import { navSafeNext } from "../alfred/core.ts";
 import {
   ensureKissSchema,
   mintSession,
@@ -73,7 +76,7 @@ async function upsertGoogleUser(
   env: Env,
   profile: { email: string; name?: string; sub: string },
   preferredHandle?: string
-): Promise<KissUser> {
+): Promise<{ user: KissUser; created: boolean; owner: boolean }> {
   const email = profile.email.toLowerCase().trim();
   const name = (profile.name || email.split("@")[0] || "user").slice(0, 80);
   await ensureKissSchema(env.DB);
@@ -82,6 +85,16 @@ async function upsertGoogleUser(
     await env.DB.prepare(`ALTER TABLE kiss_users ADD COLUMN google_sub TEXT`).run();
   } catch {
     /* column may exist */
+  }
+
+  // Owner emails (any of OWNER_EMAILS) are the ONE owner tenant: never insert a second tenant row.
+  if (isOwnerEmail(env, email)) {
+    try {
+      await env.DB.prepare(`UPDATE kiss_users SET google_sub = ? WHERE email = ?`).bind(profile.sub, email).run();
+    } catch {
+      /* ignore */
+    }
+    return { user: { email, name, tenant_id: await ownerTenant(env), billing_paid: 1, google: true }, created: false, owner: true };
   }
 
   const existing = await env.DB
@@ -98,10 +111,15 @@ async function upsertGoogleUser(
       /* ignore */
     }
     return {
-      email: existing.email,
-      name: existing.name || name,
-      tenant_id: existing.tenant_id,
-      billing_paid: existing.billing_paid || 0,
+      user: {
+        email: existing.email,
+        name: existing.name || name,
+        tenant_id: existing.tenant_id,
+        billing_paid: existing.billing_paid || 0,
+        google: true,
+      },
+      created: false,
+      owner: false,
     };
   }
 
@@ -128,7 +146,7 @@ async function upsertGoogleUser(
     /* ignore */
   }
 
-  return { email, name, tenant_id, billing_paid: 0 };
+  return { user: { email, name, tenant_id, billing_paid: 0, google: true }, created: true, owner: false };
 }
 
 export async function handleGoogleAuth(req: Request, env: Env, url: URL): Promise<Response | null> {
@@ -159,14 +177,13 @@ export async function handleGoogleAuth(req: Request, env: Env, url: URL): Promis
     if (req.method === "POST") {
       try {
         const body = (await req.json()) as { callbackURL?: string; handle?: string };
-        if (body.callbackURL && body.callbackURL.startsWith("/")) callbackURL = body.callbackURL;
+        callbackURL = navSafeNext(body.callbackURL);
         if (body.handle) handle = String(body.handle).slice(0, 32);
       } catch {
         /* empty */
       }
     } else {
-      callbackURL = url.searchParams.get("callbackURL") || "/home";
-      if (!callbackURL.startsWith("/")) callbackURL = "/home";
+      callbackURL = navSafeNext(url.searchParams.get("callbackURL"));
       handle = url.searchParams.get("handle") || "";
     }
     const state = await signState(env, {
@@ -221,24 +238,21 @@ export async function handleGoogleAuth(req: Request, env: Env, url: URL): Promis
     const ui = await fetch(GOOGLE_USERINFO, {
       headers: { Authorization: `Bearer ${tokenJson.access_token}` },
     });
-    const profile = (await ui.json()) as { email?: string; name?: string; sub?: string };
-    if (!profile.email || !profile.sub) {
+    const profile = (await ui.json()) as { email?: string; name?: string; sub?: string; email_verified?: boolean };
+    if (!profile.email || !profile.sub || profile.email_verified === false) {
       return Response.redirect(new URL("/login?error=profile", origin).toString(), 302);
     }
     const preferred = typeof state.handle === "string" ? state.handle : undefined;
-    const user = await upsertGoogleUser(
+    const { user, created, owner } = await upsertGoogleUser(
       env,
       { email: profile.email, name: profile.name, sub: profile.sub },
       preferred
     );
     const session = await mintSession(env, user);
-    let cb = typeof state.cb === "string" && state.cb.startsWith("/") ? state.cb : "/home";
-    // New unpaid users go to signup/subscribe with their handle
-    if (!user.billing_paid && (cb === "/home" || cb === "/")) {
-      cb = `/signup?handle=${encodeURIComponent(user.tenant_id)}`;
-    }
+    let cb = navSafeNext(typeof state.cb === "string" ? state.cb : null);
+    cb = postLoginPath({ owner, created, paid: !!user.billing_paid, cb, tenant: user.tenant_id });
     const dest = new URL(cb, origin);
-    if (preferred) dest.searchParams.set("handle", preferred);
+    if (preferred && created) dest.searchParams.set("handle", preferred);
     return new Response(null, {
       status: 302,
       headers: {

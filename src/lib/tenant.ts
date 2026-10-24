@@ -1,24 +1,63 @@
 /**
- * Multi-tenancy helpers.
- *
- * The tenant is derived ONLY from a verified identity (Cloudflare Access JWT or the
- * owner ops token). Hostnames, headers (X-Tenant-ID) and query params are never used:
- * they are attacker-controlled.
+ * Verified email -> tenant id, one rule for every sign-in path (Access, Google/KISS session, owner
+ * token, ORAL). Owners (OWNER_EMAILS, any of them) share ONE owner tenant: the tenant already
+ * registered for an owner email in kiss_users (where the owner's existing data lives), else the
+ * encoded first owner email. Everyone else: their kiss_users tenant if registered, else the
+ * injective encoded email (tenantFromEmail). Read-only: never creates or moves tenant rows.
  */
-import type { VerifiedIdentity } from "./access";
+import { isOwnerEmail, ownerEmails, tenantFromEmail, type AccessEnv } from "./access.ts";
 
-export function getTenantId(identity: VerifiedIdentity | null): string | null {
-  return identity?.tenant_id ?? null;
+export interface TenantEnv extends AccessEnv {
+  DB?: D1Database;
 }
 
-export function getTenantPrefix(tenantId: string): string {
-  return `tenant:${tenantId}:`;
+let ownerCache: { key: string; tenant: string; at: number } | null = null;
+
+async function kissTenant(db: D1Database | undefined, emails: string[]): Promise<string | null> {
+  if (!db || !emails.length) return null;
+  try {
+    const row = await db
+      .prepare(`SELECT tenant_id FROM kiss_users WHERE email IN (${emails.map(() => "?").join(",")}) ORDER BY created_at ASC LIMIT 1`)
+      .bind(...emails)
+      .first<{ tenant_id: string }>();
+    return row?.tenant_id || null;
+  } catch {
+    return null; // table not created yet on a fresh instance
+  }
 }
 
-export function getR2Key(tenantId: string, path: string): string {
-  return `${getTenantPrefix(tenantId)}${path}`;
+/** The single owner tenant (cached 5 minutes per isolate). */
+export async function ownerTenant(env: TenantEnv): Promise<string> {
+  const owners = ownerEmails(env);
+  const key = owners.join(",");
+  if (ownerCache && ownerCache.key === key && Date.now() - ownerCache.at < 300_000) return ownerCache.tenant;
+  const tenant = (await kissTenant(env.DB, owners)) || (owners[0] ? tenantFromEmail(owners[0]) : "default");
+  ownerCache = { key, tenant, at: Date.now() };
+  return tenant;
 }
 
-export function getD1Filter(tenantId: string): Record<string, unknown> {
-  return { tenant_id: tenantId };
+export async function resolveTenant(env: TenantEnv, email: string): Promise<string> {
+  const e = email.trim().toLowerCase();
+  if (isOwnerEmail(env, e)) return ownerTenant(env);
+  return (await kissTenant(env.DB, [e])) || tenantFromEmail(e);
+}
+
+export async function isOwnerTenantId(env: TenantEnv, tenant: string): Promise<boolean> {
+  return ownerEmails(env).length > 0 && tenant === (await ownerTenant(env));
+}
+
+/**
+ * Where a Google sign-in lands. Owner -> owner dashboard (Missions board at /). Only a genuinely
+ * NEW, unpaid account goes to signup; existing accounts go where they asked (default /home).
+ */
+export function postLoginPath(o: { owner: boolean; created: boolean; paid: boolean; cb: string; tenant: string }): string {
+  const plain = o.cb === "/home" || o.cb === "/";
+  if (o.owner) return plain || o.cb.startsWith("/signup") ? "/" : o.cb;
+  if (o.created && !o.paid && plain) return `/signup?handle=${encodeURIComponent(o.tenant)}`;
+  return o.cb;
+}
+
+/** Tests only. */
+export function _resetOwnerCache(): void {
+  ownerCache = null;
 }

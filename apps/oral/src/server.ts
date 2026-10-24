@@ -5,7 +5,7 @@ import { createWorkersAI } from "workers-ai-provider";
 
 import { BRAND, FLOW, PLATFORM_ROLE, instanceBrand, wakeWord } from "../../../src/brand.ts";
 import { speakReport, type TheReport } from "../../../src/alfred/report.ts";
-import { isOwnerTenant } from "./identity.ts";
+import { isOwnerTenantId } from "../../../src/lib/tenant.ts";
 import { parseUtterance, wakeKeyterms } from "./wake.ts";
 import { CANCELLED, decideTurn } from "./turn.ts";
 
@@ -44,13 +44,13 @@ export class AlfredOral extends VoiceAgent<Env> {
   private get tenant(): string {
     return this.name;
   }
-  private get isOwner(): boolean {
-    return isOwnerTenant(this.env, this.tenant);
+  private async ownerP(): Promise<boolean> {
+    return isOwnerTenantId(this.env as never, this.tenant);
   }
 
   private async alfred(): Promise<AlfredRpc> {
     const stub = this.env.ALFRED.getByName(this.tenant) as unknown as AlfredRpc;
-    await stub.bind(this.tenant, this.isOwner);
+    await stub.bind(this.tenant, await this.ownerP());
     return stub;
   }
 
@@ -61,7 +61,7 @@ export class AlfredOral extends VoiceAgent<Env> {
   async onTurn(transcript: string, context: VoiceTurnContext) {
     const domain = this.env.DOMAIN || "";
     const conn = context.connection.id;
-    const action = decideTurn(parseUtterance(transcript, domain), this.isOwner, this.pending.get(conn));
+    const action = decideTurn(parseUtterance(transcript, domain), await this.ownerP(), this.pending.get(conn));
 
     switch (action.do) {
       case "report":
@@ -102,7 +102,7 @@ export class AlfredOral extends VoiceAgent<Env> {
 
   private async start(objective: string): Promise<string> {
     const { missionId } = await (await this.alfred()).missionFromVoice(objective);
-    return `${FLOW.goMax} Mission started, reference ${missionId.slice(0, 4)}. Say ${wakeWord(this.env.DOMAIN || "")} any time for ${FLOW.report}.`;
+    return `${FLOW.goMax} Mission started, reference ${missionId.slice(-4)}. Say ${wakeWord(this.env.DOMAIN || "")} any time for ${FLOW.report}.`;
   }
 }
 

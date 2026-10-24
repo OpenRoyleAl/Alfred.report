@@ -24,7 +24,10 @@ export function fullScopes(): readonly AgentScope[] {
 interface AlfredRpc {
   bind(tenantId: string, isOwner: boolean): Promise<void>;
   getMission(id: string): Promise<unknown>;
-  startMission(objective: string, opts: { requireEvidence?: boolean }): Promise<{ missionId: string }>;
+  startMission(
+    objective: string,
+    opts: { requireEvidence?: boolean; requestId?: string | null; source?: "mcp"; fallback?: string[]; delaySeconds?: number | null }
+  ): Promise<{ missionId: string }>;
   consumeQuota(kind: string, limit: number): Promise<{ ok: boolean; used: number; limit: number }>;
   ask(prompt: string): Promise<unknown>;
   report(limit?: number): Promise<{ items: unknown[] }>;
@@ -39,7 +42,7 @@ function quota(v: string | undefined): number {
   return Number.isFinite(n) && n >= 0 ? n : 30;
 }
 
-export async function executeMCPTool(name: string, args: Record<string, unknown>, env: Env, who: MCPIdentity): Promise<unknown> {
+export async function executeMCPTool(name: string, args: Record<string, unknown>, env: Env, who: MCPIdentity, rpcId?: RpcId): Promise<unknown> {
   mcpAllow(name, who.scopes, who.isOwner);
   const bound = async (): Promise<AlfredRpc> => {
     const s = env.ALFRED.getByName(who.tenant_id) as unknown as AlfredRpc;
@@ -52,13 +55,29 @@ export async function executeMCPTool(name: string, args: Record<string, unknown>
       return { missions: await listMissions(env, who.tenant_id), alfred: (await (await bound()).report(20)).items };
     case "mission_get": {
       const id = String(args.id || "");
-      if (!/^[A-Za-z0-9-]{8,64}$/.test(id)) throw new Error("invalid id");
+      if (!/^[A-Za-z0-9~-]{8,64}$/.test(id)) throw new Error("invalid id");
       return (await (await bound()).getMission(id)) ?? { error: "not found" };
     }
     case "mission_create": {
       const objective = String(args.objective || "").trim().slice(0, 4000);
       if (objective.length < 3) throw new Error("objective required");
-      return (await bound()).startMission(objective, { requireEvidence: Boolean(args.requireEvidence) });
+      // Idempotent: the same requestId returns the same mission. Without one, the token + JSON-RPC
+      // request id + objective form the key, so a transport retry of one call is still one run.
+      const requestId = typeof args.requestId === "string" && args.requestId ? args.requestId : null;
+      return (await bound()).startMission(objective, {
+        requireEvidence: Boolean(args.requireEvidence),
+        requestId,
+        source: "mcp",
+        fallback: requestId ? [] : ["mcp", who.tokenId ?? who.email ?? "", String(rpcId ?? ""), objective],
+        delaySeconds: typeof args.delaySeconds === "number" ? args.delaySeconds : null,
+      });
+    }
+    case "history_search": {
+      const query = String(args.query || "").trim().slice(0, 1000);
+      if (query.length < 3) throw new Error("query required");
+      const { durableHistory } = await import("../lib/durable-client.ts");
+      const h = await durableHistory(env, who.tenant_id, query, typeof args.requestId === "string" ? args.requestId : null);
+      return { answer: h.answer, status: h.status, used: h.used, error: h.error };
     }
     case "mission_act":
       return actMission(env, who.tenant_id, String(args.id || ""), String(args.act || "open"));
@@ -113,7 +132,7 @@ export async function handleMCP(req: Request, env: Env, who: MCPIdentity): Promi
       const name = String(body.params?.name || "");
       const args = (body.params?.arguments as Record<string, unknown>) || {};
       try {
-        const result = await executeMCPTool(name, args, env, who);
+        const result = await executeMCPTool(name, args, env, who, id);
         return mcpResult(id, { content: [{ type: "text", text: JSON.stringify(result) }] });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);

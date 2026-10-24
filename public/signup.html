@@ -3,26 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Get Alfred.report</title>
+  <title>Claim your name.report! · Alfred.report!</title>
   <meta name="description" content="Pick your name. Domain at cost. Your Alfred. The report comes back." />
   <link rel="canonical" href="https://alfred.report/signup" />
-  <link rel="stylesheet" href="/fonts.css?v=2" />
-  <link rel="stylesheet" href="/landing.css?v=53" />
-  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <meta name="theme-color" content="#070708" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/ds.css?v=1" />
+  <link rel="stylesheet" href="/site.css?v=2" />
+  <script src="/brand.js?v=1"></script>
 </head>
 <body>
-  <header class="top">
-    <a class="brand brand-al" href="/" aria-label="Alfred.report"><span class="al-mark">Al</span></a>
-    <nav class="top-nav" aria-label="Primary">
-      <a href="/oral">ORAL</a>
-      <a class="btn-go-max" href="/go-max"><span class="gm-go">Go Max</span> <span class="gm-al">Al</span><span class="gm-bang">!</span></a>
-      <a class="sign-in" href="/login">Sign in</a>
+  <header class="bar">
+    <a class="brand" href="/" aria-label="Home"><span class="wm" data-brand>Alfred.report!</span></a>
+    <span class="sp"></span>
+    <nav aria-label="Primary">
+      <a class="btn ghost sm hide-xs" href="/oral">ORAL</a>
+      <a class="btn ghost sm hide-xs" href="/go-max">Go Max AI!</a>
+      <a class="btn sm" href="/login">Sign in</a>
     </nav>
   </header>
-  <main class="band" style="padding-top:2rem">
-    <h2 style="text-align:center;margin-bottom:0.5rem">Get started</h2>
-    <p class="lede">Pick a name. We hold the domain so nobody snipes it. Domain at cost. When humming, the domain moves to <strong>your</strong> Cloudflare — no lock-in.</p>
-
+  <main class="auth">
+    <section class="auth-card glass" aria-labelledby="h">
+      <p class="eyebrow">Get started</p>
+      <h1 id="h">Claim your <span class="mono">name.report!</span></h1>
+      <p class="muted">We hold the domain at cost so nobody snipes it. When it is humming, the domain moves to <strong>your</strong> Cloudflare account. No lock-in.</p>
     <form id="f" class="auth-form">
       <label for="handle">Your Alfred
         <div class="name-field">
@@ -53,39 +60,26 @@
       <p id="err" class="auth-err" hidden></p>
       <button class="btn btn-primary" type="submit" id="pay-btn">Subscribe &amp; hold domain</button>
     </form>
-
-    <p class="lede" style="margin-top:1.25rem;text-align:center">
-      Already paid? <a href="/login">Sign in with Google</a>.
-    </p>
-    <p class="lede" style="margin-top:0.5rem;text-align:center;font-size:0.85rem;opacity:0.85">
-      After checkout you can point your own domain or subdomain. <a href="/iphone">iPhone &amp; Siri</a> is next.
-    </p>
+      <p class="muted" style="margin:18px 0 0;font-size:14px">Already subscribed? <a href="/login">Sign in with Google</a> · <a href="/iphone">iPhone &amp; Siri</a></p>
+    </section>
   </main>
-  <footer class="foot foot-home">
-    <a class="foot-terms" href="/terms">Terms</a>
-    <div class="foot-center">
-      <p class="foot-byline">A product of</p>
-      <a class="foot-mark" href="https://openroyleal.com"><span class="word">OpenRoyle</span><span class="al-mark">Al</span></a>
-      <a class="foot-gh" href="https://github.com/OpenRoyleAl/Alfred.report" aria-label="Alfred.report on GitHub">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.39.6.11.82-.26.82-.58 0-.28-.01-1.02-.02-2-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.85 1.24 1.85 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.49 5.92.43.37.81 1.1.81 2.22 0 1.61-.01 2.91-.01 3.31 0 .32.22.7.83.58C20.56 21.8 24 17.3 24 12 24 5.37 18.63 0 12 0z"/></svg>
-      </a>
-    </div>
-    <a class="foot-privacy" href="/privacy">Privacy</a>
+  <footer class="site-foot">
+    <a href="/terms">Terms</a>
+    <span>A product of <a href="https://openroyleal.com">OpenRoyleAl</a> · <a href="https://github.com/OpenRoyleAl/Alfred.report">GitHub</a></span>
+    <a href="/privacy">Privacy</a>
   </footer>
   <style>
-    .auth-form { max-width: 24rem; margin: 1rem auto 0; display: flex; flex-direction: column; gap: 0.85rem; text-align: left; }
-    .auth-form label { color: var(--muted); font-size: 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
-    .auth-form input { background: #0e1015; border: 1px solid var(--line); color: var(--ink); padding: 0.7rem 0.85rem; border-radius: 8px; font-size: 1rem; }
-    .auth-err { color: #e07070; text-align: center; }
-    .btn-primary { background: var(--gold); color: #070708; border: 0; padding: 0.85rem 1.2rem; border-radius: 10px; font-weight: 700; cursor: pointer; }
-    .name-status { font-size: 0.85rem; min-height: 1.2em; margin: 0; }
-    .name-status.ok { color: var(--gold); }
-    .name-status.no { color: #e07070; }
-    .price-box { background: #0e1015; border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1rem; margin-top: 0.25rem; }
-    .price-line { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.92rem; margin: 0.35rem 0; color: var(--ink); }
-    .price-line.total { border-top: 1px solid var(--line); padding-top: 0.55rem; margin-top: 0.55rem; font-size: 1.05rem; }
-    .price-note { font-size: 0.75rem; color: var(--muted); margin: 0.5rem 0 0; line-height: 1.35; }
-    code { font-size: 0.85em; }
+    .auth-form{display:grid;gap:14px}
+    .auth-form label{display:grid;gap:8px;font:500 13px/1.2 var(--sans);color:var(--fg2)}
+    .auth-form input{display:block;width:100%;min-height:48px;padding:12px 14px;border-radius:12px;border:1px solid var(--line2);background:rgba(0,0,0,.35);color:var(--fg);font:400 16px/1.4 var(--sans)}
+    .auth-form input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
+    .auth-err{color:var(--bad);font-size:14px;margin:0}
+    .btn-primary{min-height:48px;border-radius:12px;border:1px solid var(--acc);background:var(--acc);color:var(--acc-ink);font:600 15px/1 var(--sans);cursor:pointer;box-shadow:0 8px 30px -8px var(--acc-glow)}
+    .name-status{margin:-6px 0 0}
+    .price-box{padding:14px 16px;border-radius:14px;background:rgba(0,0,0,.28);border:1px solid var(--line)}
+    .price-line{display:flex;justify-content:space-between;gap:12px;font-size:14px;margin:6px 0;color:var(--fg2)}.price-line strong{font-family:var(--mono);color:var(--fg);font-weight:500}
+    .price-line.total{border-top:1px solid var(--line);padding-top:10px;margin-top:10px;color:var(--fg)}
+    .price-note{font-size:12px;color:var(--fg3);margin:8px 0 0}
   </style>
   <script>
     (function () {

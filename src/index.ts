@@ -1,6 +1,6 @@
 /// <reference path="./wasm.d.ts" />
 import coreWasm from "./alfred/wasm/alfred_core.wasm";
-import { initCore } from "./alfred/core.ts";
+import { initCore, navAppRedirect } from "./alfred/core.ts";
 import { clefGates } from "./alfred/extensions/clef";
 import { Alfred } from "./alfred/orchestrator";
 import type { Env } from "./lib/env";
@@ -21,6 +21,8 @@ import { fullScopes, mcpError, type MCPIdentity } from "./mcp/server";
 
 // Instantiate the Rust core in the entry module (a side-effect import is tree-shaken: sideEffects=false).
 // Do not remove: a missing initCore was a Worker 1101 twice.
+import { resolveTenant } from "./lib/tenant.ts";
+
 initCore(coreWasm);
 
 // ─── Worker exports (see deploy/web/cloudflare.config.ts) ──────────────────────────────────────
@@ -51,14 +53,23 @@ async function getVerifiedUser(
     // separate from ALFRED_OPS_TOKEN so it can be revoked without touching other automations.
     const agent = await secretGet(env.ALFRED_AGENT_TOKEN as any);
     if (owner && ((ops && safeEqual(bearer, ops)) || (agent && safeEqual(bearer, agent)))) {
-      return { email: owner, tenant_id: tenantFromEmail(owner), isOwner: true, isOwnerUser: true, via: "ops_token" };
+      return { email: owner, tenant_id: await resolveTenant(env, owner), isOwner: true, isOwnerUser: true, via: "ops_token" };
     }
     return null;
   }
   const email = await verifyAccessEmail(req, env);
-  if (!email) return null;
-  const isOwner = isOwnerEmail(env, email);
-  return { email, tenant_id: tenantFromEmail(email), isOwner, isOwnerUser: isOwner, via: "access" };
+  if (email) {
+    const isOwner = isOwnerEmail(env, email);
+    return { email, tenant_id: await resolveTenant(env, email), isOwner, isOwnerUser: isOwner, via: "access" };
+  }
+  // Signed-in session cookie (Google sign-in at /login). Owner rights only for a Google-verified
+  // owner email; password accounts are their own (sandbox) tenant.
+  if (!(req.headers.get("Cookie") || "").includes("=")) return null;
+  const { readSession } = await import("./lib/kiss");
+  const s = await readSession(new Request(req.url, { headers: { Cookie: req.headers.get("Cookie") || "" } }), env);
+  if (!s) return null;
+  const isOwner = !!s.google && isOwnerEmail(env, s.email);
+  return { email: s.email, tenant_id: s.tenant_id, isOwner, isOwnerUser: isOwner, via: "session" };
 }
 
 function sandboxLimit(v: string | undefined, fallback: number): number {
@@ -212,7 +223,7 @@ async function handleSignalIngest(req: Request, env: Env): Promise<Response> {
 async function tryPublicAsset(req: Request, env: Env, url: URL): Promise<Response | null> {
   if (req.method !== "GET" && req.method !== "HEAD") return null;
   const p = url.pathname;
-  if (!p.startsWith("/fonts/") && !/\.(css|js|svg|png|woff2|ico|webp|mp3|wav|txt)(\?|$)/i.test(p)) {
+  if (!p.startsWith("/fonts/") && !/\.(css|js|svg|png|woff2|ico|webp|webmanifest|mp3|wav|txt)(\?|$)/i.test(p)) {
     return null;
   }
   const res = await env.ASSETS.fetch(new Request(new URL(p + url.search, url.origin), req));
@@ -397,17 +408,12 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
   if (url.pathname === "/oral" || url.pathname === "/oral/" || url.pathname === "/oral.html") {
     return env.ASSETS.fetch(new Request(new URL("/oral.html", url.origin), req));
   }
-  if (url.pathname === "/missions" || url.pathname === "/missions/") {
-    return Response.redirect(new URL("/home", url.origin).toString(), 302);
-  }
-  if (url.pathname === "/map" || url.pathname === "/map/") {
-    return Response.redirect(new URL("/home", url.origin).toString(), 302);
-  }
-  if (url.pathname === "/board" || url.pathname === "/board/") {
-    return Response.redirect(new URL("/home", url.origin).toString(), 302);
-  }
-  if (url.pathname === "/evidence" || url.pathname === "/evidence/") {
-    return Response.redirect(new URL("/home", url.origin).toString(), 302);
+  // App aliases: signed in -> the board; signed out -> sign-in with a return path (decided in Rust).
+  if (url.pathname === "/board" || url.pathname === "/board/" || url.pathname === "/missions" || url.pathname === "/missions/" ||
+      url.pathname === "/map" || url.pathname === "/map/" || url.pathname === "/evidence" || url.pathname === "/evidence/") {
+    const who = await getVerifiedUser(req, env);
+    const nav = navAppRedirect(url.pathname, url.search, Boolean(who), Boolean(who?.isOwnerUser));
+    return Response.redirect(new URL(nav.location, url.origin).toString(), 302);
   }
   if (url.pathname === "/brief" || url.pathname === "/brief/") {
     return Response.redirect(new URL("/", url.origin).toString(), 302);
@@ -472,7 +478,7 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
           { status: 403 }
         );
       }
-      return Response.redirect(new URL("/login/", url.origin).toString(), 302);
+      return Response.redirect(new URL(navAppRedirect(url.pathname, url.search, false).location, url.origin).toString(), 302);
     }
     if (boardAsset) {
       return env.ASSETS.fetch(new Request(new URL(boardAsset, url.origin), req));
@@ -524,14 +530,114 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
     if (ownerOnly && !user.isOwner) {
       return Response.json({ error: "sandbox", message: "Missions and intake are for the instance owner. Your sandbox can ask." }, { status: 403 });
     }
+    if (url.pathname === "/api/alfred/adopt-legacy-owner" && req.method === "POST") {
+      // One-time, idempotent: copy missions from the encoded-email owner tenants (used between the
+      // tenant-id change and the owner-tenant fix) into the single owner tenant. Sources are kept;
+      // a mission id already present is skipped, so re-running never duplicates.
+      if (!user.isOwner) return Response.json({ error: "owner only" }, { status: 403 });
+      const { tenantFromEmail: enc, ownerEmails } = await import("./lib/access.ts");
+      type Dump = { missions: unknown[] };
+      const target = stub as unknown as { importMissions(d: Dump): Promise<{ missions: number; skipped: number }> };
+      const out: Record<string, unknown> = {};
+      for (const e of ownerEmails(env)) {
+        const src = enc(e);
+        if (src === tenant_id) continue;
+        try {
+          const dump = await (env.ALFRED.getByName(src) as unknown as { exportMissions(): Promise<Dump> }).exportMissions();
+          out[src] = { found: dump.missions.length, ...(await target.importMissions(dump)) };
+        } catch (err) {
+          out[src] = { error: String((err as Error)?.message || err).slice(0, 300) };
+        }
+      }
+      return Response.json({ into: tenant_id, from: out });
+    }
+    if (url.pathname === "/api/alfred/voice" && req.method === "POST") {
+      // In-app voice for the signed-in user (wake word -> The Report; owner: draft + Go Max AI!).
+      const { voiceTurn, transcribe, speak } = await import("./alfred/voice-turn.ts");
+      const ct = (req.headers.get("Content-Type") || "").toLowerCase();
+      let text = "";
+      let pending: string | undefined;
+      let requestId: string | null = url.searchParams.get("requestId") || req.headers.get("Idempotency-Key");
+      if (ct.startsWith("audio/")) {
+        const buf = await req.arrayBuffer();
+        if (buf.byteLength > 20 * 1024 * 1024) return Response.json({ error: "audio too large" }, { status: 413 });
+        text = await transcribe(env.AI, buf);
+        pending = url.searchParams.get("pending")?.slice(0, 4000) || undefined;
+      } else {
+        const b = (await req.json().catch(() => ({}))) as { text?: unknown; pending?: unknown; requestId?: unknown };
+        if (typeof b.requestId === "string" && b.requestId) requestId = b.requestId.slice(0, 128);
+        text = typeof b.text === "string" ? b.text : "";
+        pending = typeof b.pending === "string" ? b.pending.slice(0, 4000) : undefined;
+      }
+      text = text.trim().slice(0, 4000);
+      if (!text) return Response.json({ error: "text or audio required", heard: "" }, { status: 400 });
+      const out = await voiceTurn(
+        { ai: env.AI, alfred: stub as never, domain: env.DOMAIN || "", isOwner: user.isOwner, askLimit: sandboxLimit(env.SANDBOX_ASKS_PER_DAY, 30), requestId },
+        text,
+        pending
+      );
+      if (url.searchParams.get("format") === "audio") {
+        return new Response(await speak(env.AI, out.text), { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
+      }
+      return Response.json({ ...out, heard: text }, { headers: { "Cache-Control": "no-store" } });
+    }
     if (url.pathname === "/api/alfred/missions" && req.method === "POST") {
-      const body = (await req.json().catch(() => ({}))) as { objective?: string; wait?: boolean; requireEvidence?: boolean };
+      const body = (await req.json().catch(() => ({}))) as {
+        objective?: string;
+        wait?: boolean;
+        requireEvidence?: boolean;
+        requestId?: string;
+        delaySeconds?: number;
+        runAt?: string | number;
+        engine?: "durable" | "pi";
+        debugStepDelayMs?: number;
+        debugSearch?: string;
+      };
       const objective = (body.objective || "").trim().slice(0, 4000);
       if (objective.length < 3) return Response.json({ error: "objective required" }, { status: 400 });
-      const opts = { requireEvidence: body.requireEvidence ?? false };
-      return Response.json(body.wait ? await stub.runMission(objective, opts) : await stub.startMission(objective, opts));
+      const headerId = req.headers.get("Idempotency-Key") || req.headers.get("X-Request-Id") || undefined;
+      const runAt = typeof body.runAt === "string" ? Date.parse(body.runAt) : typeof body.runAt === "number" ? body.runAt : null;
+      if (runAt !== null && !Number.isFinite(runAt)) return Response.json({ error: "runAt must be ISO time or epoch ms" }, { status: 400 });
+      if (body.wait && body.engine === "pi") return Response.json(await stub.runMission(objective, { requireEvidence: body.requireEvidence ?? false }));
+      try {
+        const r = await stub.startMission(objective, {
+          requireEvidence: body.requireEvidence ?? false,
+          requestId: body.requestId || headerId || null,
+          source: "web",
+          delaySeconds: typeof body.delaySeconds === "number" ? body.delaySeconds : null,
+          runAt,
+          engine: body.engine,
+          debugStepDelayMs: typeof body.debugStepDelayMs === "number" ? body.debugStepDelayMs : 0,
+          debugSearch: body.debugSearch === "force-exa" ? "force-exa" : null,
+        });
+        if (!body.wait || r.engine !== "durable") return Response.json(r, { status: r.duplicate ? 200 : 202 });
+        const until = Date.now() + 90_000;
+        for (;;) {
+          const m = (await stub.getMission(r.missionId)) as { status?: string } | null;
+          if (!m || m.status === "done" || m.status === "failed" || Date.now() > until) return Response.json({ ...r, mission: m });
+          await new Promise((res) => setTimeout(res, 2000));
+        }
+      } catch (err) {
+        const msg = String((err as Error)?.message || err);
+        return Response.json({ error: msg.slice(0, 300) }, { status: / 400 |requestId|within|required/.test(msg) ? 400 : 502 });
+      }
     }
-    const m = url.pathname.match(/^\/api\/alfred\/missions\/([A-Za-z0-9-]{8,64})$/);
+    if (url.pathname === "/api/alfred/history" && req.method === "POST") {
+      // The Report's history search: a durable subagent over this tenant's earlier missions.
+      const { durableHistory } = await import("./lib/durable-client.ts");
+      const b = (await req.json().catch(() => ({}))) as { query?: string; requestId?: string };
+      const q = String(b.query || "").trim().slice(0, 1000);
+      if (q.length < 3) return Response.json({ error: "query required" }, { status: 400 });
+      const h = await durableHistory(env, tenant_id, q, b.requestId || req.headers.get("Idempotency-Key"));
+      return Response.json({ answer: h.answer, status: h.status, used: h.used, missionId: h.id, error: h.error }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (url.pathname.startsWith("/api/alfred/durable/") && user.isOwner) {
+      // Owner diagnostics for the durable engine: stats (receipts/tasks/wakes/alarm) and forced eviction.
+      const dc = await import("./lib/durable-client.ts");
+      if (url.pathname === "/api/alfred/durable/stats" && req.method === "GET") return Response.json(await dc.durableStats(env, tenant_id));
+      if (url.pathname === "/api/alfred/durable/abort" && req.method === "POST") return Response.json(await dc.durableDebugAbort(env, tenant_id));
+    }
+    const m = url.pathname.match(/^\/api\/alfred\/missions\/([A-Za-z0-9~-]{8,64})$/);
     if (m && req.method === "GET") {
       const mission = await stub.getMission(m[1]);
       return mission ? Response.json(mission) : Response.json({ error: "not found" }, { status: 404 });

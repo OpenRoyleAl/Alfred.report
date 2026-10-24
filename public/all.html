@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>God-view — Alfred.report</title>
-  <link rel="icon" href="/favicon.svg" />
+  <title>All missions · Alfred.report!</title>
   <style>
 :root {
   --bg: #0b0c0f; --bg2: #12141a; --card: #161922; --border: #2a2e3a;
@@ -49,15 +48,21 @@ h2{font-size:1.05rem;color:var(--gold);margin:1.1rem 0 .4rem;font-weight:600}
 .dense .card{padding:.7rem .8rem}.dense .obj{font-size:.9rem}
 @media (max-width:640px){.wrap{padding:.85rem .85rem 2.5rem}}
 </style>
+  <meta name="theme-color" content="#070708" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/ds.css?v=1" />
+  <link rel="stylesheet" href="/board.css?v=2" />
+  <script src="/brand.js?v=1"></script>
 </head>
 <body class="dense">
-  <div class="top">
-    <div class="brand">Alfred.report · <em>Alfred</em></div>
-    <nav class="nav">
-      <a href="//">Now</a>
-      <a class="on" href="/all/">All</a>
-      </nav>
-  </div>
+  <header class="bar">
+    <a class="brand" href="/" aria-label="Board"><span class="wm" data-brand>Alfred.report!</span></a>
+    <span class="sp"></span>
+    <nav aria-label="Primary"><a class="btn ghost sm" href="/">Board</a><a class="btn sm" href="/all/" aria-current="page">All</a></nav>
+  </header>
   <div class="wrap">
     <div id="listView">
       <h1>God-view</h1>
@@ -213,5 +218,6 @@ window.addEventListener("popstate", function(){
   <a href="https://github.com/OpenRoyleAl" style="color:#888;text-decoration:none;font-size:1rem">OpenRoyleAl</a>
   <div style="color:#c9a227;font-weight:700;margin-top:.5rem">Go Max Al!</div>
 </footer>
+<script src="/alfred-voice.js?v=3" defer></script>
 </body>
 </html>

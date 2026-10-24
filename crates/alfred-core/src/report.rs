@@ -59,6 +59,9 @@ pub struct Counts {
     pub success: u32,
     pub fail: u32,
     pub running: u32,
+    /// Finished and passed review, but a step was interrupted (outcome of that step unknown).
+    #[serde(default)]
+    pub partial: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -84,6 +87,8 @@ fn flag_words(kind: &str) -> String {
         "failed_request" => "model calls failed".into(),
         "logs_missing" => "logs missing".into(),
         "clef_unavailable" => "done check unavailable".into(),
+        "interrupted" => "a step was interrupted; its outcome is unknown".into(),
+        "uncited_source" => "cited sources it did not read".into(),
         other => other.into(),
     }
 }
@@ -141,7 +146,11 @@ pub fn outcome_of(m: &MissionRow) -> &'static str {
     if m.status == "running" || (m.finished_at.is_none() && m.verdict.as_deref().is_none_or(|v| v.is_empty())) {
         "running"
     } else if m.status == "done" && m.verdict.as_deref() == Some("pass") {
-        "success"
+        if m.review.as_ref().is_some_and(|r| r.flags.iter().any(|f| f.kind == "interrupted")) {
+            "partial"
+        } else {
+            "success"
+        }
     } else {
         "fail"
     }
@@ -158,9 +167,18 @@ fn clef_done_of(r: Option<&Review>) -> Option<bool> {
 fn reason_of(m: &MissionRow) -> Option<String> {
     let flags = m.review.as_ref().map(|r| r.flags.as_slice()).unwrap_or(&[]);
     let outcome = outcome_of(m);
-    let f = flags.iter().find(|x| x.blocking).or_else(|| if outcome == "fail" { flags.first() } else { None });
+    let f = flags
+        .iter()
+        .find(|x| x.blocking)
+        .or_else(|| if outcome == "partial" { flags.iter().find(|x| x.kind == "interrupted") } else { None })
+        .or_else(|| if outcome == "fail" { flags.first() } else { None });
     if let Some(f) = f {
-        return Some(flag_words(&f.kind));
+        let mut words = flag_words(&f.kind);
+        // A failed run that also lost a step to an eviction says so (never hidden behind the first flag).
+        if f.kind != "interrupted" && flags.iter().any(|x| x.kind == "interrupted") {
+            words.push_str("; a step was interrupted");
+        }
+        return Some(words);
     }
     if outcome == "fail" {
         return Some(if m.status == "done" { "failed review".into() } else { "did not finish".into() });
@@ -182,17 +200,18 @@ pub fn build_report(brand: &str, rows: &[MissionRow], now: u64, limit: usize) ->
             clef_done: clef_done_of(m.review.as_ref()),
         })
         .collect();
-    let mut counts = Counts { success: 0, fail: 0, running: 0 };
+    let mut counts = Counts { success: 0, fail: 0, running: 0, partial: 0 };
     for i in &items {
         match i.outcome.as_str() {
             "success" => counts.success += 1,
             "fail" => counts.fail += 1,
+            "partial" => counts.partial += 1,
             _ => counts.running += 1,
         }
     }
     let mut attention = Vec::new();
     for (m, i) in recent.iter().zip(items.iter()) {
-        if i.outcome == "fail" {
+        if i.outcome == "fail" || i.outcome == "partial" {
             attention.push(format!("{}: {}", i.title, i.reason.clone().unwrap_or_default()));
         } else if i.outcome == "running" && now.saturating_sub(m.started_at) > STUCK_AFTER_MS {
             let mins = ((now - m.started_at) as f64 / 60_000.0).round() as u64;
@@ -205,6 +224,9 @@ pub fn build_report(brand: &str, rows: &[MissionRow], now: u64, limit: usize) ->
         let mut parts = Vec::new();
         if counts.success > 0 {
             parts.push(format!("{} succeeded", counts.success));
+        }
+        if counts.partial > 0 {
+            parts.push(format!("{} partial", counts.partial));
         }
         if counts.fail > 0 {
             parts.push(format!("{} failed", counts.fail));
@@ -224,6 +246,7 @@ pub fn speak_report(r: &TheReport) -> String {
         match i.outcome.as_str() {
             "success" => out.push(format!("Success: {}{}.", i.title, if i.clef_done == Some(true) { ", verified done" } else { "" })),
             "fail" => out.push(format!("Fail: {}.", i.title)),
+            "partial" => out.push(format!("Partial: {}.", i.title)),
             _ => out.push(format!("Running: {}.", i.title)),
         }
     }
@@ -287,6 +310,25 @@ mod tests {
     }
 
     #[test]
+    fn interrupted_step_is_partial() {
+        let row: MissionRow = serde_json::from_value(serde_json::json!({
+            "id": "dm-1", "objective": "Save a note.", "status": "done", "verdict": "pass", "started_at": 1, "finished_at": 2,
+            "review": { "flags": [{ "kind": "interrupted", "blocking": false }] }
+        })).unwrap();
+        let r = build_report("x!", &[row], 3, 5);
+        assert_eq!(r.items[0].outcome, "partial");
+        assert_eq!(r.counts.partial, 1);
+        assert!(r.synopsis.contains("1 partial"));
+        assert!(speak_report(&r).contains("Partial: Save a note"));
+        assert!(r.attention[0].contains("interrupted"));
+        let row: MissionRow = serde_json::from_value(serde_json::json!({
+            "id": "dm-2", "objective": "Save a note.", "status": "done", "verdict": "fail", "started_at": 1, "finished_at": 2,
+            "review": { "flags": [{ "kind": "clef_not_done", "blocking": true }, { "kind": "interrupted", "blocking": false }] }
+        })).unwrap();
+        assert_eq!(build_report("x!", &[row], 3, 5).items[0].reason.as_deref(), Some("not finished; a step was interrupted"));
+    }
+
+    #[test]
     fn empty_report() {
         let r = build_report("acme.report!", &[], 5000, REPORT_LIMIT);
         assert_eq!(r.synopsis, "No missions yet.");
@@ -310,7 +352,7 @@ mod tests {
             row("c", "Check the uptime", "running", None, now - STUCK_AFTER_MS - 60_000, None, None),
         ];
         let r = build_report("acme.report!", &rows, now, REPORT_LIMIT);
-        assert_eq!(r.counts, Counts { success: 1, fail: 1, running: 1 });
+        assert_eq!(r.counts, Counts { success: 1, fail: 1, running: 1, partial: 0 });
         assert_eq!(r.synopsis, "3 recent missions: 1 succeeded, 1 failed, 1 running.");
         assert_eq!(r.items.iter().map(|i| i.outcome.as_str()).collect::<Vec<_>>(), vec!["fail", "success", "running"]);
         assert_eq!(

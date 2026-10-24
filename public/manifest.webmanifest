@@ -1,0 +1,2 @@
+{"name":"Alfred.report!","short_name":"Alfred.report!","description":"You speak once. Alfred reports back.","start_url":"/","display":"standalone","background_color":"#070708","theme_color":"#070708",
+ "icons":[{"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml"}]}

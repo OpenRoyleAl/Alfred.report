@@ -1,6 +1,6 @@
 /// <reference path="../../../src/wasm.d.ts" />
 import coreWasm from "../../../src/alfred/wasm/alfred_core.wasm";
-import { initCore } from "../../../src/alfred/core.ts";
+import { durableBoardId, initCore } from "../../../src/alfred/core.ts";
 import { primeSecrets } from "./lib/secrets";
 import { BriefingWorkflow } from "./workflows/briefing";
 import { MaintenanceWorkflow } from "./workflows/maintenance";
@@ -14,6 +14,8 @@ import * as a2a from "./lib/a2a";
 import * as cfChangelog from "./lib/cf-changelog";
 import * as memory from "./lib/memory";
 import * as emailIngest from "./lib/email-ingest";
+import { getAgentByName } from "agents";
+import type { AlfredMissions } from "./orchestrator";
 
 // Do not remove: a missing initCore was a Worker 1101 twice.
 initCore(coreWasm);
@@ -422,6 +424,13 @@ export default {
 
     // ─── Mission Kernel Routes ─────────────────────────────────
 
+    // ─── Durable missions (web Worker over the MISSIONS service binding; ops bearer) ───
+    if (url.pathname.startsWith("/durable/")) {
+      const denied = requireOpsAuth(req, env);
+      if (denied) return denied;
+      return handleDurable(req, env, url);
+    }
+
     if (url.pathname === "/missions" && req.method === "GET") {
       const deniedList = requireOpsAuth(req, env);
       if (deniedList) return deniedList;
@@ -451,9 +460,20 @@ export default {
         acceptance?: string[];
         state?: "drafted" | "active" | "gated" | "complete" | "failed" | "aborted";
         field_agent?: string;
+        requestId?: string;
       };
       if (!body?.objective || typeof body.objective !== "string") {
         return Response.json({ error: "objective required" }, { status: 400 });
+      }
+      // Client requestId (board/new page) -> deterministic board id: a retried submit is one mission.
+      const rid = (typeof body.requestId === "string" ? body.requestId : req.headers.get("Idempotency-Key") || "").trim();
+      let boardId = "";
+      if (rid) {
+        try {
+          boardId = durableBoardId(rid);
+        } catch (err) {
+          return Response.json({ error: (err as Error).message.replace(/^alfred-core \w+: /, "") }, { status: 400 });
+        }
       }
       const ALLOWED_AGENTS = new Set<string>(FIELD_AGENTS);
       const field_agent =
@@ -466,8 +486,9 @@ export default {
         acceptance: body.acceptance ?? [],
         state: body.state,
         field_agent,
+        ...(rid ? { id: boardId } : {}),
       });
-      return Response.json(mission, { status: 201 });
+      return Response.json({ ...mission, requestId: rid || undefined }, { status: mission.duplicate ? 200 : 201 });
     }
 
     // Mission LLM under budget
@@ -577,7 +598,13 @@ export default {
         });
         return Response.json({ ok: true, action, mission: updated });
       }
-      return Response.json({ error: "action must be go_max|keep_going|done|note|voice" }, { status: 400 });
+      if (action === "archive") {
+        // Owner archive (board API is owner-only): the row is kept, state -> aborted with a note.
+        const updated = await missions.archiveMission(env.DB, missionId, note || `archived by ${actor}`);
+        if (!updated) return Response.json({ error: "mission not found" }, { status: 404 });
+        return Response.json({ ok: true, action, mission: updated });
+      }
+      return Response.json({ error: "action must be go_max|keep_going|done|note|voice|archive" }, { status: 400 });
     }
 
     // POST /missions/:id/go-max — KISS: park→Cursor + temp full-power burst
@@ -735,3 +762,64 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env>;
+
+// ─── Durable mission routes ────────────────────────────────────
+
+const TENANT_RE = /^[A-Za-z0-9._:@-]{1,200}$/;
+
+async function durableStub(env: Env, tenant: string) {
+  return (await getAgentByName(env.MISSIONS_AGENT as never, `tenant:${tenant}`)) as unknown as DurableObjectStub<AlfredMissions>;
+}
+
+async function handleDurable(req: Request, env: Env, url: URL): Promise<Response> {
+  const body = req.method === "POST" ? ((await req.json().catch(() => ({}))) as Record<string, unknown>) : {};
+  const tenant = String(body.tenant ?? url.searchParams.get("tenant") ?? "");
+  if (!TENANT_RE.test(tenant)) return Response.json({ error: "tenant required" }, { status: 400 });
+  const stub = await durableStub(env, tenant);
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  try {
+    if (url.pathname === "/durable/missions" && req.method === "POST") {
+      if (newMissionsHeld(env) && !meteringBootstrapOverride(req)) return holdNewMissionsResponse();
+      const r = await stub.durableCreate({
+        tenant,
+        objective: String(body.objective ?? ""),
+        requestId: typeof body.requestId === "string" ? body.requestId : null,
+        fallback: Array.isArray(body.fallback) ? body.fallback.map(String).slice(0, 8) : [],
+        source: String(body.source ?? "web"),
+        runAt: num(body.runAt),
+        delaySeconds: num(body.delaySeconds),
+        debugStepDelayMs: num(body.debugStepDelayMs) ?? 0,
+        requireEvidence: body.requireEvidence === true,
+        debugSearch: body.debugSearch === "force-exa" ? "force-exa" : null,
+      });
+      return Response.json(r, { status: r.duplicate ? 200 : 202 });
+    }
+    if (url.pathname === "/durable/missions" && req.method === "GET") {
+      return Response.json({ missions: await stub.durableList(Number(url.searchParams.get("limit")) || 20) });
+    }
+    const m = url.pathname.match(/^\/durable\/missions\/([A-Za-z0-9~:_-]{4,160})$/);
+    if (m && req.method === "GET") {
+      const v = await stub.durableGet(m[1]);
+      return v ? Response.json(v) : Response.json({ error: "not found" }, { status: 404 });
+    }
+    if (url.pathname === "/durable/history" && req.method === "POST") {
+      const q = String(body.query ?? "").trim().slice(0, 1000);
+      if (q.length < 3) return Response.json({ error: "query required" }, { status: 400 });
+      return Response.json(await stub.durableHistory(tenant, q, typeof body.requestId === "string" ? body.requestId : null));
+    }
+    if (url.pathname === "/durable/lessons" && req.method === "GET") {
+      return Response.json({ lessons: await stub.durableLessons(Number(url.searchParams.get("limit")) || 20) });
+    }
+    if (url.pathname === "/durable/stats" && req.method === "GET") {
+      return Response.json(await stub.durableStats());
+    }
+    if (url.pathname === "/durable/debug/abort" && req.method === "POST") {
+      await stub.durableDebugAbort().catch(() => undefined);
+      return Response.json({ aborted: true, tenant });
+    }
+  } catch (err) {
+    const msg = String((err as Error)?.message || err).slice(0, 500);
+    return Response.json({ error: msg }, { status: /required|invalid|within/.test(msg) ? 400 : 500 });
+  }
+  return Response.json({ error: "not found" }, { status: 404 });
+}

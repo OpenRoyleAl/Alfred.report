@@ -1,21 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { agentNameAllowed, identify, isOwnerTenant } from "./identity.ts";
-import { tenantFromEmail } from "../../../src/lib/access.ts";
+import { agentNameAllowed, bearer, identify } from "./identity.ts";
 
-const env = { OWNER_EMAILS: "owner@acme.example.com", ACCESS_TEAM_DOMAIN: "", ACCESS_AUD: "" };
+const env = { OWNER_EMAILS: "owner@acme.example.com", ACCESS_TEAM_DOMAIN: "", ACCESS_AUD: "", DB: undefined as never };
 
-test("no verified Access sign-in -> no identity", async () => {
+test("no token -> no identity (human Access sign-in is not accepted)", async () => {
   assert.equal(await identify(new Request("https://oral.acme.example.com/"), env), null);
+  const withAccess = new Request("https://oral.acme.example.com/", { headers: { "Cf-Access-Jwt-Assertion": "x", Cookie: "CF_Authorization=x" } });
+  assert.equal(await identify(withAccess, env), null);
 });
 
-test("owner is decided by the verified tenant, not by the request", () => {
-  assert.equal(isOwnerTenant(env, tenantFromEmail("owner@acme.example.com")), true);
-  assert.equal(isOwnerTenant(env, tenantFromEmail("owner@elsewhere.example.com")), false);
+test("malformed bearer never reaches the token table", async () => {
+  const r = new Request("https://oral.acme.example.com/", { headers: { Authorization: "Bearer nope" } });
+  assert.equal(bearer(r), "nope");
+  assert.equal(await identify(r, env), null);
 });
 
 test("a socket may only open its own tenant's ORAL instance", () => {
-  const id = { email: "x@y.z", tenant: tenantFromEmail("x@y.z"), isOwner: false };
-  assert.equal(agentNameAllowed(id.tenant, id), true);
-  assert.equal(agentNameAllowed(tenantFromEmail("owner@acme.example.com"), id), false);
+  assert.equal(agentNameAllowed("t1", { tenant: "t1" }), true);
+  assert.equal(agentNameAllowed("owner", { tenant: "t1" }), false);
 });

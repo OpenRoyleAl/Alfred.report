@@ -4,7 +4,7 @@ import { buildReport, outcomeOf, shortTitle, speakReport, STUCK_AFTER_MS, type M
 import type { ReviewResult } from "./review.ts";
 
 const totals = { requests: 1, tokens_in: 1, tokens_out: 1, cost: 0, wasted_tokens: 0, tool_calls: 1, tool_failures: 0 };
-const review = (over: Partial<ReviewResult> = {}): ReviewResult => ({ missionId: "m", verdict: "pass", flags: [], totals, models: [], ...over });
+const review = (over: Partial<ReviewResult> = {}): ReviewResult => ({ missionId: "m", verdict: "pass", flags: [], totals, models: [], lessonOk: false, ...over });
 const row = (over: Partial<MissionRow> = {}): MissionRow => ({
   id: "m1", objective: "Renew the domain for the shop.", status: "done", verdict: "pass",
   started_at: 1000, finished_at: 2000, review: review({ done: { done: true, pDone: 0.9, pEvidence: 0.9 } }), ...over,
@@ -25,7 +25,7 @@ test("success / fail / running per mission, with synopsis and attention", () => 
     row({ id: "c", objective: "Check the uptime", status: "running", verdict: null, finished_at: null, review: null, started_at: now - STUCK_AFTER_MS - 60_000 }),
   ];
   const r = buildReport("acme.report!", rows, now);
-  assert.deepEqual(r.counts, { success: 1, fail: 1, running: 1 });
+  assert.deepEqual(r.counts, { success: 1, fail: 1, running: 1, partial: 0 });
   assert.equal(r.synopsis, "3 recent missions: 1 succeeded, 1 failed, 1 running.");
   assert.deepEqual(r.items.map((i) => i.outcome), ["fail", "success", "running"]); // newest first
   assert.deepEqual(r.attention, ["Send the invoice to the client: needs your approval", "Check the uptime: still running after 31 minutes"]);

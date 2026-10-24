@@ -3,233 +3,68 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Alfred.report!</title>
-  <link rel="icon" href="/favicon.svg" />
-  <style>
-:root {
-  --bg:#0b0c0f; --bg2:#12141a; --card:#161922; --border:#2a2e3a;
-  --text:#e8e6e1; --muted:#9a958c; --gold:#c9a227; --gold-dim:#8a7018;
-  --active:#5b9a6f; --gated:#c9a227; --complete:#6b8cae;
-  --aborted:#a35d5d; --failed:#c45c5c; --drafted:#6b6b6b;
-  --up:#5b9a6f; --down:#8a8580;
-  --safe-top:env(safe-area-inset-top,0px);
-  --safe-bot:env(safe-area-inset-bottom,0px);
-  --safe-x:env(safe-area-inset-left,0px);
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{
-  font-size:17px;background:var(--bg);color:var(--text);
-  font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
-  min-height:100%;line-height:1.45;
-  padding-left:var(--safe-x);padding-right:var(--safe-x);
-}
-a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
-.top{
-  display:flex;align-items:center;justify-content:space-between;gap:.75rem;
-  padding:calc(.75rem + var(--safe-top)) 1rem .75rem;
-  border-bottom:1px solid var(--border);background:var(--bg2);
-  position:sticky;top:0;z-index:20;
-}
-.brand{font-size:.9rem;letter-spacing:.04em;white-space:nowrap}
-.brand em{color:var(--gold);font-style:normal;font-weight:700}
-.nav{display:flex;align-items:center;gap:.35rem}
-.nav a,.nav button.navplus{
-  color:var(--muted);font-size:.85rem;font-family:inherit;
-  background:transparent;border:none;cursor:pointer;
-  min-height:44px;min-width:44px;padding:.45rem .7rem;
-  display:inline-flex;align-items:center;justify-content:center;border-radius:10px;
-}
-.nav a.on,.nav a:hover,.nav button.navplus:hover{color:var(--gold);background:#1a1d27}
-.nav button.navplus{font-size:1.35rem;font-weight:700;color:var(--gold);line-height:1}
-.wrap{max-width:42rem;margin:0 auto;padding:1rem 1rem calc(3rem + var(--safe-bot))}
-.field{
-  display:grid;grid-template-columns:1fr 1fr;gap:.55rem;
-  margin:0 0 1rem;
-}
-.field a.cell{
-  display:block;text-align:center;min-width:0;min-height:88px;
-  padding:.9rem .65rem;background:var(--bg2);
-  border:1px solid var(--border);border-radius:14px;color:inherit;
-  text-decoration:none;cursor:pointer;
-}
-.field a.cell:hover,.field a.cell:focus{border-color:var(--gold);outline:none}
-.field .n{font-size:1.85rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--gold);line-height:1.1}
-.field .delta{font-size:.85rem;margin-top:.25rem;font-variant-numeric:tabular-nums}
-.field .delta.up{color:var(--up)}.field .delta.down{color:var(--down)}.field .delta.flat{color:var(--muted)}
-.field .l{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:.35rem}
-.filters{display:flex;gap:.4rem;margin-bottom:1rem}
-.chip{
-  flex:1;border:1px solid var(--border);background:transparent;color:var(--muted);
-  border-radius:999px;padding:.7rem .5rem;font-size:.82rem;cursor:pointer;
-  font-family:inherit;min-height:44px;
-}
-.chip.on,.chip:hover{border-color:var(--gold);color:var(--gold)}
-.list{display:flex;flex-direction:column;gap:.65rem}
-.card{
-  background:var(--card);border:1px solid var(--border);border-radius:12px;
-  padding:1rem;cursor:pointer;min-height:44px;
-}
-.card:hover,.card:focus{border-color:var(--gold-dim);outline:none}
-.card .title{font-size:1.05rem;font-weight:600;line-height:1.3;margin:.35rem 0 .25rem}
-.card .need{color:var(--muted);font-size:.88rem;margin-top:.2rem}
-.card .who{
-  display:inline-block;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;
-  color:var(--gold-dim);border:1px solid var(--gold-dim);border-radius:999px;
-  padding:.15rem .45rem;margin-right:.35rem;
-}
-.row{display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start;flex-wrap:wrap}
-.state{
-  font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;
-  padding:.25rem .55rem;border-radius:999px;border:1px solid currentColor;white-space:nowrap;
-}
-.state.active{color:var(--active)}.state.gated{color:var(--gated)}.state.complete{color:var(--complete)}
-.state.aborted,.state.failed{color:var(--aborted)}.state.drafted{color:var(--drafted)}
-.spend,.meta{color:var(--muted);font-size:.72rem;margin-top:.45rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.empty,.err{color:var(--muted);padding:1.5rem .25rem}
-.detail{display:none}.detail.on{display:block}
-.back{
-  display:inline-flex;align-items:center;min-height:44px;margin-bottom:.5rem;
-  color:var(--muted);font-size:.9rem;padding:.25rem 0;
-}
-h1{font-size:1.4rem;font-weight:600;margin-bottom:.35rem}
-h2{font-size:1rem;color:var(--gold);margin:1.1rem 0 .4rem;font-weight:600}
-.compare{
-  display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:.75rem 0 1rem;
-}
-.compare .cell{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:.85rem;text-align:center}
-.compare .n{font-size:1.5rem;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
-.compare .l{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:.25rem}
-.note{font-size:.82rem;color:var(--muted);background:#10131a;border:1px solid var(--border);border-radius:10px;padding:.75rem;margin:.75rem 0}
-.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;white-space:pre-wrap;font-size:.9rem;color:#d6d2c8}
-.panel.muted{opacity:.72;font-size:.82rem;color:var(--muted)}
-.aar-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:.5rem 0 1rem}
-.aar-grid .cell{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem}
-.aar-grid .k{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-.aar-grid .v{font-size:.95rem;font-variant-numeric:tabular-nums;margin-top:.2rem}
-.evidence{display:flex;flex-direction:column;gap:.5rem}
-.ev{border-left:3px solid var(--border);padding:.55rem .7rem;background:#10131a;border-radius:0 8px 8px 0;font-size:.82rem}
-.ev.pass{border-left-color:var(--active)}.ev.fail{border-left-color:var(--aborted)}
-.ev .when{color:var(--muted);font-size:.7rem;font-family:ui-monospace,Menlo,monospace}
-.actions{display:flex;flex-wrap:wrap;gap:.45rem;margin:1rem 0;align-items:center}
-.iconbtn{
-  width:44px;height:44px;border-radius:12px;border:1px solid var(--border);
-  background:var(--card);color:var(--text);font-size:1.2rem;cursor:pointer;
-  display:inline-flex;align-items:center;justify-content:center;
-}
-.iconbtn:hover{border-color:var(--gold);color:var(--gold)}
-.composer{
-  display:none;position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.72);
-  padding:calc(1rem + var(--safe-top)) 1rem calc(1rem + var(--safe-bot));
-  align-items:flex-end;justify-content:center;
-}
-.composer.on{display:flex}
-.composer .sheet{
-  width:100%;max-width:42rem;background:var(--bg2);border:1px solid var(--border);
-  border-radius:16px 16px 12px 12px;padding:1rem;max-height:90vh;overflow:auto;
-}
-.composer h2{margin-top:0}
-.composer label{display:block;font-size:.78rem;color:var(--muted);margin:.75rem 0 .35rem}
-.composer textarea,.composer input{
-  width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;
-  color:var(--text);font-family:inherit;font-size:1rem;padding:.75rem;min-height:44px;
-}
-.composer textarea{min-height:5.5rem;resize:vertical}
-.composer .rowbtns{display:flex;gap:.5rem;margin-top:1rem}
-.composer .btn{
-  flex:1;min-height:48px;border:none;border-radius:10px;font-family:inherit;
-  font-weight:700;font-size:.95rem;cursor:pointer;
-}
-.composer .btn.primary{background:var(--gold);color:#1a1405}
-.composer .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
-.composer .hint{font-size:.75rem;color:var(--muted);margin-top:.35rem}
-footer{text-align:center;padding:1.25rem;border-top:1px solid #2a2a2a;margin-top:1.5rem}
-footer a{color:#888;text-decoration:none;font-size:1rem}
-footer .go{color:#c9a227;font-weight:700;margin-top:.5rem}
-@media (max-width:420px){
-  .aar-grid,.compare{grid-template-columns:1fr}
-  .brand{font-size:.8rem}
-.brand.home{color:var(--text);text-decoration:none;font-weight:700;font-size:1.05rem;letter-spacing:.01em;font-style:normal}
-.brand.home:hover{opacity:.9}
-.brand.home .wm-al,.brand.home .wm-dot,.brand.home .wm-bang{color:var(--gold);font-style:normal;font-weight:800}
-.brand.home .wm-fred,.brand.home .wm-rest{color:#efeadb;font-style:normal;font-weight:600}
-.brand.home .wm-dot{position:relative;top:0.12em;display:inline-block}
-.counts{display:flex;gap:.4rem;margin:0 0 .85rem;flex-wrap:wrap}
-.counts .cell{flex:1;min-width:5.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:.65rem .5rem;text-align:center;cursor:pointer;color:inherit;text-decoration:none}
-.counts .cell.on,.counts .cell:hover{border-color:var(--gold)}
-.counts .n{font-size:1.35rem;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
-.counts .l{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:.2rem}
-.archbtn{margin-left:auto;border:1px solid var(--border);background:transparent;color:var(--muted);border-radius:8px;padding:.25rem .55rem;font:inherit;font-size:.75rem;cursor:pointer}
-.archbtn:hover{border-color:var(--gold);color:var(--gold)}
-.login-stub{font-size:.75rem;color:var(--muted);margin:.35rem 0 0}
-.top{display:flex;flex-wrap:wrap;gap:.35rem .75rem;align-items:center}
-.top .nav{margin-left:auto;display:flex;align-items:center;gap:.15rem}
-  .field .n{font-size:1.6rem}
-}
-
-.gomaxbtn{display:inline-flex;align-items:center;justify-content:center;width:100%;margin:.75rem 0 .5rem;padding:.9rem 1rem;border:0;border-radius:12px;background:linear-gradient(135deg,#c9a227,#e8c547);color:#111;font-weight:800;font-size:1.15rem;cursor:pointer}
-.gomaxbtn:disabled{opacity:.55;cursor:wait}
-.quickrow{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:0 0 1rem}
-.quickrow .q{padding:.7rem .5rem;border-radius:10px;border:1px solid var(--border,#333);background:rgba(255,255,255,.04);color:var(--fg,#eee);font-weight:600;font-size:.88rem;cursor:pointer}
-.quickrow .q.primary{border-color:var(--gold,#c9a227);color:var(--gold,#c9a227)}
-.navico{appearance:none;background:transparent;border:0;color:var(--muted,#999);font-size:1.15rem;padding:.25rem .4rem;cursor:pointer;line-height:1}
-.navico:hover,.navico:focus{color:var(--gold,#c9a227);outline:none}
-.searchpop{display:none;position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);padding:12vh 1rem 1rem}
-.searchpop.on{display:block}
-.searchsheet{max-width:28rem;margin:0 auto;background:var(--panel,#1a1a1a);border:1px solid var(--border,#333);border-radius:14px;padding:1rem}
-.searchsheet input{width:100%;box-sizing:border-box;padding:.75rem .8rem;border-radius:10px;border:1px solid var(--border,#333);background:#111;color:#eee;font-size:1rem}
-.searchhits{margin-top:.75rem;max-height:50vh;overflow:auto}
-.searchhits .hit{display:block;padding:.65rem .5rem;border-bottom:1px solid #222;color:inherit;text-decoration:none}
-.searchhits .hit:hover{background:rgba(201,162,39,.08)}
-.mid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9rem;letter-spacing:.04em;user-select:all;cursor:pointer;color:var(--gold,#c9a227)}
-.voicefab{position:fixed;right:1rem;bottom:5.5rem;z-index:40;width:3.25rem;height:3.25rem;border-radius:999px;border:0;background:var(--gold,#c9a227);color:#111;font-size:1.35rem;box-shadow:0 8px 24px rgba(0,0,0,.35);cursor:pointer}
-.voicefab.rec{background:#c45;color:#fff}
-</style>
+  <title>Alfred.report! · The Report</title>
+  <meta name="theme-color" content="#070708" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/ds.css?v=1" />
+  <link rel="stylesheet" href="/board.css?v=2" />
+  <script src="/brand.js?v=1"></script>
 </head>
 <body>
-    <div class="top">
-    <a class="brand home" href="/app" aria-label="Alfred.report!"><span class="wm-al">Al</span><span class="wm-fred">fred</span><span class="wm-dot">.</span><span class="wm-rest">report</span><span class="wm-bang">!</span></a>
-    <nav class="nav" aria-label="Primary">
-      <a href="/iphone" class="navico" style="font-size:1.1rem;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;" aria-label="Siri / iPhone Setup" title="Siri / iPhone Setup">📱</a>
-      <button type="button" class="navico" id="searchBtn" aria-label="Search" title="Search">🔍</button>
-      <button type="button" class="navico" id="voiceBtn" aria-label="Voice" title="Voice">🎤</button>
-      <button type="button" class="navplus" id="addBtn" aria-label="Add mission" title="Add mission">+</button>
+  <header class="bar">
+    <a class="brand" href="/" aria-label="Home"><span class="wm" data-brand>Alfred.report!</span></a>
+    <span class="sp"></span>
+    <nav aria-label="Primary">
+      <a href="/iphone" class="btn icon ghost" aria-label="Siri and iPhone setup" title="Siri / iPhone setup"><svg class="ic"><use href="#i-phone"/></svg></a>
+      <button type="button" class="btn icon ghost" id="searchBtn" aria-label="Search missions" title="Search"><svg class="ic"><use href="#i-search"/></svg></button>
+      <button type="button" class="btn icon ghost" id="voiceBtn" hidden aria-hidden="true" tabindex="-1"></button>
+      <button type="button" class="btn primary sm" id="addBtn" aria-label="New mission"><svg class="ic"><use href="#i-plus"/></svg><span class="lbl-wide">Mission</span></button>
     </nav>
-    <p class="hint" id="holdBanner" style="display:none;color:#c45;margin:.35rem 0 0;width:100%">New missions held — close metering loop first.</p>
-  </div>
+  </header>
+  <p class="hold" id="holdBanner" style="display:none" role="status"><svg class="ic"><use href="#i-alert"/></svg>New missions are held until the metering loop closes.</p>
 
-
-  <div class="wrap">
+  <main class="wrap">
     <div id="listView">
-      <div class="counts" id="statusCounts" aria-label="Mission counts">
-        <button type="button" class="cell on" data-filter="progress" id="cardProgress"><div class="n" id="statProgress">—</div><div class="l">In progress</div></button>
-        <button type="button" class="cell" data-filter="incomplete" id="cardIncomplete"><div class="n" id="statIncomplete">—</div><div class="l">Incomplete</div></button>
-        <button type="button" class="cell" data-filter="complete" id="cardComplete"><div class="n" id="statComplete">—</div><div class="l">Complete</div></button>
+      <section class="report glass" id="theReport" aria-labelledby="reportTitle">
+        <div class="report-top">
+          <div>
+            <p class="eyebrow">The Report</p>
+            <h1 id="reportTitle" class="report-syn" aria-live="polite">Gathering The Report…</h1>
+          </div>
+          <button type="button" class="btn sm" id="speakReport" aria-label="Speak The Report"><svg class="ic"><use href="#i-wave"/></svg>Speak</button>
+        </div>
+        <div class="report-stats">
+          <div class="stat ok"><span class="n mono" id="rSuccess">—</span><span class="l">Succeeded</span></div>
+          <div class="stat bad"><span class="n mono" id="rFail">—</span><span class="l">Failed</span></div>
+          <div class="stat part" title="Finished, but a step was interrupted and its outcome is unknown"><span class="n mono" id="rPartial">—</span><span class="l">Partial</span></div>
+          <div class="stat run"><span class="n mono" id="rRunning">—</span><span class="l">Running</span></div>
+          <a class="stat" href="/app/burn" id="cardBurn"><span class="n mono" id="statBurn">—</span><span class="l">Spend · 24h <span class="delta flat" id="deltaBurn"></span></span></a>
+        </div>
+        <div class="attn" id="rAttention" hidden></div>
+        <p class="wake-hint">Say <strong data-wake>“Alfred.report!”</strong> any time. To start a mission: “start a mission …”, then <strong>“Go Max AI!”</strong></p>
+      </section>
+
+      <div class="toolbar">
+        <div class="seg" id="filters" role="tablist" aria-label="View">
+          <button type="button" class="chip on" data-filter="progress" role="tab" aria-selected="true">Board</button>
+          <button type="button" class="chip" data-filter="archived" role="tab" aria-selected="false">Archived</button>
+        </div>
+        <div class="seg counts" id="statusCounts" aria-label="Mission counts">
+          <button type="button" class="cell" data-filter="progress" id="cardProgress"><span class="n mono" id="statProgress">—</span> active</button>
+          <button type="button" class="cell" data-filter="incomplete" id="cardIncomplete"><span class="n mono" id="statIncomplete">—</span> stalled</button>
+          <button type="button" class="cell" data-filter="complete" id="cardComplete"><span class="n mono" id="statComplete">—</span> done</button>
+          <a class="cell" href="/app/closed" id="cardClosed"><span class="n mono" id="statClosed">—</span> closed 24h <span class="delta flat" id="deltaClosed"></span></a>
+        </div>
       </div>
-      <div class="field" id="fieldMap" aria-label="Field map">
-        <a class="cell" href="/app/closed" id="cardClosed">
-          <div class="n" id="statClosed">—</div>
-          <div class="delta flat" id="deltaClosed">vs prior 24h</div>
-          <div class="l">Closed · 24h</div>
-        </a>
-        <a class="cell" href="/app/burn" id="cardBurn">
-          <div class="n" id="statBurn">—</div>
-          <div class="delta flat" id="deltaBurn">vs prior 24h</div>
-          <div class="l">Burn · 24h</div>
-        </a>
-      </div>
-      <div class="filters" id="filters" role="tablist">
-        <button type="button" class="chip on" data-filter="progress" role="tab" aria-selected="true">In progress</button>
-        <button type="button" class="chip" data-filter="incomplete" role="tab" aria-selected="false">Incomplete</button>
-        <button type="button" class="chip" data-filter="complete" role="tab" aria-selected="false">Complete</button>
-        <button type="button" class="chip" data-filter="archived" role="tab" aria-selected="false">Archived</button>
-      </div>
-      <p class="login-stub">Owner board · missions on this instance.</p>
-      <div class="list" id="list"><div class="empty">Loading board…</div></div>
+      <div class="list" id="list"><div class="empty">Loading missions…</div></div>
     </div>
     <div class="detail" id="closedView"></div>
     <div class="detail" id="burnView"></div>
     <div class="detail" id="detailView"></div>
-  </div>
+  </main>
 
   <div class="composer" id="composer" aria-hidden="true">
     <div class="sheet" role="dialog" aria-labelledby="composerTitle">
@@ -256,12 +91,8 @@ footer .go{color:#c9a227;font-weight:700;margin-top:.5rem}
       </div>
     </div>
   </div>
-  <button type="button" class="voicefab" id="voiceFab" aria-label="Voice note" title="Voice note">🎤</button>
-
-  <footer>
-    <a href="https://github.com/OpenRoyleAl">OpenRoyleAl</a>
-    <div class="go">Go Max Al!</div>
-  </footer>
+  <button type="button" id="voiceFab" hidden aria-hidden="true" tabindex="-1"></button>
+  <footer class="foot"><span data-brand-text>Alfred.report!</span> · Sovereign Custodian · <span class="mono">ORAL → WAKE → Go Max AI! → The Report</span></footer>
 
 <script>
 const BASE = "/app";
@@ -555,29 +386,66 @@ function updateFieldMap(stats){
   dBurn.textContent=burnDelta.text; dBurn.className="delta "+burnDelta.cls;
 }
 
+const SRC_ICON={email:"mail",web:"globe",phone:"phone",voice:"wave",mission:"bolt"};
+function srcOf(m){ const w=whoTag(m); const o=String(m.objective||""); if(/^voice:/i.test(o)||/mb-voice|oral/i.test(o)) return {k:"voice",l:"voice"};
+  if(SRC_ICON[w]) return {k:w,l:w}; if(/\.md$/i.test(w)) return {k:"doc",l:w}; return {k:"globe",l:w}; }
+function statusOf(m){
+  const st=String(m.state||"").toLowerCase();
+  if(isArchived(m.id)) return {c:"",l:"archived"};
+  if(isNeedsYou(m)) return {c:"warn",l:"needs you"};
+  if(st==="failed"||st==="aborted") return {c:"bad",l:st};
+  if(CLOSED.has(st)) return {c:"ok",l:"done"};
+  if(isInProgress(m)) return {c:"run",l:st==="gated"?"gated":"running"};
+  return {c:"warn",l:st||"stalled"};
+}
+function costHtml(m){
+  const b=m.budget||{}; const t=num(b.used_tokens), n=num(b.used_neurons), u=num(b.spend_usd);
+  const bits=[];
+  if(u>0) bits.push(fmtUsd(u));
+  if(t>0) bits.push(fmtNum(t)+" tok");
+  if(n>0) bits.push(fmtNum(n)+" neurons");
+  return bits.length?'<span class="cost mono" title="Metered spend">'+alfredIcon("coin")+esc(bits.join(" · "))+'</span>':'<span class="cost mono muted">unmetered</span>';
+}
+function cleanTitle(t){ return String(t||"").replace(/^(\s*\[[^\]]{1,24}\]\s*)+/,"").replace(/^(re|fwd?):\s*/i,"").trim()||String(t||""); }
+function cardHtml(m){
+  const name=cleanTitle(humanName(m)); const st=statusOf(m); const src=srcOf(m);
+  const need=isNeedsYou(m)?'<p class="need">'+alfredIcon("alert")+esc(needLine(m))+'</p>':"";
+  return '<article class="card '+st.c+'" tabindex="0" data-id="'+esc(m.id)+'" role="button" aria-label="Open '+esc(name)+'">'
+    + '<div class="card-main"><div class="card-tags"><span class="pill '+st.c+'"><span class="dot"></span>'+esc(st.l)+'</span>'
+    + '<span class="src">'+alfredIcon(SRC_ICON[src.k]||src.k)+esc(src.l)+'</span></div>'
+    + '<h3 class="title">'+esc(name)+'</h3>'+need
+    + '<div class="card-meta">'+costHtml(m)+'<span class="when mono">'+alfredIcon("clock")+esc(fmtWhen(m.updated_at))+'</span></div></div>'
+    + '<button type="button" class="btn icon sm ghost archbtn" data-arch="'+esc(m.id)+'" aria-label="'+(isArchived(m.id)?"Unarchive":"Archive")+' '+esc(name)+'" title="'+(isArchived(m.id)?"Unarchive":"Archive")+'">'+alfredIcon(isArchived(m.id)?"unarchive":"archive")+'</button>'
+    + '</article>';
+}
 function renderList(){
   const el=document.getElementById("list");
-  const filtered=allMissions.filter(m=>bucketOf(m)===currentFilter)
-    .slice().sort((a,b)=>(b.updated_at||0)-(a.updated_at||0));
-  if(!filtered.length){
-    const msg={progress:"Nothing in progress.",incomplete:"No incomplete missions.",complete:"No complete missions.",archived:"Archive is empty."}[currentFilter]||"Empty.";
-    el.innerHTML='<div class="empty">'+esc(msg)+'</div>';
-    return;
+  const byTime=(a,b)=>(b.updated_at||0)-(a.updated_at||0);
+  let html="";
+  if(currentFilter==="progress"){
+    const live=allMissions.filter(m=>!isArchived(m.id));
+    const groups=[
+      {k:"g-attn",t:"Needs attention",i:"alert",items:live.filter(m=>isNeedsYou(m)||isIncomplete(m)||(["failed","aborted"].includes(String(m.state||"").toLowerCase())&&(Date.now()-num(m.updated_at))<864e5))},
+      {k:"g-run",t:"Running",i:"run",items:live.filter(m=>isInProgress(m)&&!isNeedsYou(m))},
+      {k:"g-done",t:"Done",i:"check",items:live.filter(m=>isComplete(m)&&!["failed","aborted"].includes(String(m.state||"").toLowerCase())).sort(byTime).slice(0,12)}
+    ];
+    const seen=new Set();
+    html=groups.map(g=>{
+      const items=g.items.filter(m=>!seen.has(m.id)).sort(byTime); items.forEach(m=>seen.add(m.id));
+      if(!items.length) return "";
+      return '<section class="group '+g.k+'"><h2 class="group-h">'+alfredIcon(g.i)+esc(g.t)+'<span class="mono">'+items.length+'</span></h2>'+items.map(cardHtml).join("")+'</section>';
+    }).join("");
+    if(!html) html='<div class="empty">'+alfredIcon("shield")+'All quiet. Nothing needs you.</div>';
+  } else {
+    const filtered=allMissions.filter(m=>bucketOf(m)===currentFilter).sort(byTime);
+    const msg={incomplete:"Nothing stalled.",complete:"No completed missions yet.",archived:"Archive is empty."}[currentFilter]||"Empty.";
+    html=filtered.length?filtered.map(cardHtml).join(""):'<div class="empty">'+esc(msg)+'</div>';
   }
-  el.innerHTML=filtered.map(m=>{
-    const name=humanName(m);
-    return '<article class="card" tabindex="0" data-id="'+esc(m.id)+'" role="button" aria-label="Open '+esc(name)+'">'
-      + '<div class="row"><span><span class="who">'+esc(whoTag(m))+'</span><span class="state '+(m.state||"drafted")+'">'+esc(m.state||"?")+'</span></span>'
-      + '<button type="button" class="archbtn" data-arch="'+esc(m.id)+'">'+(isArchived(m.id)?"Unarchive":"Archive")+'</button></div>'
-      + '<div class="title">'+esc(name)+'</div>'
-      + '<div class="need">'+esc(needLine(m))+'</div>'
-      + '<div class="spend">'+esc(spendLine(m))+'</div>'
-      + '</article>';
-  }).join("");
+  el.innerHTML=html;
   el.querySelectorAll(".card").forEach(c=>{
     const open=()=>goDetail(c.dataset.id);
     c.onclick=open;
-    c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } };
+    c.onkeydown=e=>{ if(e.target===c&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); open(); } };
   });
   el.querySelectorAll("[data-arch]").forEach(b=>{
     b.onclick=function(e){
@@ -590,6 +458,29 @@ function renderList(){
     };
   });
 }
+
+let reportText="";
+async function loadReport(){
+  try{
+    const r=await fetch("/api/alfred/report",{credentials:"same-origin",headers:{Accept:"application/json"}});
+    if(!r.ok) throw new Error(String(r.status));
+    const d=await r.json(); const c=d.counts||{};
+    document.getElementById("rSuccess").textContent=String(c.success||0);
+    document.getElementById("rFail").textContent=String(c.fail||0);
+    document.getElementById("rRunning").textContent=String(c.running||0);
+    document.getElementById("rPartial").textContent=String(c.partial||0);
+    document.getElementById("reportTitle").textContent=d.synopsis||"No missions yet.";
+    const at=(d.attention||[]).slice(0,4);
+    const box=document.getElementById("rAttention");
+    if(at.length){ box.hidden=false; box.innerHTML='<p class="eyebrow">Needs attention</p><ul>'+at.map(a=>'<li>'+alfredIcon("alert")+esc(typeof a==="string"?a:(a.title||a.text||a.reason||JSON.stringify(a)))+'</li>').join("")+'</ul>'; }
+    else box.hidden=true;
+    reportText=(d.synopsis||"")+(at.length?" Needs attention: "+at.map(a=>typeof a==="string"?a:(a.title||a.text||"")).join(". "):"");
+  }catch(e){ document.getElementById("reportTitle").textContent="The Report is unavailable right now."; }
+}
+document.addEventListener("DOMContentLoaded",()=>{
+  loadReport(); setInterval(loadReport,60000);
+  const sp=document.getElementById("speakReport"); if(sp) sp.onclick=()=>{ if(reportText) speakBrief(reportText); };
+});
 
 function goList(){
   history.pushState({}, "", BASE);
@@ -609,6 +500,7 @@ function goDetail(id){
 }
 
 function missionCardHtml(m, opts){
+  if(typeof cardHtml==="function") return cardHtml(m);
   opts=opts||{};
   const b=m.budget||{};
   return '<article class="card" tabindex="0" data-id="'+esc(m.id)+'" role="button">'
@@ -747,7 +639,7 @@ async function showDetail(id){
       + '<div class="quickrow" id="needsQuick">'
       + '<button type="button" class="q primary" data-act="keep_going">Keep going</button>'
       + '<button type="button" class="q" data-act="done">Done</button>'
-      + '<button type="button" class="q" data-act="voice">🎤 Voice</button>'
+      + '<button type="button" class="q" data-act="voice">'+alfredIcon("mic")+'Voice</button>'
       + '<button type="button" class="q" data-act="note">Note</button>'
       + '<button type="button" class="q" data-act="archive">'+(isArchived(m.id)?"Unarchive":"Archive")+'</button>'
       + '</div>'
@@ -783,6 +675,7 @@ async function showDetail(id){
           body:JSON.stringify({reason:"Go Max Al! from board", actor:"owner"})
         });
         const data=await r.json().catch(()=>({}));
+    if(r.ok) window.__missionRid=null;
         if(!r.ok) throw new Error(data.error||data.message||("Go Max failed "+r.status));
         await showDetail(id);
       }catch(e){
@@ -895,6 +788,7 @@ function openComposer(){
   document.getElementById("composerErr").style.display="none";
   document.getElementById("objInput").value="";
   document.getElementById("accInput").value="";
+  window.__missionRid=null;
   setTimeout(()=>document.getElementById("objInput").focus(),50);
 }
 function closeComposer(){
@@ -917,9 +811,12 @@ document.getElementById("composerSave").onclick=async function(){
   }
   this.disabled=true;
   try{
+    // One client requestId per form: a double click or retried submit is the same mission.
+    window.__missionRid=window.__missionRid||("board-"+(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2)));
+    body.requestId=window.__missionRid;
     const r=await fetch("/api/missions",{
       method:"POST", credentials:"same-origin",
-      headers:{"Content-Type":"application/json","Accept":"application/json"},
+      headers:{"Content-Type":"application/json","Accept":"application/json","Idempotency-Key":window.__missionRid},
       body:JSON.stringify(body)
     });
     const data=await r.json().catch(()=>({}));
@@ -1021,7 +918,7 @@ document.getElementById("searchBtn").onclick=openSearch;
 document.getElementById("searchClose").onclick=closeSearch;
 document.getElementById("searchPop").addEventListener("click",function(e){ if(e.target===this) closeSearch(); });
 document.getElementById("searchInput").addEventListener("input",function(){ renderSearchHits(this.value); });
-document.getElementById("voiceBtn").onclick=function(){ voiceMode="new"; startVoice(); };
+document.getElementById("voiceBtn").onclick=function(){ if(window.alfredVoiceToggle) alfredVoiceToggle(); };
 document.getElementById("voiceFab").onclick=function(){ voiceMode="new"; startVoice(); };
 
 async function applyRoute(){
@@ -1041,5 +938,6 @@ window.addEventListener("popstate", function(){
   await applyRoute();
 })();
 </script>
+<script src="/alfred-voice.js?v=3" defer></script>
 </body>
 </html>

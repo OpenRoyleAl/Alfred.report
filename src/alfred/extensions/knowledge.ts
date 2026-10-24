@@ -23,8 +23,12 @@ const ObserveParams = Type.Object({ record_id: Type.String(), signal: Type.Strin
 
 const text = (v: unknown) => ({ output: [{ type: "text" as const, text: JSON.stringify(v) }] });
 
-export function knowledgeTools(db: D1Database): ToolRegistration[] {
+export function knowledgeTools(db: D1Database, allowed: () => boolean = () => true): ToolRegistration[] {
   const D = db as never;
+  const gate = async <T>(run: () => Promise<T>) => {
+    if (!allowed()) return text({ error: "owner only" });
+    return text(await run());
+  };
   const tools: ToolRegistration[] = [
     {
       name: "kg_create",
@@ -32,8 +36,10 @@ export function knowledgeTools(db: D1Database): ToolRegistration[] {
       parameters: CreateParams,
       replay: "unsafe",
       async execute(a: { type: (typeof RECORD_TYPES)[number]; title: string; content?: string }) {
-        const r = await kg.createRecord(D, { type: a.type, title: a.title, content: a.content });
-        return text({ id: r.id, type: r.type, title: r.title });
+        return gate(async () => {
+          const r = await kg.createRecord(D, { type: a.type, title: a.title, content: a.content });
+          return { id: r.id, type: r.type, title: r.title };
+        });
       },
     },
     {
@@ -42,7 +48,7 @@ export function knowledgeTools(db: D1Database): ToolRegistration[] {
       parameters: IdParams,
       replay: "safe",
       async execute(a: { id: string }) {
-        return text((await kg.getRecord(D, a.id)) ?? { error: "not found" });
+        return gate(async () => (await kg.getRecord(D, a.id)) ?? { error: "not found" });
       },
     },
     {
@@ -51,8 +57,10 @@ export function knowledgeTools(db: D1Database): ToolRegistration[] {
       parameters: SearchParams,
       replay: "safe",
       async execute(a: { query: string; limit?: number }) {
-        const rows = await kg.searchRecords(D, a.query, a.limit ?? 20);
-        return text(rows.map((r) => ({ id: r.id, type: r.type, title: r.title, status: r.status })));
+        return gate(async () => {
+          const rows = await kg.searchRecords(D, a.query, a.limit ?? 20);
+          return rows.map((r) => ({ id: r.id, type: r.type, title: r.title, status: r.status }));
+        });
       },
     },
     {
@@ -61,7 +69,7 @@ export function knowledgeTools(db: D1Database): ToolRegistration[] {
       parameters: LinkParams,
       replay: "unsafe",
       async execute(a: { source_id: string; target_id: string; relation: string }) {
-        return text(await kg.createEdge(D, a.source_id, a.target_id, a.relation));
+        return gate(async () => kg.createEdge(D, a.source_id, a.target_id, a.relation));
       },
     },
     {
@@ -70,7 +78,7 @@ export function knowledgeTools(db: D1Database): ToolRegistration[] {
       parameters: ObserveParams,
       replay: "unsafe",
       async execute(a: { record_id: string; signal: string }) {
-        return text(await kg.createObservation(D, { record_id: a.record_id, signal: a.signal, source: "alfred", confidence: 1 } as never));
+        return gate(async () => kg.createObservation(D, { record_id: a.record_id, signal: a.signal, source: "alfred", confidence: 1 } as never));
       },
     },
   ] as unknown as ToolRegistration[];

@@ -40,8 +40,9 @@ pub extern "C" fn dealloc(ptr: *mut u8, len: usize) {
     }
 }
 
-fn read(ptr: *const u8, len: usize) -> &'static str {
-    unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, len)) }
+fn read(ptr: *const u8, len: usize) -> Result<&'static str, String> {
+    let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+    std::str::from_utf8(bytes).map_err(|_| "invalid utf-8".into())
 }
 
 fn write(out: String) -> u64 {
@@ -52,7 +53,7 @@ fn write(out: String) -> u64 {
 }
 
 fn call(ptr: *const u8, len: usize, f: fn(&str) -> Result<String, String>) -> u64 {
-    match f(read(ptr, len)) {
+    match read(ptr, len).and_then(f) {
         Ok(s) => write(s),
         Err(e) => write(serde_json::json!({ "error": e }).to_string()),
     }

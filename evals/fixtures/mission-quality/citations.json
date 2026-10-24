@@ -1,0 +1,87 @@
+[
+  {
+    "id": "cited-unread-url-is-sent-back",
+    "suite": "mission-quality",
+    "check": "durable_plan",
+    "input": {
+      "goal": "What is the population of Lima?",
+      "kind": "mission",
+      "tasks": [
+        {
+          "id": "t1",
+          "seq": 1,
+          "name": "model",
+          "status": "done",
+          "attempts": 1,
+          "output": "{\"final\":\"Lima has 10M people (https://en.wikipedia.org/wiki/Lima).\",\"evidence\":\"\"}"
+        }
+      ]
+    },
+    "expect": { "action": "call_model" }
+  },
+  {
+    "id": "repeat-uncited-finishes-flagged-not-success-lesson",
+    "suite": "mission-quality",
+    "check": "durable_plan",
+    "input": {
+      "goal": "What is the population of Lima?",
+      "kind": "mission",
+      "tasks": [
+        {
+          "id": "t1",
+          "seq": 1,
+          "name": "model",
+          "status": "done",
+          "attempts": 1,
+          "output": "{\"final\":\"Lima has 10M people (https://en.wikipedia.org/wiki/Lima).\",\"evidence\":\"\"}"
+        },
+        {
+          "id": "t2",
+          "seq": 2,
+          "name": "model",
+          "status": "done",
+          "attempts": 1,
+          "output": "{\"final\":\"Lima has 10M people (https://en.wikipedia.org/wiki/Lima).\",\"evidence\":\"\"}"
+        }
+      ]
+    },
+    "expect": { "action": "finish", "uncited": ["https://en.wikipedia.org/wiki/Lima"] }
+  },
+  {
+    "id": "fetched-url-may-be-cited",
+    "suite": "mission-quality",
+    "check": "durable_plan",
+    "input": {
+      "goal": "What is the population of Lima?",
+      "kind": "mission",
+      "tasks": [
+        {
+          "id": "t1",
+          "seq": 1,
+          "name": "model",
+          "status": "done",
+          "attempts": 1,
+          "output": "{\"tool\":\"web_fetch\",\"args\":{\"url\":\"https://en.wikipedia.org/wiki/Lima\"}}"
+        },
+        {
+          "id": "t2",
+          "seq": 2,
+          "name": "web_fetch",
+          "status": "done",
+          "attempts": 1,
+          "input": { "url": "https://en.wikipedia.org/wiki/Lima" },
+          "output": "HTTP 200 https://en.wikipedia.org/wiki/Lima\nLima is the capital of Peru."
+        },
+        {
+          "id": "t3",
+          "seq": 3,
+          "name": "model",
+          "status": "done",
+          "attempts": 1,
+          "output": "{\"final\":\"Lima is the capital of Peru (https://en.wikipedia.org/wiki/Lima).\",\"evidence\":\"https://en.wikipedia.org/wiki/Lima\"}"
+        }
+      ]
+    },
+    "expect": { "action": "finish", "uncited": [], "answerContains": "capital of Peru" }
+  }
+]

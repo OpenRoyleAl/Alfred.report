@@ -2,7 +2,8 @@ import PostalMime from "postal-mime";
 import { ownerTenant } from "./tenant.ts";
 import type { Env } from "./env";
 import { BRAND, brandContext } from "../brand";
-import { isOwnerEmail } from "./access";
+import { isOwnerEmail } from "./access.ts";
+import { senderAuthenticated } from "./mail-auth.ts";
 
 export async function ensureMailSchema(db: D1Database): Promise<void> {
   await db
@@ -26,14 +27,7 @@ export interface InboundEmail {
   setReject?: (reason: string) => void;
 }
 
-/**
- * The sender is authenticated when the receiving MTA recorded a DMARC (or DKIM) pass for it.
- * Email Routing adds the Authentication-Results header; without a pass a forged From is ignored.
- */
-export function senderAuthenticated(headers: Headers): boolean {
-  const ar = (headers.get("authentication-results") || "").toLowerCase();
-  return /\bdmarc=pass\b/.test(ar) || /\bdkim=pass\b/.test(ar);
-}
+export { senderAuthenticated } from "./mail-auth.ts";
 
 /**
  * Inbound mail (Email Routing -> this Worker). Every message is logged and acknowledged.
@@ -72,7 +66,7 @@ export async function handleInboundEmail(message: InboundEmail, env: Env): Promi
     }
   }
 
-  if (!env.EMAIL?.send || !env.DOMAIN) return;
+  if (!owner || !env.EMAIL?.send || !env.DOMAIN) return;
   try {
     await env.EMAIL.send({
       from: { name: brand.instanceBrand, email: `${BRAND.senderLocalPart}@${env.DOMAIN}` },

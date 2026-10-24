@@ -7,6 +7,7 @@ import { isOwnerEmail } from "./access.ts";
 import { ownerTenant, postLoginPath } from "./tenant.ts";
 import { secretGet } from "./secret";
 import { navSafeNext } from "../alfred/core.ts";
+import { signOAuthState, verifyOAuthState } from "./oauth-state.ts";
 import {
   ensureKissSchema,
   mintSession,
@@ -25,51 +26,6 @@ async function clientId(env: Env): Promise<string> {
 }
 async function clientSecret(env: Env): Promise<string> {
   return await secretGet(env.GOOGLE_CLIENT_SECRET);
-}
-
-function b64url(buf: ArrayBuffer | Uint8Array | string): string {
-  let bytes: Uint8Array;
-  if (typeof buf === "string") bytes = new TextEncoder().encode(buf);
-  else if (buf instanceof ArrayBuffer) bytes = new Uint8Array(buf);
-  else bytes = buf;
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-async function signState(env: Env, payload: object): Promise<string> {
-  const secret = (await secretGet(env.JWT_SECRET)) || (await clientSecret(env)) || "alfred-dev-state";
-  const body = b64url(JSON.stringify(payload));
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
-  return `${body}.${b64url(sig)}`;
-}
-
-async function verifyState(env: Env, state: string): Promise<Record<string, unknown> | null> {
-  const [body, sig] = state.split(".");
-  if (!body || !sig) return null;
-  const secret = (await secretGet(env.JWT_SECRET)) || (await clientSecret(env)) || "alfred-dev-state";
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const expect = b64url(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
-  if (expect !== sig) return null;
-  try {
-    const json = atob(body.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(json) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
 }
 
 async function upsertGoogleUser(
@@ -104,8 +60,12 @@ async function upsertGoogleUser(
 
   if (existing) {
     try {
-      await env.DB.prepare(`UPDATE kiss_users SET google_sub = ?, name = COALESCE(NULLIF(?, ''), name) WHERE email = ?`)
-        .bind(profile.sub, name, email)
+      // Linking Google disables any prior password hash so a pre-registered
+      // unverified password account cannot keep a backdoor after the owner claims it.
+      await env.DB.prepare(
+        `UPDATE kiss_users SET google_sub = ?, name = COALESCE(NULLIF(?, ''), name), pass_salt = 'google', pass_hash = ? WHERE email = ?`
+      )
+        .bind(profile.sub, name, `google:${profile.sub}`, email)
         .run();
     } catch {
       /* ignore */
@@ -186,7 +146,7 @@ export async function handleGoogleAuth(req: Request, env: Env, url: URL): Promis
       callbackURL = navSafeNext(url.searchParams.get("callbackURL"));
       handle = url.searchParams.get("handle") || "";
     }
-    const state = await signState(env, {
+    const state = await signOAuthState(env, {
       cb: callbackURL,
       handle,
       t: Date.now(),
@@ -216,7 +176,7 @@ export async function handleGoogleAuth(req: Request, env: Env, url: URL): Promis
     }
     const code = url.searchParams.get("code");
     const stateRaw = url.searchParams.get("state") || "";
-    const state = await verifyState(env, stateRaw);
+    const state = await verifyOAuthState(env, stateRaw);
     if (!code || !state) {
       return Response.redirect(new URL("/login?error=bad_state", origin).toString(), 302);
     }

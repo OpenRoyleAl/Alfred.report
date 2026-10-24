@@ -28,6 +28,7 @@ import { extractMission, type IntakeSource } from "./clairic";
 import { buildReport, REPORT_LIMIT, type MissionRow, type TheReport } from "./report";
 import { instanceBrand } from "../brand";
 import { durableCreate, durableGet, durableLessons, durableList, durableReportRow, isDurableId, type DurableCreateIn } from "../lib/durable-client";
+import { nextBindState } from "./bind";
 
 export interface AlfredState {
   tenantId: string | null;
@@ -58,6 +59,8 @@ export class Alfred extends Agent<Env, AlfredState> {
   private evidence = new Map<string, string>();
   private escalations = new Map<string, string>();
   private missionQueue: Promise<unknown> = Promise.resolve();
+  /** Privilege of the caller that last bound this isolate (not persisted). */
+  private callerIsOwner = false;
 
   private routing = createAlfredModels(this.env);
   private gates = clefGates(this.env);
@@ -73,7 +76,9 @@ export class Alfred extends Agent<Env, AlfredState> {
         // Prune tools that cannot work here: fewer tool schemas per request = smaller, stable prefix.
         ...(this.env.MEMORY ? memoryTools(this.env, tenant, () => this.activeMission) : []),
         ...missionTools(this.env, tenant, (id, ev) => this.evidence.set(this.activeMission, `${id}: ${ev}`)),
-        ...(this.state?.isOwner ? knowledgeTools(this.env.DB) : []),
+        ...(this.state?.isOwner
+          ? knowledgeTools(this.env.DB, () => this.callerIsOwner)
+          : []),
       ].map((t) => guardTool(t, guard));
 
       this.registry.install({
@@ -106,9 +111,10 @@ export class Alfred extends Agent<Env, AlfredState> {
 
   /** Bind this object to a verified tenant (called by the Worker after auth). Idempotent. */
   async bind(tenantId: string, isOwner: boolean): Promise<void> {
-    if (this.state.tenantId === tenantId && this.state.isOwner === isOwner) return;
-    if (this.state.tenantId && this.state.tenantId !== tenantId) throw new Error("tenant mismatch");
-    this.setState({ ...this.state, tenantId, isOwner });
+    const next = nextBindState(this.state, tenantId, isOwner);
+    this.callerIsOwner = isOwner;
+    if (this.state.tenantId === next.tenantId && this.state.isOwner === next.isOwner) return;
+    this.setState({ ...this.state, ...next });
   }
 
   /** Owner-tenant consolidation: everything needed to copy this object's missions elsewhere. */
@@ -227,9 +233,9 @@ export class Alfred extends Agent<Env, AlfredState> {
         source: opts.source ?? "web",
         delaySeconds: opts.delaySeconds ?? null,
         runAt: opts.runAt ?? null,
-        debugStepDelayMs: this.state.isOwner ? opts.debugStepDelayMs : 0,
+        debugStepDelayMs: this.callerIsOwner ? opts.debugStepDelayMs : 0,
         requireEvidence: opts.requireEvidence ?? false,
-        debugSearch: this.state.isOwner && opts.debugSearch === "force-exa" ? "force-exa" : null,
+        debugSearch: this.callerIsOwner && opts.debugSearch === "force-exa" ? "force-exa" : null,
       });
       return { ...r, engine: "durable" };
     }
@@ -431,7 +437,7 @@ export class Alfred extends Agent<Env, AlfredState> {
     }
     if (route.route === "ops") {
       const d = await this.gates.escalate(prompt); // fails closed
-      if (d.escalate && !this.state.isOwner) {
+      if (d.escalate && !this.callerIsOwner) {
         return { text: "This needs the account owner's approval before Alfred acts.", status: "needs_approval", route, escalation: d.reason };
       }
     }
@@ -441,7 +447,7 @@ export class Alfred extends Agent<Env, AlfredState> {
 
   /** Sandbox quota: count one use of `kind` today; refuse past `limit` (owners are not limited). */
   async consumeQuota(kind: string, limit: number): Promise<{ ok: boolean; used: number; limit: number }> {
-    if (this.state.isOwner) return { ok: true, used: 0, limit: Infinity };
+    if (this.callerIsOwner) return { ok: true, used: 0, limit: Infinity };
     this.sql`CREATE TABLE IF NOT EXISTS alfred_quota (day TEXT, kind TEXT, n INTEGER, PRIMARY KEY (day, kind))`;
     const day = new Date().toISOString().slice(0, 10);
     const [r] = this.sql<{ n: number }>`SELECT n FROM alfred_quota WHERE day = ${day} AND kind = ${kind}`;
@@ -456,7 +462,7 @@ export class Alfred extends Agent<Env, AlfredState> {
    * Owner-only (the Worker checks the sender before calling this).
    */
   async missionFromEmail(subject: string, body: string): Promise<{ missionId: string; objective: string }> {
-    if (!this.state.isOwner) throw new Error("owner only");
+    if (!this.callerIsOwner) throw new Error("owner only");
     let objective = "";
     try {
       const x = await extractMission(this.env, { kind: "email", subject, body });
@@ -475,7 +481,7 @@ export class Alfred extends Agent<Env, AlfredState> {
    * reads the typed fields so ORAL can read back the uncertain ones before "Go Max AI!" starts it.
    */
   async draftFromVoice(transcript: string): Promise<{ objective: string; needsReview: string[]; due: string | null }> {
-    if (!this.state.isOwner) throw new Error("owner only");
+    if (!this.callerIsOwner) throw new Error("owner only");
     const objective = transcript.trim().slice(0, 4000);
     let needsReview: string[] = [];
     let due: string | null = null;
@@ -492,7 +498,7 @@ export class Alfred extends Agent<Env, AlfredState> {
 
   /** Owner voice "Go Max AI!" -> start the drafted mission (evidence required, like email). */
   async missionFromVoice(objective: string, requestId?: string | null, source: "voice" | "siri" | "oral" = "voice"): Promise<{ missionId: string }> {
-    if (!this.state.isOwner) throw new Error("owner only");
+    if (!this.callerIsOwner) throw new Error("owner only");
     const o = objective.trim().slice(0, 4000);
     if (o.length < 3) throw new Error("objective required");
     // A repeated "Go Max AI!" for the same draft within 10 minutes is the same request (one run).

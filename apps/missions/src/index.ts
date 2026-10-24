@@ -102,6 +102,8 @@ export default {
 
     if (url.pathname === "/" || url.pathname === "/chat") {
       if (req.headers.get("upgrade") === "websocket") {
+        const deniedWs = requireOpsAuth(req, env);
+        if (deniedWs) return deniedWs;
         const id = env.MISSIONS_AGENT.idFromName("default");
         const stub = env.MISSIONS_AGENT.get(id);
         return stub.fetch(req);
@@ -113,6 +115,8 @@ export default {
     }
 
     if (url.pathname === "/api/inbox" && req.method === "POST") {
+      const deniedInbox = requireOpsAuth(req, env);
+      if (deniedInbox) return deniedInbox;
       const body = await req.json() as { source: string; content: string; metadata?: Record<string, unknown> };
       const id = env.MISSIONS_AGENT.idFromName("default");
       const stub = env.MISSIONS_AGENT.get(id);
@@ -124,6 +128,8 @@ export default {
     }
 
     if (url.pathname === "/api/briefing" && req.method === "POST") {
+      const deniedBrief = requireOpsAuth(req, env);
+      if (deniedBrief) return deniedBrief;
       const instance = await env.BRIEFING_WORKFLOW.create({
         params: { date: new Date().toISOString().split("T")[0] },
       });
@@ -131,6 +137,8 @@ export default {
     }
 
     if (url.pathname === "/api/maintenance" && req.method === "POST") {
+      const deniedMaint = requireOpsAuth(req, env);
+      if (deniedMaint) return deniedMaint;
       const instance = await env.MAINTENANCE_WORKFLOW.create({
         params: { date: new Date().toISOString().split("T")[0] },
       });
@@ -138,6 +146,8 @@ export default {
     }
 
     if (url.pathname === "/api/stats" && req.method === "GET") {
+      const deniedStats = requireOpsAuth(req, env);
+      if (deniedStats) return deniedStats;
       const id = env.MISSIONS_AGENT.idFromName("default");
       const stub = env.MISSIONS_AGENT.get(id);
       const resp = await stub.fetch(new Request("https://internal/stats"));
@@ -145,6 +155,8 @@ export default {
     }
 
     if (url.pathname.startsWith("/api/workflow/") && req.method === "GET") {
+      const deniedWf = requireOpsAuth(req, env);
+      if (deniedWf) return deniedWf;
       const workflowId = url.pathname.split("/")[3];
       const type = url.searchParams.get("type") || "briefing";
       const workflow = type === "maintenance" ? env.MAINTENANCE_WORKFLOW : env.BRIEFING_WORKFLOW;
@@ -173,6 +185,8 @@ export default {
     // ─── LLM routes ────────────────────────────────────────────
 
     if (url.pathname === "/llm/health" && req.method === "GET") {
+      const deniedHealth = requireOpsAuth(req, env);
+      if (deniedHealth) return deniedHealth;
       const probe = await llm.healthProbe(env);
       return Response.json({
         ...probe,

@@ -730,20 +730,18 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
     }));
   }
 
-  // GBP — list locations
-  if (url.pathname === "/api/gbp/locations") {
-    const { fetchGBPLocations } = await import("./lib/gbp");
-    const locations = await fetchGBPLocations(env);
-    return Response.json({ locations });
-  }
-
-  // GBP — reviews + posts + keywords for a location
-  if (url.pathname === "/api/gbp/reviews") {
+  // GBP — owner-only (service-account access to the instance's Business Profile).
+  if (url.pathname === "/api/gbp/locations" || url.pathname === "/api/gbp/reviews") {
+    if (!user.isOwner) return Response.json({ error: "owner only" }, { status: 403 });
+    if (url.pathname === "/api/gbp/locations") {
+      const { fetchGBPLocations } = await import("./lib/gbp");
+      const locations = await fetchGBPLocations(env);
+      return Response.json({ locations });
+    }
     const locationId = url.searchParams.get("locationId");
     if (!locationId) return Response.json({ error: "locationId required" }, { status: 400 });
     const { fetchGBPReviews } = await import("./lib/gbp");
-    const data = await fetchGBPReviews(env, locationId);
-    return Response.json(data);
+    return Response.json(await fetchGBPReviews(env, locationId));
   }
 
   if (url.pathname === "/api/run") {

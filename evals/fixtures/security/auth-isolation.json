@@ -1,0 +1,6 @@
+[
+  { "id": "unaligned-dkim-is-not-auth", "suite": "security", "check": "sender_auth", "input": { "authenticationResults": "mx; dkim=pass header.d=evil.example" }, "expect": { "ok": false } },
+  { "id": "dmarc-pass-is-auth", "suite": "security", "check": "sender_auth", "input": { "authenticationResults": "mx; dmarc=pass" }, "expect": { "ok": true } },
+  { "id": "bind-never-downgrades-owner", "suite": "security", "check": "bind", "input": { "current": { "tenantId": "owner", "isOwner": true }, "tenantId": "owner", "isOwner": false }, "expect": { "state": { "tenantId": "owner", "isOwner": true } } },
+  { "id": "bind-refuses-other-tenant", "suite": "security", "check": "bind_throws", "input": { "current": { "tenantId": "a", "isOwner": false }, "tenantId": "b", "isOwner": false }, "expect": {} }
+]

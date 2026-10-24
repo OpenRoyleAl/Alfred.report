@@ -1,0 +1,68 @@
+[
+  {
+    "id": "uncited-source-fails-and-no-lesson",
+    "suite": "mission-quality",
+    "check": "review",
+    "input": {
+      "missionId": "m1",
+      "status": "done",
+      "finalText": "According to Wikipedia, Lima has 10M.",
+      "events": [{ "tool": "web_search", "args_hash": "a", "ok": true }],
+      "logs": [{ "id": "l", "model": "x", "success": true, "status": 200, "tokens_in": 100, "tokens_out": 50, "cost": 0, "duration": 1 }],
+      "missingLogs": 0,
+      "evidence": "https://a.b",
+      "requireEvidence": false,
+      "uncited": ["https://en.wikipedia.org/wiki/Lima"]
+    },
+    "expect": { "verdict": "fail", "lessonOk": false, "flag": "uncited_source" }
+  },
+  {
+    "id": "interrupted-is-partial-no-lesson",
+    "suite": "mission-quality",
+    "check": "review",
+    "input": {
+      "missionId": "m2",
+      "status": "done",
+      "finalText": "Saved the note.",
+      "events": [{ "tool": "note_save", "args_hash": "n", "ok": true }],
+      "logs": [{ "id": "l", "model": "x", "success": true, "status": 200, "tokens_in": 80, "tokens_out": 20, "cost": 0, "duration": 1 }],
+      "missingLogs": 0,
+      "evidence": "note t2",
+      "requireEvidence": false,
+      "interrupted": 1
+    },
+    "expect": { "verdict": "pass", "lessonOk": false, "flag": "interrupted" }
+  },
+  {
+    "id": "no-evidence-no-lesson-even-on-pass-path",
+    "suite": "mission-quality",
+    "check": "review",
+    "input": {
+      "missionId": "m3",
+      "status": "done",
+      "finalText": "ok",
+      "events": [{ "tool": "web_search", "args_hash": "a", "ok": true }],
+      "logs": [{ "id": "l", "model": "x", "success": true, "status": 200, "tokens_in": 100, "tokens_out": 50, "cost": 0, "duration": 1 }],
+      "missingLogs": 0,
+      "evidence": null,
+      "requireEvidence": true
+    },
+    "expect": { "verdict": "fail", "lessonOk": false, "flag": "no_evidence" }
+  },
+  {
+    "id": "passing-evidenced-run-may-teach",
+    "suite": "mission-quality",
+    "check": "review",
+    "input": {
+      "missionId": "m4",
+      "status": "done",
+      "finalText": "Lima is the capital of Peru.",
+      "events": [{ "tool": "web_fetch", "args_hash": "f", "ok": true }],
+      "logs": [{ "id": "l", "model": "x", "success": true, "status": 200, "tokens_in": 100, "tokens_out": 50, "cost": 0, "duration": 1 }],
+      "missingLogs": 0,
+      "evidence": "https://en.wikipedia.org/wiki/Lima",
+      "requireEvidence": true
+    },
+    "expect": { "verdict": "pass", "lessonOk": true }
+  }
+]

@@ -1,0 +1,40 @@
+[
+  {
+    "id": "empty-report-is-one-breath",
+    "suite": "mission-quality",
+    "check": "report_speak",
+    "input": { "brand": "acme.report!", "rows": [], "now": 1000, "limit": 5 },
+    "expect": { "maxWords": 20, "contains": "No missions yet.", "omits": "http" }
+  },
+  {
+    "id": "spoken-report-stays-short-with-three-missions",
+    "suite": "mission-quality",
+    "check": "report_speak",
+    "input": {
+      "brand": "acme.report!",
+      "now": 10000000,
+      "limit": 5,
+      "rows": [
+        {
+          "id": "a",
+          "objective": "Renew the domain for the shop.",
+          "status": "done",
+          "verdict": "pass",
+          "started_at": 9997000,
+          "finished_at": 9998000,
+          "review": { "verdict": "pass", "flags": [], "done": { "done": true } }
+        },
+        {
+          "id": "b",
+          "objective": "Send the invoice to the client",
+          "status": "done",
+          "verdict": "fail",
+          "started_at": 9998000,
+          "finished_at": 9999000,
+          "review": { "verdict": "fail", "flags": [{ "kind": "escalated", "blocking": true }] }
+        }
+      ]
+    },
+    "expect": { "maxWords": 80, "contains": "The Report.", "omits": "according to" }
+  }
+]

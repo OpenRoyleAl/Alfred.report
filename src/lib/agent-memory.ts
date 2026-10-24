@@ -35,10 +35,10 @@ export async function kingdom(env: MemoryEnv, tenant: string, archive = false): 
   return env.MEMORY.getProfile(memoryProfile(tenant, archive));
 }
 
-export async function recallFor(env: MemoryEnv, tenant: string, text: string, budgetTokens?: number | null, referenceDate?: Date, archive = false): Promise<MemoryShape & { count: number }> {
+export async function recallFor(env: MemoryEnv, tenant: string, text: string, budgetTokens?: number | null, referenceDate?: Date, archive = false, confidence?: Record<string, number>): Promise<MemoryShape & { count: number }> {
   const q = memoryQuery(text);
   const r = await (await kingdom(env, tenant, archive)).recall(q, { responseLength: "short", ...(referenceDate ? { referenceDate } : {}) });
-  const shaped = memoryShape({ answer: r.answer || "", candidates: (r.candidates || []).map((c) => ({ id: c.id, summary: c.summary, score: c.score })), budget_tokens: budgetTokens ?? null });
+  const shaped = memoryShape({ answer: r.answer || "", candidates: (r.candidates || []).map((c) => ({ id: c.id, summary: c.summary, score: c.score })), budget_tokens: budgetTokens ?? null, ...(confidence ? { confidence } : {}) });
   return { ...shaped, count: r.count };
 }
 

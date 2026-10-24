@@ -765,6 +765,12 @@ async function handleDurable(req: Request, env: Env, url: URL): Promise<Response
     if (url.pathname === "/durable/lessons" && req.method === "GET") {
       return Response.json({ lessons: await stub.durableLessons(Number(url.searchParams.get("limit")) || 20) });
     }
+    if (url.pathname === "/durable/consolidate" && req.method === "POST") {
+      return Response.json(await stub.durableConsolidate(tenant, body.force !== false));
+    }
+    if (url.pathname === "/durable/memory-health" && req.method === "GET") {
+      return Response.json(await stub.durableMemoryHealth());
+    }
     if (url.pathname === "/durable/stats" && req.method === "GET") {
       return Response.json(await stub.durableStats());
     }

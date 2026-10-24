@@ -315,9 +315,9 @@ export function memoryQuery(text: string): string {
 export function memoryStorePlan(input: { mission_id: string; objective: string; answer: string; evidence: string | null; lesson_ok: boolean; verdict: string; interrupted: number; tools: string[] }): MemoryStorePlan {
   return callJson("memory_store", input);
 }
-export function memoryShape(input: { answer: string; candidates: Array<{ id: string; summary: string; score: number }>; budget_tokens?: number | null }): MemoryShape {
+export function memoryShape(input: { answer: string; candidates: Array<{ id: string; summary: string; score: number }>; budget_tokens?: number | null; confidence?: Record<string, number> }): MemoryShape {
   return callJson("memory_shape", input);
 }
-export function memoryOp<T>(op: "forget" | "remember" | "export" | "uncited", args: unknown): T {
+export function memoryOp<T>(op: "forget" | "remember" | "export" | "uncited" | "confidence" | "consolidate" | "notice", args: unknown): T {
   return callJson<T>("memory_op", { op, args });
 }

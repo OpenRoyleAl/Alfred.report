@@ -1,3 +1,4 @@
+import { noticeNewUser } from "./owner-notices.ts";
 /**
  * Google OAuth for Alfred.report! - browser and CLI sign-in.
  * No API-key hell: session cookie after Google; CF account linking is later in /start.
@@ -100,6 +101,7 @@ async function upsertGoogleUser(
     .bind(email, name, tenant_id, `google:${profile.sub}`, now)
     .run();
   invalidateOwnerCache();
+  await noticeNewUser(env.DB, { tenant_id, email, name, method: "google" });
 
   try {
     await env.DB.prepare(`UPDATE kiss_users SET google_sub = ? WHERE email = ?`).bind(profile.sub, email).run();

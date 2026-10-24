@@ -97,6 +97,13 @@ pub fn tools() -> Vec<Tool> {
             input_schema: json!({ "type": "object", "properties": { "id": { "type": "string" }, "sessionId": { "type": "string", "maxLength": 64 }, "archive": { "type": "boolean" } } }),
         },
         Tool {
+            name: "memory_consolidate",
+            scope: "memory:write",
+            owner_only: false,
+            description: "Write this week's consolidation memory now (one summary of missions that passed review with evidence; replaces this week's earlier one).",
+            input_schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
             name: "history_search",
             scope: "memory:read",
             owner_only: false,
@@ -245,7 +252,7 @@ mod tests {
         };
         assert_eq!(names(&["report:read"], false), vec!["report"]);
         assert_eq!(names(&["memory:read"], false), vec!["memory_recall", "memory_export", "history_search"]);
-        assert_eq!(names(&["memory:write"], false), vec!["memory_remember", "memory_forget"]);
+        assert_eq!(names(&["memory:write"], false), vec!["memory_remember", "memory_forget", "memory_consolidate"]);
         assert!(!names(&["missions:write", "missions:read"], false).contains(&"mission_create".into()));
         assert!(names(&["missions:write"], true).contains(&"mission_create".into()));
     }

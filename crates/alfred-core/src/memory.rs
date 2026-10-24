@@ -179,6 +179,118 @@ pub struct ShapeIn {
     pub candidates: Vec<Candidate>,
     #[serde(default)]
     pub budget_tokens: Option<usize>,
+    /// Opinion confidence per memory id (from past missions that cited it). Missing = neutral.
+    #[serde(default)]
+    pub confidence: std::collections::HashMap<String, f64>,
+}
+
+/// Memories at or below this confidence are not recalled into missions (cited, then failed twice+).
+pub const MIN_CONFIDENCE: f64 = 0.3;
+
+/// Laplace estimate: (passes + 1) / (passes + fails + 2). 0.5 when unused.
+pub fn confidence_of(pass: u64, fail: u64) -> f64 {
+    (pass as f64 + 1.0) / ((pass + fail) as f64 + 2.0)
+}
+
+/// Opinion confidence update after a mission review: every recalled memory the mission cited
+/// (`mem:<id>`) gains a pass on verdict pass, a fail on verdict fail. Uncited memories are untouched.
+pub fn confidence_update(v: &Value) -> Value {
+    let recalled: Vec<String> = v["recalled"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+    let text = v["text"].as_str().unwrap_or("");
+    let verdict = v["verdict"].as_str().unwrap_or("");
+    let re = regex_lite::Regex::new(MEM_REF).expect("mem ref regex");
+    let mut cited: Vec<String> = Vec::new();
+    for cap in re.captures_iter(text) {
+        let id = cap[1].to_string();
+        if recalled.contains(&id) && !cited.contains(&id) {
+            cited.push(id);
+        }
+    }
+    let prior = |id: &str, k: &str| -> u64 {
+        v["prior"].as_array().and_then(|a| a.iter().find(|p| p["id"].as_str() == Some(id))).and_then(|p| p[k].as_u64()).unwrap_or(0)
+    };
+    let mut updates = Vec::new();
+    if verdict == "pass" || verdict == "fail" {
+        for id in &cited {
+            let (mut p, mut f) = (prior(id, "pass"), prior(id, "fail"));
+            if verdict == "pass" { p += 1 } else { f += 1 }
+            updates.push(json!({ "id": id, "pass": p, "fail": f, "confidence": confidence_of(p, f) }));
+        }
+    }
+    json!({ "cited": cited, "updates": updates })
+}
+
+/// ISO week label, e.g. 2026-W43, from unix ms.
+pub fn iso_week(ms: i64) -> String {
+    let days = ms.div_euclid(86_400_000);
+    let wd = (days + 3).rem_euclid(7); // 0 = Monday (1970-01-01 was a Thursday)
+    let thursday = days - wd + 3;
+    let (y, _, _) = civil(thursday);
+    let jan1 = days_from_civil(y, 1, 1);
+    let week = (thursday - jan1) / 7 + 1;
+    format!("{y}-W{week:02}")
+}
+fn civil(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (yoe + era * 400 + if m <= 2 { 1 } else { 0 }, m, d)
+}
+fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (m as i64 + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// Weekly consolidation: one deterministic summary memory per kingdom per ISO week, built only
+/// from missions that passed review AND were stored (no model writes it). Session `weekly-<week>`
+/// so a re-run replaces it (deleteSession first) and forget-by-session removes it.
+pub fn consolidate(v: &Value) -> Value {
+    let now = v["now"].as_i64().unwrap_or(0);
+    let week = iso_week(now);
+    let session = format!("weekly-{week}");
+    let mut lines = Vec::new();
+    for m in v["missions"].as_array().cloned().unwrap_or_default() {
+        let stored = m["memory_status"].as_str().unwrap_or("").contains("stored (");
+        if m["verdict"].as_str() != Some("pass") || !stored {
+            continue;
+        }
+        let title: String = m["objective"].as_str().unwrap_or("").split_whitespace().take(14).collect::<Vec<_>>().join(" ");
+        let ev = m["evidence"].as_str().unwrap_or("");
+        let url = regex_lite::Regex::new(r"https?://[^\s)\]>\x22']+").expect("url").find(ev).map(|x| x.as_str().to_string()).unwrap_or_default();
+        let ans: String = m["answer"].as_str().unwrap_or("").split_whitespace().take(40).collect::<Vec<_>>().join(" ");
+        lines.push(format!("- {title}: {ans}{}", if url.is_empty() { String::new() } else { format!(" (source {url})") }));
+        if lines.len() >= 25 {
+            break;
+        }
+    }
+    if lines.is_empty() {
+        return json!({ "store": false, "reason": "no passing stored missions this week", "session_id": session, "week": week });
+    }
+    let mut weak = Vec::new();
+    for c in v["confidence"].as_array().cloned().unwrap_or_default() {
+        let conf = c["confidence"].as_f64().unwrap_or(0.5);
+        if conf <= MIN_CONFIDENCE {
+            if let Some(id) = c["id"].as_str() {
+                weak.push(format!("{id} ({conf:.2})"));
+            }
+        }
+    }
+    let mut content = format!("[weekly {week} consolidation] {} mission(s) passed review with evidence:\n{}", lines.len(), lines.join("\n"));
+    if !weak.is_empty() {
+        content.push_str(&format!("\nLow-confidence memories (cited in failed missions, not recalled): {}", weak.join(", ")));
+    }
+    let content: String = redact(&content).chars().take(30_000).collect();
+    json!({ "store": true, "reason": "ok", "session_id": session, "week": week, "count": lines.len(), "content": content })
 }
 
 fn tokens(s: &str) -> usize {
@@ -189,8 +301,10 @@ fn tokens(s: &str) -> usize {
 /// The ids returned are the only memory ids a mission may cite.
 pub fn shape_recall(i: &ShapeIn) -> Value {
     let budget = i.budget_tokens.unwrap_or(DEFAULT_BUDGET_TOKENS).clamp(50, 8000);
-    let mut c: Vec<Candidate> = i.candidates.iter().filter(|c| valid_memory_id(&c.id)).cloned().collect();
-    c.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    let conf = |id: &str| i.confidence.get(id).copied().unwrap_or(0.5);
+    let mut c: Vec<Candidate> = i.candidates.iter().filter(|c| valid_memory_id(&c.id) && conf(&c.id) > MIN_CONFIDENCE).cloned().collect();
+    // Rank by search score weighted by opinion confidence (neutral 0.5 keeps the search order).
+    c.sort_by(|a, b| (b.score * conf(&b.id)).partial_cmp(&(a.score * conf(&a.id))).unwrap_or(std::cmp::Ordering::Equal));
     let mut used = 0usize;
     let mut items = Vec::new();
     for x in c {
@@ -200,7 +314,7 @@ pub fn shape_recall(i: &ShapeIn) -> Value {
             break;
         }
         used += t;
-        items.push(json!({ "id": x.id, "summary": s, "score": x.score }));
+        items.push(json!({ "id": x.id, "summary": s, "score": x.score, "confidence": conf(&x.id) }));
     }
     let answer_budget = budget.saturating_sub(used);
     let answer: String = i.answer.chars().take(answer_budget * 4).collect();
@@ -283,6 +397,9 @@ pub fn op_json(input: &str) -> Result<String, String> {
             let allowed: Vec<String> = v["args"]["allowed"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
             json!({ "uncited": uncited_ids(v["args"]["text"].as_str().unwrap_or(""), &allowed) })
         }
+        "confidence" => confidence_update(&v["args"]),
+        "consolidate" => consolidate(&v["args"]),
+        "notice" => crate::notice::new_user(&v["args"])?,
         other => return Err(format!("unknown memory op: {other}")),
     };
     Ok(out.to_string())
@@ -292,6 +409,40 @@ pub fn op_json(input: &str) -> Result<String, String> {
 mod tests {
     use super::*;
     const ID: &str = "01M0RWH2SGDZJRBQ6S82RH823B";
+
+    #[test]
+    fn confidence_tracks_cited_outcomes_only() {
+        const B: &str = "01M0RWH2SGDZJRBQ6S82RH823C";
+        let r = confidence_update(&json!({ "recalled": [ID, B], "text": format!("per mem:{ID} and mem:01M0RWH2SGDZJRBQ6S82RH8999"), "verdict": "fail", "prior": [{ "id": ID, "pass": 0, "fail": 1 }] }));
+        assert_eq!(r["cited"], json!([ID]));
+        assert_eq!(r["updates"][0]["fail"], 2);
+        assert!((r["updates"][0]["confidence"].as_f64().unwrap() - 0.25).abs() < 1e-9);
+        assert_eq!(confidence_update(&json!({ "recalled": [ID], "text": format!("mem:{ID}"), "verdict": "partial" }))["updates"], json!([]));
+        // Low confidence drops out of recall; higher confidence ranks first.
+        let mut conf = std::collections::HashMap::new();
+        conf.insert(ID.to_string(), 0.25);
+        conf.insert(B.to_string(), 0.9);
+        let i = ShapeIn { answer: "a".into(), candidates: vec![Candidate { id: ID.into(), summary: "x".into(), score: 0.9 }, Candidate { id: B.into(), summary: "y".into(), score: 0.5 }], budget_tokens: None, confidence: conf };
+        assert_eq!(shape_recall(&i)["ids"], json!([B]));
+    }
+
+    #[test]
+    fn weekly_consolidation_uses_only_passing_stored_missions() {
+        assert_eq!(iso_week(1_792_800_000_000), "2026-W43");
+        assert_eq!(iso_week(1_735_689_600_000), "2025-W01"); // 2025-01-01
+        let v = json!({ "now": 1_792_800_000_000i64, "missions": [
+            { "objective": "Check Agent Memory docs", "answer": "Limits are listed", "evidence": "fetched https://developers.cloudflare.com/agent-memory/ ok", "verdict": "pass", "memory_status": "recalled 1/2; stored (session dm-1)" },
+            { "objective": "Failed one", "answer": "x", "verdict": "fail", "memory_status": "not stored: fail" },
+            { "objective": "Passed not stored token=abc123", "answer": "y", "verdict": "pass", "memory_status": "not stored: no evidence" } ],
+            "confidence": [{ "id": ID, "confidence": 0.25 }] });
+        let r = consolidate(&v);
+        assert_eq!(r["store"], true);
+        assert_eq!(r["session_id"], "weekly-2026-W43");
+        assert_eq!(r["count"], 1);
+        let c = r["content"].as_str().unwrap();
+        assert!(c.contains("source https://developers.cloudflare.com/agent-memory/") && c.contains(ID) && !c.contains("Failed one"));
+        assert_eq!(consolidate(&json!({ "now": 0, "missions": [] }))["store"], false);
+    }
 
     #[test]
     fn profile_is_tenant_safe_and_injective() {
@@ -336,7 +487,7 @@ mod tests {
     #[test]
     fn budget_and_ids() {
         let cands: Vec<Candidate> = (0..20).map(|n| Candidate { id: format!("01M0RWH2SGDZJRBQ6S82RH82{:02}", n), summary: "x".repeat(200), score: n as f64 }).collect();
-        let out = shape_recall(&ShapeIn { answer: "y".repeat(5000), candidates: cands, budget_tokens: Some(300) });
+        let out = shape_recall(&ShapeIn { answer: "y".repeat(5000), candidates: cands, budget_tokens: Some(300), confidence: Default::default() });
         assert!(out["tokens"].as_u64().unwrap() <= 300);
         assert_eq!(out["items"][0]["score"], 19.0);
         let ids: Vec<String> = out["ids"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect();

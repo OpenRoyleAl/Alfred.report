@@ -19,6 +19,7 @@ import {
   durableNextAlarm,
   durablePlan,
   memoryStorePlan,
+  memoryOp,
   durableRank,
   durableRecover,
   durableFetchCheck,
@@ -170,6 +171,9 @@ export class DurableEngine {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS dm_wakes (at INTEGER, reason TEXT, recovered TEXT)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS dm_lessons (id TEXT PRIMARY KEY, mission_id TEXT, lesson TEXT, at INTEGER)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS dm_search_usage (day TEXT PRIMARY KEY, exa INTEGER)`);
+    // Opinion confidence per Agent Memory id (Rust rule in memory.rs) + weekly consolidation state.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS dm_mem_confidence (id TEXT PRIMARY KEY, pass INTEGER NOT NULL, fail INTEGER NOT NULL, confidence REAL NOT NULL, last_mission TEXT, updated_at INTEGER)`);
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS dm_meta (k TEXT PRIMARY KEY, v TEXT)`);
     // Additive columns (idempotent): evidence + review on missions, gateway log id on tasks.
     const cols = (t: string) => new Set(this.rows(`PRAGMA table_info(${t})`).map((r) => String(r.name)));
     const m = cols("dm_missions");
@@ -406,7 +410,8 @@ export class DurableEngine {
     let items: Array<{ id: string; summary: string }> = [];
     let status: string;
     try {
-      const r = await recallFor(this.h.env, String(m.tenant), String(m.objective), 600, new Date());
+      const confidence = Object.fromEntries(this.rows(`SELECT id, confidence FROM dm_mem_confidence`).map((c) => [String(c.id), Number(c.confidence)]));
+      const r = await recallFor(this.h.env, String(m.tenant), String(m.objective), 600, new Date(), false, confidence);
       items = r.items.map((x) => ({ id: x.id, summary: x.summary }));
       status = `recalled ${items.length}/${r.count} (${r.tokens} tokens)`;
     } catch (err) {
@@ -507,7 +512,58 @@ export class DurableEngine {
     }
     const prev = this.rows(`SELECT memory_status FROM dm_missions WHERE id = ?`, id)[0]?.memory_status;
     this.sql.exec(`UPDATE dm_missions SET memory_status = ? WHERE id = ?`, `${prev ? `${String(prev)}; ` : ""}${memStatus}`, id);
+    this.updateConfidence(id, m, answer, evidence, String(review.verdict));
+    // Weekly consolidation runs lazily: the first review of a new ISO week writes last week's summary.
+    await this.consolidate(String(m.tenant), false).catch((err) => console.error(`weekly consolidation failed: ${(err as Error).message}`));
     return review;
+  }
+
+  /** Opinion confidence (Rust): recalled memories this mission cited gain a pass or a fail. */
+  private updateConfidence(id: string, m: Row, answer: string, evidence: string | null, verdict: string): void {
+    const recalled = (JSON.parse(String(m.memory ?? "[]")) as Array<{ id: string }>).map((x) => x.id);
+    if (!recalled.length) return;
+    const ph = recalled.map(() => "?").join(",");
+    const prior = this.rows(`SELECT id, pass, fail FROM dm_mem_confidence WHERE id IN (${ph})`, ...recalled).map((r) => ({ id: String(r.id), pass: Number(r.pass), fail: Number(r.fail) }));
+    const u = memoryOp<{ updates: Array<{ id: string; pass: number; fail: number; confidence: number }> }>("confidence", { recalled, text: `${answer}\n${evidence ?? ""}`, verdict, prior });
+    for (const x of u.updates)
+      this.sql.exec(`INSERT OR REPLACE INTO dm_mem_confidence VALUES (?, ?, ?, ?, ?, ?)`, x.id, x.pass, x.fail, x.confidence, id, Date.now());
+  }
+
+  /**
+   * Weekly consolidation (Rust builds it from passing, stored missions of the last 7 days; no model).
+   * One memory per ISO week, session weekly-<week>: a re-run replaces it. force = run now.
+   */
+  async consolidate(tenant: string, force: boolean): Promise<{ week: string; status: string; id?: string; count?: number }> {
+    this.ensure();
+    const now = Date.now();
+    const last = this.rows(`SELECT v FROM dm_meta WHERE k = 'weekly_week'`)[0]?.v;
+    const since = now - 7 * 86_400_000;
+    const missions = this.rows(
+      `SELECT objective, answer, evidence, verdict, memory_status FROM dm_missions WHERE kind = 'mission' AND finished_at >= ? ORDER BY finished_at DESC LIMIT 50`,
+      since
+    );
+    const confidence = this.rows(`SELECT id, confidence FROM dm_mem_confidence WHERE confidence <= 0.3`).map((c) => ({ id: String(c.id), confidence: Number(c.confidence) }));
+    const plan = memoryOp<{ store: boolean; reason: string; session_id: string; week: string; count?: number; content?: string }>("consolidate", { now, missions, confidence });
+    if (!force && last === plan.week) return { week: plan.week, status: "already done this week" };
+    let status = `not stored: ${plan.reason}`;
+    let memId: string | undefined;
+    if (plan.store && plan.content) {
+      const p = await kingdom(this.h.env, tenant);
+      await p.deleteSession(plan.session_id);
+      memId = (await p.remember({ content: plan.content, sessionId: plan.session_id })).id;
+      status = `stored ${plan.count} mission(s) as ${memId} (session ${plan.session_id})`;
+    }
+    this.sql.exec(`INSERT OR REPLACE INTO dm_meta VALUES ('weekly_week', ?)`, plan.week);
+    this.sql.exec(`INSERT OR REPLACE INTO dm_meta VALUES ('weekly_status', ?)`, `${new Date(now).toISOString()} ${status}`);
+    return { week: plan.week, status, id: memId, count: plan.count };
+  }
+
+  memoryHealth() {
+    this.ensure();
+    return {
+      confidence: this.rows(`SELECT id, pass, fail, confidence, last_mission FROM dm_mem_confidence ORDER BY updated_at DESC LIMIT 50`),
+      weekly: Object.fromEntries(this.rows(`SELECT k, v FROM dm_meta WHERE k LIKE 'weekly_%'`).map((r) => [String(r.k), String(r.v)])),
+    };
   }
 
   /** Execute one stored task. The row is marked running BEFORE any side effect. */

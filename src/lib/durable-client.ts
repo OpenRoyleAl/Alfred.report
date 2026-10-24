@@ -83,6 +83,13 @@ export async function durableList(env: Env, tenant: string, limit = 20): Promise
   return (await call<{ missions: DurableMission[] }>(env, "/durable/missions", { query: { tenant, limit: String(limit) } })).missions;
 }
 
+export function durableConsolidate(env: Env, tenant: string) {
+  return call<{ week: string; status: string; id?: string; count?: number }>(env, "/durable/consolidate", { method: "POST", body: { tenant, force: true } });
+}
+export function durableMemoryHealth(env: Env, tenant: string) {
+  return call<{ confidence: Array<Record<string, unknown>>; weekly: Record<string, string> }>(env, "/durable/memory-health", { query: { tenant } });
+}
+
 export function durableHistory(env: Env, tenant: string, query: string, requestId?: string | null) {
   return call<DurableMission & { used: string[] }>(env, "/durable/history", { method: "POST", body: { tenant, query, requestId: requestId ?? null } });
 }

@@ -68,6 +68,16 @@ export class AlfredMissions extends Agent<Env, OrchestratorState> {
     return this.engine.lessons(limit);
   }
 
+  async durableConsolidate(tenant: string, force = true) {
+    await this.engine.wake("rpc");
+    return this.engine.consolidate(tenant, force);
+  }
+
+  async durableMemoryHealth() {
+    await this.engine.wake("rpc");
+    return this.engine.memoryHealth();
+  }
+
   async durableStats() {
     await this.engine.wake("rpc");
     return { ...this.engine.stats(), schedules: (await this.listSchedules()).filter((s) => s.callback === "durableWake") };

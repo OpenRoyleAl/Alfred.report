@@ -108,6 +108,11 @@ export async function executeMCPTool(name: string, args: Record<string, unknown>
       const m = await rememberFor(env, who.tenant_id, { content: args.content, sessionId: args.sessionId });
       return { id: m.id, type: m.type, summary: m.summary };
     }
+    case "memory_consolidate": {
+      const { durableConsolidate, durableMemoryHealth } = await import("../lib/durable-client.ts");
+      const r = await durableConsolidate(env, who.tenant_id);
+      return { ...r, health: await durableMemoryHealth(env, who.tenant_id) };
+    }
     case "memory_forget": {
       return forgetFor(env, who.tenant_id, { id: args.id, sessionId: args.sessionId, archive: args.archive });
     }

@@ -18,6 +18,7 @@ pub mod durable;
 pub mod limiter;
 pub mod mcp;
 pub mod memory;
+pub mod notice;
 pub mod models;
 pub mod nav;
 pub mod report;

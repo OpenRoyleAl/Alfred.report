@@ -1,3 +1,4 @@
+import { noticeNewUser } from "./owner-notices.ts";
 /**
  * KISS lane — email session, D1 missions/spend/memory. No tokens in responses.
  * Customers mint tokens only on their own Cloudflare account.
@@ -380,6 +381,7 @@ export async function verifySignup(env: Env, token: string): Promise<{ user: Kis
     env.DB.prepare("DELETE FROM kiss_pending WHERE email = ?").bind(p.email),
   ]);
   invalidateOwnerCache();
+  await noticeNewUser(env.DB, { tenant_id: p.tenant_id, email: p.email, name: p.name, method: "password" });
   return { user: { email: p.email, name: p.name, tenant_id: p.tenant_id, billing_paid: 0 } };
 }
 

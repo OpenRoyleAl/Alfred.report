@@ -1,3 +1,5 @@
+import { recentNotices } from "../lib/owner-notices.ts";
+import { isOwnerTenantId } from "../lib/tenant.ts";
 /**
  * Alfred - the agent. A Pi Durable harness running in the `Alfred` Durable Object
  * (one object per tenant, addressed by tenant id).
@@ -287,7 +289,16 @@ export class Alfred extends Agent<Env, AlfredState> {
       review: r.review ? (JSON.parse(String(r.review)) as ReviewResult) : null,
     }));
     const merged = [...missions, ...durable].sort((a, b) => b.started_at - a.started_at).slice(0, limit);
-    return buildReport(instanceBrand(this.env.DOMAIN || ""), merged, Date.now(), limit);
+    const report = buildReport(instanceBrand(this.env.DOMAIN || ""), merged, Date.now(), limit);
+    // Kingdom model: only the default king's Report lists who joined (signup metadata only).
+    if (this.state.tenantId && (await isOwnerTenantId(this.env as never, this.state.tenantId))) {
+      try {
+        for (const n of await recentNotices(this.env.DB)) report.attention.push(n.text);
+      } catch (err) {
+        console.warn("owner notices failed", String((err as Error)?.message || err).slice(0, 200));
+      }
+    }
+    return report;
   }
 
   /** Owner: drop the lesson a mission produced (keeps a bad run out of self-improvement). */

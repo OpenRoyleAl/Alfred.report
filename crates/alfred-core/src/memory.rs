@@ -148,8 +148,8 @@ pub fn plan_store(i: &StoreIn) -> Value {
     let user = format!("[mission {}] {}", i.mission_id, redact(i.objective.trim()));
     let assistant = format!(
         "[experience] Alfred completed this mission (review passed; tools: {tools}).\n{}\n[world] Evidence fetched: {}",
-        redact(i.answer.trim()),
-        redact(evidence)
+        strip_mem_refs(&redact(i.answer.trim())),
+        strip_mem_refs(&redact(evidence))
     );
     json!({
         "store": true,
@@ -268,7 +268,7 @@ pub fn consolidate(v: &Value) -> Value {
         let ev = m["evidence"].as_str().unwrap_or("");
         let url = regex_lite::Regex::new(r"https?://[^\s)\]>\x22']+").expect("url").find(ev).map(|x| x.as_str().to_string()).unwrap_or_default();
         // Strip mem:<id> refs: a later mission would see them in recall and cite ids it never recalled.
-        let raw = regex_lite::Regex::new(MEM_REF).expect("mem ref regex").replace_all(m["answer"].as_str().unwrap_or(""), "a memory").to_string();
+        let raw = strip_mem_refs(m["answer"].as_str().unwrap_or(""));
         let ans: String = raw.split_whitespace().take(40).collect::<Vec<_>>().join(" ");
         lines.push(format!("- {title}: {ans}{}", if url.is_empty() { String::new() } else { format!(" (source {url})") }));
         if lines.len() >= 25 {
@@ -323,6 +323,12 @@ pub fn shape_recall(i: &ShapeIn) -> Value {
     used += tokens(&answer);
     let ids: Vec<Value> = items.iter().map(|x| x["id"].clone()).collect();
     json!({ "answer": answer, "items": items, "ids": ids, "tokens": used, "budget": budget })
+}
+
+/// Stored memory must not carry `mem:<id>` refs: a later mission would read them in recall and
+/// cite ids it never recalled (seen live: dm-d3aeab09c14240cd failed review this way).
+pub fn strip_mem_refs(text: &str) -> String {
+    regex_lite::Regex::new(MEM_REF).expect("mem ref regex").replace_all(text, "a memory").to_string()
 }
 
 /// Memory ids cited as `mem:<id>` that were not recalled for this mission.
@@ -411,6 +417,11 @@ pub fn op_json(input: &str) -> Result<String, String> {
 mod tests {
     use super::*;
     const ID: &str = "01M0RWH2SGDZJRBQ6S82RH823B";
+
+    #[test]
+    fn stored_memory_has_no_mem_refs() {
+        assert_eq!(strip_mem_refs(&format!("per mem:{ID}.")), "per a memory.");
+    }
 
     #[test]
     fn confidence_tracks_cited_outcomes_only() {

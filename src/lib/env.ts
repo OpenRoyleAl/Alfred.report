@@ -59,7 +59,6 @@ export interface Env {
   WORKERS_AI_FLOOR?: string;
   EXA_KEY_ALIAS?: string;
   EXA_CUSTOM_PROVIDER?: string;
-  SEARCH_EXA_DAILY_LIMIT?: string;
   SANDBOX_ASKS_PER_DAY?: string;
   /** "clef" (default) or "clef-flash" for the route/escalate/done gates. */
   CLEF_MODEL?: string;

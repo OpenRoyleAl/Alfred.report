@@ -1,0 +1,113 @@
+[
+ {
+  "id": "search-parallel-dedup-canonical",
+  "check": "search_fuse",
+  "input": {
+   "lists": [
+    {
+     "provider": "ceramic",
+     "items": [
+      {
+       "title": "x",
+       "description": "x",
+       "url": "https://a.com/x"
+      },
+      {
+       "title": "x",
+       "description": "x",
+       "url": "https://b.com"
+      }
+     ]
+    },
+    {
+     "provider": "exa-lite",
+     "items": [
+      {
+       "title": "x",
+       "description": "x",
+       "url": "http://www.a.com/x/?utm_source=q#top"
+      },
+      {
+       "title": "x",
+       "description": "x",
+       "url": "https://c.com"
+      }
+     ]
+    }
+   ]
+  },
+  "expect": {
+   "count": 3,
+   "first": "https://a.com/x",
+   "firstProviders": 2
+  }
+ },
+ {
+  "id": "search-one-provider-failed-keeps-order",
+  "check": "search_fuse",
+  "input": {
+   "lists": [
+    {
+     "provider": "exa-lite",
+     "items": [
+      {
+       "title": "x",
+       "description": "x",
+       "url": "https://e.com/1"
+      },
+      {
+       "title": "x",
+       "description": "x",
+       "url": "https://e.com/2"
+      }
+     ]
+    }
+   ]
+  },
+  "expect": {
+   "count": 2,
+   "first": "https://e.com/1"
+  }
+ },
+ {
+  "id": "search-rrf-agreement-wins",
+  "check": "search_fuse",
+  "input": {
+   "lists": [
+    {
+     "provider": "ceramic",
+     "items": [
+      {
+       "title": "x",
+       "description": "x",
+       "url": "https://only-c.com"
+      },
+      {
+       "title": "x",
+       "description": "x",
+       "url": "https://both.com"
+      }
+     ]
+    },
+    {
+     "provider": "exa-lite",
+     "items": [
+      {
+       "title": "x",
+       "description": "x",
+       "url": "https://only-e.com"
+      },
+      {
+       "title": "x",
+       "description": "x",
+       "url": "https://both.com"
+      }
+     ]
+    }
+   ]
+  },
+  "expect": {
+   "first": "https://both.com"
+  }
+ }
+]

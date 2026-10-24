@@ -13,7 +13,7 @@ import { googleRedirectUri } from "../src/lib/google-auth.ts";
 import { checkPassword, makePasswordHash } from "../src/lib/kiss.ts";
 import { nextBindState } from "../src/alfred/bind.ts";
 import { senderAuthenticated } from "../src/lib/mail-auth.ts";
-import { durableOp } from "../src/alfred/core.ts";
+import { durableOp, searchFuse, searchQuota } from "../src/alfred/core.ts";
 import { fetchPublicPage } from "../apps/missions/src/durable.ts";
 
 type Fixture = {
@@ -205,6 +205,18 @@ async function runCheck(f: Fixture): Promise<void> {
         ok = false;
       }
       if (ok !== Boolean(expect.ok)) throw new Error(`ok=${ok}`);
+      return;
+    }
+    case "search_fuse": {
+      const out = searchFuse(input.lists as never, Number(input.limit ?? 10));
+      if (typeof expect.count === "number" && out.length !== expect.count) throw new Error(`count ${out.length}`);
+      if (expect.first && out[0]?.url !== expect.first) throw new Error(`first ${out[0]?.url}`);
+      if (typeof expect.firstProviders === "number" && out[0]?.providers.length !== expect.firstProviders) throw new Error(`providers ${out[0]?.providers}`);
+      return;
+    }
+    case "search_quota": {
+      const q = searchQuota(input as never);
+      if (q.exa !== Boolean(expect.exa)) throw new Error(`exa=${q.exa} ${q.reason}`);
       return;
     }
     case "one_engine": {

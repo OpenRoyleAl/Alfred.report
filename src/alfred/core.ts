@@ -15,12 +15,12 @@ interface Exports {
   memory: WebAssembly.Memory;
   alloc(len: number): number;
   dealloc(ptr: number, len: number): void;
-  search_plan(ptr: number, len: number): bigint;
+  search_fuse(ptr: number, len: number): bigint;
   search_analyze(ptr: number, len: number): bigint;
   search_lite_url(ptr: number, len: number): bigint;
   search_lite_body(ptr: number, len: number): bigint;
   search_lite_parse(ptr: number, len: number): bigint;
-  search_better(ptr: number, len: number): bigint;
+  search_quota(ptr: number, len: number): bigint;
   models_floor(ptr: number, len: number): bigint;
   models_primary(ptr: number, len: number): bigint;
   models_headers(ptr: number, len: number): bigint;
@@ -97,26 +97,16 @@ function callJson<T>(fn: JsonFn, input: unknown): T {
 }
 
 export interface SearchItem { title: string; description?: string | null; url: string }
-export type SearchStage = "start" | "after_ceramic" | "after_lite" | "after_exa" | "after_deep" | "after_fallback";
-export interface SearchPlan {
-  action: "ceramic" | "exa-lite" | "exa" | "return";
-  reason: string;
-  on_fail: "throw" | "continue";
-  served?: SearchProvider;
-  next_stage?: SearchStage;
-}
 export type SearchProvider = "ceramic" | "exa-lite" | "exa";
 
-export function searchPlan(input: {
-  query: string;
-  stage: SearchStage;
-  items?: SearchItem[];
-  failed?: boolean;
-  has_lite: boolean;
-  has_exa: boolean;
-  under_cap: boolean;
-}): SearchPlan {
-  return callJson<SearchPlan>("search_plan", input);
+export interface FusedItem extends SearchItem { providers: string[]; score: number }
+/** Reciprocal rank fusion over provider lists, deduplicated by canonical URL (search.rs fuse). */
+export function searchFuse(lists: Array<{ provider: string; items: SearchItem[] }>, limit = 6): FusedItem[] {
+  return callJson<{ items: FusedItem[] }>("search_fuse", { lists, limit }).items;
+}
+/** Per-kingdom Exa quota (search.rs quota_json): owner unlimited, others `cap` per UTC day. */
+export function searchQuota(input: { owner: boolean; used: number; cap?: number | null; has_exa: boolean }): { exa: boolean; reason: string; cap: number | null; used: number } {
+  return callJson("search_quota", { ...input, cap: input.cap ?? undefined });
 }
 
 export function searchAnalyze(query: string, items: SearchItem[] = []): { terms: string[]; deep: boolean; coverage: number; thin: boolean } {
@@ -135,9 +125,6 @@ export function searchLiteParse(raw: unknown): { items: SearchItem[]; requestId:
   return callJson("search_lite_parse", raw);
 }
 
-export function searchBetter(a: SearchItem[], b: SearchItem[]): "a" | "b" {
-  return callJson<{ pick: "a" | "b" }>("search_better", { a, b }).pick;
-}
 
 export function modelsFloor(models: string[], primaryAvailable: boolean, exclude?: string | null): string[] {
   return callJson<string[]>("models_floor", { models, primary_available: primaryAvailable, exclude: exclude ?? null });

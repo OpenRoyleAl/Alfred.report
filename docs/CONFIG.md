@@ -36,7 +36,7 @@ Apps: `web` = deploy/web (src/index.ts), `missions` = apps/missions, `oral` = ap
 | `WORKERS_AI_FLOOR` | web, missions |  |  | Comma list of @cf/ models tried when the routed call fails. |
 | `EXA_KEY_ALIAS` | web, missions |  |  | Alias of the Exa key in AI Gateway Provider Keys. Set it to let the search router escalate to Exa; unset means Ceramic only. |
 | `EXA_CUSTOM_PROVIDER` | web, missions |  | `exa` | Slug of the AI Gateway custom provider for Exa's own API (base_url https://api.exa.ai, BYOK alias EXA_KEY_ALIAS). Enables the Exa Lite tier ($4/1k) between Ceramic and Exa auto. |
-| `SEARCH_EXA_DAILY_LIMIT` | web, missions |  | `200` | Max Exa escalations per day per instance; past it the router stays on Ceramic. |
+| `SEARCH_EXA_KINGDOM_DAILY` | missions |  | `20` | Daily Exa searches for each kingdom other than the owner's (all kingdoms use the owner's Exa key). The owner kingdom is unlimited; over the cap a kingdom searches Ceramic only. |
 | `MISSIONS_MODEL` | web, missions |  |  | Primary mission/coding model (Workers AI id) tried before Auto Router. Default DeepSeek V4.1 Flash; "auto" = Auto Router only. |
 | `CLEF_MODEL` | web, missions |  | `clef` | Clef model for the route/escalate/done gates: clef, clef-flash or clef-omni (audio/video input always uses clef-omni). |
 | `SANDBOX_ASKS_PER_DAY` | web, oral |  | `30` | Asks per day for a non-owner sandbox tenant (typed asks and ORAL voice turns share it). |

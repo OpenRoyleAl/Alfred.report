@@ -40,8 +40,6 @@ export interface DurableCreateIn {
   runAt?: number | null;
   debugStepDelayMs?: number;
   requireEvidence?: boolean;
-  /** Owner debug only (the Alfred DO drops it for non-owners). */
-  debugSearch?: "force-exa" | null;
   /** Verified caller is the default king (owner-only tools). Set by the Alfred DO, never by a client. */
   owner?: boolean;
 }

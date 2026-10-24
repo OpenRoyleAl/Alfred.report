@@ -1,0 +1,63 @@
+[
+ {
+  "id": "exa-quota-owner-unlimited",
+  "check": "search_quota",
+  "input": {
+   "owner": true,
+   "used": 100000,
+   "has_exa": true
+  },
+  "expect": {
+   "exa": true
+  }
+ },
+ {
+  "id": "exa-quota-kingdom-under-cap",
+  "check": "search_quota",
+  "input": {
+   "owner": false,
+   "used": 19,
+   "has_exa": true
+  },
+  "expect": {
+   "exa": true
+  }
+ },
+ {
+  "id": "exa-quota-kingdom-over-default-cap",
+  "check": "search_quota",
+  "input": {
+   "owner": false,
+   "used": 20,
+   "has_exa": true
+  },
+  "expect": {
+   "exa": false
+  }
+ },
+ {
+  "id": "exa-quota-kingdom-configured-cap",
+  "check": "search_quota",
+  "input": {
+   "owner": false,
+   "used": 5,
+   "cap": 5,
+   "has_exa": true
+  },
+  "expect": {
+   "exa": false
+  }
+ },
+ {
+  "id": "exa-quota-no-key",
+  "check": "search_quota",
+  "input": {
+   "owner": true,
+   "used": 0,
+   "has_exa": false
+  },
+  "expect": {
+   "exa": false
+  }
+ }
+]

@@ -47,7 +47,7 @@ export const SCHEMA = {
   WORKERS_AI_FLOOR: { kind: "var", apps: ["web", "missions"], description: "Comma list of @cf/ models tried when the routed call fails." },
   EXA_KEY_ALIAS: { kind: "var", apps: ["web", "missions"], description: "Alias of the Exa key in AI Gateway Provider Keys. Set it to let the search router escalate to Exa; unset means Ceramic only.", example: "default" },
   EXA_CUSTOM_PROVIDER: { kind: "var", apps: ["web", "missions"], default: "exa", description: "Slug of the AI Gateway custom provider for Exa's own API (base_url https://api.exa.ai, BYOK alias EXA_KEY_ALIAS). Enables the Exa Lite tier ($4/1k) between Ceramic and Exa auto." },
-  SEARCH_EXA_DAILY_LIMIT: { kind: "var", apps: ["web", "missions"], default: "200", description: "Max Exa escalations per day per instance; past it the router stays on Ceramic." },
+  SEARCH_EXA_KINGDOM_DAILY: { kind: "var", apps: ["missions"], default: "20", description: "Daily Exa searches for each kingdom other than the owner's (all kingdoms use the owner's Exa key). The owner kingdom is unlimited; over the cap a kingdom searches Ceramic only." },
   MISSIONS_MODEL: { kind: "var", apps: ["web", "missions"], description: "Primary mission/coding model (Workers AI id) tried before Auto Router. Default DeepSeek V4.1 Flash; \"auto\" = Auto Router only." },
   CLEF_MODEL: { kind: "var", apps: ["web", "missions"], default: "clef", description: "Clef model for the route/escalate/done gates: clef, clef-flash or clef-omni (audio/video input always uses clef-omni)." },
 

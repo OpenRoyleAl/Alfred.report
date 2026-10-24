@@ -101,7 +101,7 @@ export class Alfred extends Agent<Env, AlfredState> {
 
   async startMission(
     objective: string,
-    opts: { requireEvidence?: boolean; requestId?: string | null; source?: DurableCreateIn["source"]; fallback?: string[]; delaySeconds?: number | null; runAt?: number | null; debugStepDelayMs?: number; debugSearch?: "force-exa" | null } = {}
+    opts: { requireEvidence?: boolean; requestId?: string | null; source?: DurableCreateIn["source"]; fallback?: string[]; delaySeconds?: number | null; runAt?: number | null; debugStepDelayMs?: number } = {}
   ): Promise<{ missionId: string; requestId?: string; duplicate?: boolean; status?: string; engine: "durable"; runAt?: number }> {
     const r = await durableCreate(this.env, this.tenant(), {
       objective,
@@ -112,7 +112,6 @@ export class Alfred extends Agent<Env, AlfredState> {
       runAt: opts.runAt ?? null,
       debugStepDelayMs: this.callerIsOwner ? opts.debugStepDelayMs : 0,
       requireEvidence: opts.requireEvidence ?? false,
-      debugSearch: this.callerIsOwner && opts.debugSearch === "force-exa" ? "force-exa" : null,
       owner: this.callerIsOwner,
     });
     return { ...r, engine: "durable" };

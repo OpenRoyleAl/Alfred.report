@@ -5,7 +5,7 @@
 //! `import "*.wasm"` yields a `WebAssembly.Module`; `initCore` instantiates it in every
 //! Worker entry. A missing init caused 1101s twice — do not skip it.
 //!
-//! In Rust: search router, Exa Lite request/result shape, model floor/primary/429, The Report,
+//! In Rust: parallel search fusion (RRF) + per-kingdom Exa quota, Exa Lite request/result shape, model floor/primary/429, The Report,
 //! MCP token format + scope/tool checks, sliding-window limiters.
 //!
 //! Not in Rust (needs the JS isolate / Agents SDK): Durable Objects, `routeAgentRequest`,
@@ -63,8 +63,8 @@ fn call(ptr: *const u8, len: usize, f: fn(&str) -> Result<String, String>) -> u6
 }
 
 #[no_mangle]
-pub extern "C" fn search_plan(ptr: *const u8, len: usize) -> u64 {
-    call(ptr, len, search::plan_json)
+pub extern "C" fn search_fuse(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, search::fuse_json)
 }
 
 #[no_mangle]
@@ -88,8 +88,8 @@ pub extern "C" fn search_lite_parse(ptr: *const u8, len: usize) -> u64 {
 }
 
 #[no_mangle]
-pub extern "C" fn search_better(ptr: *const u8, len: usize) -> u64 {
-    call(ptr, len, search::better_json)
+pub extern "C" fn search_quota(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, search::quota_json)
 }
 
 #[no_mangle]

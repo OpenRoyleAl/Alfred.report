@@ -33,7 +33,7 @@ import * as kg from "./lib/db.ts";
 import { DEEPSEEK_FLASH, deepseekLimiter, gatewayId } from "../../../src/alfred/models.ts";
 import { reviewMission, summarizeLog, type GatewayLogSummary, type ReviewResult } from "../../../src/alfred/review.ts";
 import { decideDone, doneQuestions, doneState, runClef, type DoneDecision } from "../../../src/alfred/clef.ts";
-import { createRoutedSearch, type ExaBudget } from "../../../src/alfred/search.ts";
+import { createParallelSearch, type ExaBudget } from "../../../src/alfred/search.ts";
 import { createExaLiteSearch } from "../../../src/alfred/exa-lite.ts";
 import { createAIWebSearch, type WebSearchSource } from "agents/websearch";
 import type { SecretValue } from "../../../src/lib/secret";
@@ -56,7 +56,8 @@ export interface DurableEnv {
   /** Same search config as the web Worker (config/schema.ts): Exa key lives on the gateway. */
   EXA_KEY_ALIAS?: string;
   EXA_CUSTOM_PROVIDER?: string;
-  SEARCH_EXA_DAILY_LIMIT?: string;
+  /** Daily Exa searches per non-owner kingdom (config/schema.ts); owner unlimited. */
+  SEARCH_EXA_KINGDOM_DAILY?: string;
   CF_AIG_TOKEN?: SecretValue;
   /** HMAC key for derived mission ids (Secrets Store). */
   ALFRED_RECEIPT_KEY?: SecretValue;
@@ -77,8 +78,6 @@ export interface CreateArgs {
   runAt?: number | null;
   delaySeconds?: number | null;
   requireEvidence?: boolean;
-  /** Owner debug only: "force-exa" treats Ceramic and Exa Lite results as thin so every tier runs. */
-  debugSearch?: "force-exa" | null;
   /** Owner debug only: sleep before each step so an eviction can land mid-mission. */
   debugStepDelayMs?: number;
   /** Caller is the default king: owner-only tools (knowledge graph) are offered. Set by the web Worker. */
@@ -141,7 +140,7 @@ export async function fetchPublicPage(
 
 const MAX_RUN_LOOP = 24;
 /** Build stamp in /durable/stats (shows which code a live instance runs after a deploy). */
-const ENGINE_BUILD = "durable-2026-10-23c";
+const ENGINE_BUILD = "durable-2026-10-24-onefold";
 const MODEL_RETRY_MS = 5_000;
 /** Work due within this window runs now (alarm clock skew / 1 s schedule resolution). */
 const DUE_SLACK_MS = 1_000;
@@ -199,6 +198,7 @@ export class DurableEngine {
     ] as const)
       if (!m.has(c)) this.sql.exec(`ALTER TABLE dm_missions ADD COLUMN ${c} ${ddl}`);
     const t = cols("dm_tasks");
+    if (!cols("dm_search_usage").has("ceramic")) this.sql.exec(`ALTER TABLE dm_search_usage ADD COLUMN ceramic INTEGER NOT NULL DEFAULT 0`);
     if (!t.has("log_id")) this.sql.exec(`ALTER TABLE dm_tasks ADD COLUMN log_id TEXT`);
     // Worker version id that started / finished each task (proves which deploy ran it).
     if (!t.has("started_version")) this.sql.exec(`ALTER TABLE dm_tasks ADD COLUMN started_version TEXT`);
@@ -278,10 +278,10 @@ export class DurableEngine {
       }
       this.sql.exec(`INSERT INTO dm_receipts VALUES (?, ?, ?, ?, ?)`, a.tenant, c.request_id, c.mission_id, c.source, now);
       this.sql.exec(
-        `INSERT INTO dm_missions (id, tenant, objective, kind, source, status, request_id, run_at, created_at, debug_delay_ms, require_evidence, debug_search, owner)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO dm_missions (id, tenant, objective, kind, source, status, request_id, run_at, created_at, debug_delay_ms, require_evidence, owner)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         c.mission_id, a.tenant, c.objective, c.kind, c.source, c.status, c.request_id, c.run_at, now, debug, a.requireEvidence ? 1 : 0,
-        a.debugSearch === "force-exa" ? "force-exa" : null, a.owner ? 1 : 0
+        a.owner ? 1 : 0
       );
       return { missionId: c.mission_id, requestId: c.request_id, duplicate: false, status: c.status, runAt: c.run_at };
     });
@@ -322,6 +322,7 @@ export class DurableEngine {
       tasks: this.rows(`SELECT status, COUNT(*) AS n FROM dm_tasks GROUP BY status`),
       wakes: this.rows(`SELECT * FROM dm_wakes ORDER BY at DESC LIMIT 10`),
       receipts: Number(this.rows(`SELECT COUNT(*) AS n FROM dm_receipts`)[0]?.n ?? 0),
+      search_usage: this.rows(`SELECT day, exa, ceramic FROM dm_search_usage ORDER BY day DESC LIMIT 7`),
       inflight: [...this.inflight],
       build: ENGINE_BUILD,
     };
@@ -656,9 +657,9 @@ export class DurableEngine {
         const query = String(input.query || "").trim().slice(0, 400);
         if (query.length < 2) throw new Error("query required");
         const route: string[] = [];
-        const res = await this.search(mission.debug_search === "force-exa", route).search({ query, limit: 6 } as never, {} as never);
+        const res = await this.search(owner, tenant, route).search({ query, limit: 6 } as never, {} as never);
         const items = res.items.slice(0, 6).map((i, n) => `${n + 1}. ${i.title}\n   ${i.url}\n   ${(i.description ?? "").slice(0, 300)}`);
-        return `Search results via ${route.join(" -> ") || "router"} (leads only: open with web_fetch before citing):\n${items.join("\n") || "(no results)"}`;
+        return `Search results via ${route.join("; ") || "search"} (leads only: open with web_fetch before citing):\n${items.join("\n") || "(no results)"}`;
       }
       case "web_fetch": {
         const fetched = await fetchPublicPage(String(input.url || ""));
@@ -795,7 +796,6 @@ export class DurableEngine {
   }
 
   private currentTask = "";
-  private searchSource: WebSearchSource | null = null;
 
   /** Same router as the web Worker: Ceramic, then Exa Lite (gateway custom provider), then Exa auto; 10 rps. */
   version(): string {
@@ -803,49 +803,43 @@ export class DurableEngine {
   }
 
   /**
-   * Same router as the web Worker: Ceramic, then Exa Lite (gateway custom provider), then Exa auto; 10 rps.
-   * Owner debug `force-exa` (per mission, set at create): the real Ceramic and Exa Lite calls still run
-   * (and are logged on the gateway), but their results are handed to the Rust router as empty, so it
-   * escalates through every tier. Normal missions never take this path.
+   * web_search: Ceramic and Exa (Lite via the gateway `exa` custom provider, else Exa auto) in
+   * parallel, fused by RRF in Rust. Exa is metered per kingdom (this object is one kingdom): the
+   * owner kingdom is unlimited, others get SEARCH_EXA_KINGDOM_DAILY per UTC day, then Ceramic only.
+   * Usage per kingdom and day is stored in dm_search_usage and logged.
    */
-  private search(forceExa = false, route: string[] = []): WebSearchSource {
-    if (!forceExa && this.searchSource) return this.searchSource;
+  private search(owner: boolean, tenant: string, route: string[] = []): WebSearchSource {
     const env = this.h.env;
     const gateway = gatewayId(env);
     const alias = (env.EXA_KEY_ALIAS || "").trim();
-    const limit = Number.parseInt(env.SEARCH_EXA_DAILY_LIMIT || "200", 10);
+    const cap = Number.parseInt(env.SEARCH_EXA_KINGDOM_DAILY || "", 10);
     const day = () => new Date().toISOString().slice(0, 10);
     const budget: ExaBudget = {
       used: () => Number(this.rows(`SELECT exa FROM dm_search_usage WHERE day = ?`, day())[0]?.exa ?? 0),
       spend: () => {
-        this.sql.exec(`INSERT INTO dm_search_usage VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET exa = exa + 1`, day());
+        this.sql.exec(`INSERT INTO dm_search_usage (day, exa, ceramic) VALUES (?, 1, 0) ON CONFLICT(day) DO UPDATE SET exa = exa + 1`, day());
+      },
+      ceramic: () => {
+        this.sql.exec(`INSERT INTO dm_search_usage (day, exa, ceramic) VALUES (?, 0, 1) ON CONFLICT(day) DO UPDATE SET ceramic = ceramic + 1`, day());
       },
     };
-    const thin = (name: string, src: WebSearchSource): WebSearchSource => ({
-      async search(req, call) {
-        const r = await src.search(req, call);
-        route.push(`${name}(${r.items.length} results, debug: treated as thin)`);
-        return { ...r, items: [] };
-      },
-    });
-    const ceramic = createAIWebSearch({ binding: env.AI, gateway, provider: "ceramic" });
     const lite =
       alias && env.CLOUDFLARE_ACCOUNT_ID && env.CF_AIG_TOKEN
         ? createExaLiteSearch({ accountId: env.CLOUDFLARE_ACCOUNT_ID, gateway, slug: (env.EXA_CUSTOM_PROVIDER || "exa").trim(), alias, gatewayToken: env.CF_AIG_TOKEN })
         : undefined;
-    const source = createRoutedSearch({
-      ceramic: forceExa ? thin("ceramic", ceramic) : ceramic,
-      exaLite: lite && forceExa ? thin("exa-lite", lite) : lite,
+    return createParallelSearch({
+      ceramic: createAIWebSearch({ binding: env.AI, gateway, provider: "ceramic" }),
+      exaLite: lite,
       exa: alias ? createAIWebSearch({ binding: env.AI, gateway, provider: "exa", byokAlias: alias }) : undefined,
       budget,
-      exaDailyLimit: Number.isFinite(limit) ? limit : 200,
+      owner,
+      kingdomCap: Number.isFinite(cap) && cap >= 0 ? cap : null,
       onRoute: (r) => {
-        route.push(`${r.provider}: ${r.reason}`);
-        console.log(`durable web_search ${r.provider}: ${r.reason}`);
+        const p = r.providers.map((x) => `${x.provider}(${x.ok ? x.count : `failed: ${x.error}`})`).join(" + ");
+        route.push(`${p} -> ${r.merged} merged; exa ${r.exa.allowed ? "on" : "off"}: ${r.exa.reason}`);
+        console.log(JSON.stringify({ event: "web_search", kingdom: tenant, owner, providers: r.providers, merged: r.merged, exa: r.exa }));
       },
     });
-    if (!forceExa) this.searchSource = source;
-    return source;
   }
 }
 

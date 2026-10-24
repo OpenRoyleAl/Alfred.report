@@ -89,65 +89,124 @@ pub fn is_thin(query: &str, items: &[Item]) -> bool {
     items.len() < MIN_GOOD_RESULTS || term_coverage(query, items) < MIN_TERM_COVERAGE
 }
 
-/// Prefer the set with at least as many items (Lite/auto escalation keeps the denser page).
-pub fn pick_better<'a>(a: &'a [Item], b: &'a [Item]) -> &'a [Item] {
-    if b.len() >= a.len() { b } else { a }
+// ─── Parallel search: Ceramic + Exa at once, fused by reciprocal rank ─────────
+
+/// RRF constant (Cormack et al. 2009): rank r contributes 1/(K + r).
+pub const RRF_K: f64 = 60.0;
+
+/// Canonical URL for dedup: lower-case scheme/host, http->https, no www., no fragment, no
+/// trailing slash, tracking params (utm_*, gclid, fbclid, ref) dropped.
+pub fn canonical_url(u: &str) -> String {
+    let u = u.trim();
+    let u = u.split('#').next().unwrap_or(u);
+    let (scheme_host, rest) = match u.find("://") {
+        Some(i) => {
+            let after = &u[i + 3..];
+            let cut = after.find(['/', '?']).unwrap_or(after.len());
+            (format!("https://{}", after[..cut].to_ascii_lowercase().trim_start_matches("www.")), &after[cut..])
+        }
+        None => return u.to_ascii_lowercase(),
+    };
+    let (path, query) = match rest.split_once('?') {
+        Some((p, q)) => (p, q),
+        None => (rest, ""),
+    };
+    let kept: Vec<&str> = query
+        .split('&')
+        .filter(|kv| !kv.is_empty())
+        .filter(|kv| {
+            let k = kv.split('=').next().unwrap_or("").to_ascii_lowercase();
+            !(k.starts_with("utm_") || k == "gclid" || k == "fbclid" || k == "ref")
+        })
+        .collect();
+    let path = path.trim_end_matches('/');
+    if kept.is_empty() { format!("{scheme_host}{path}") } else { format!("{scheme_host}{path}?{}", kept.join("&")) }
 }
 
 #[derive(Deserialize)]
-pub struct PlanIn {
-    pub query: String,
-    /// "start" | "after_ceramic" | "after_lite" | "after_exa" | "after_deep" | "after_fallback"
-    pub stage: String,
+pub struct ProviderList {
+    pub provider: String,
     #[serde(default)]
     pub items: Vec<Item>,
-    #[serde(default)]
-    pub failed: bool,
-    pub has_lite: bool,
-    pub has_exa: bool,
-    pub under_cap: bool,
 }
 
-#[derive(Serialize, PartialEq, Debug)]
-pub struct Plan {
-    /// "ceramic" | "exa-lite" | "exa" | "return"
-    pub action: &'static str,
-    pub reason: &'static str,
-    /// "throw" when a failed fetch should surface (deep-intent Exa at start); else "continue".
-    pub on_fail: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub served: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_stage: Option<&'static str>,
-}
-
-fn p(action: &'static str, reason: &'static str, on_fail: &'static str, served: Option<&'static str>, next_stage: Option<&'static str>) -> Plan {
-    Plan { action, reason, on_fail, served, next_stage }
-}
-
-pub fn plan(i: &PlanIn) -> Plan {
-    let exa_ok = i.has_exa && i.under_cap;
-    let lite_ok = i.has_lite && i.under_cap;
-    match i.stage.as_str() {
-        // Deep intent goes straight to Exa auto. If that call fails, fall back to Ceramic once
-        // (never back to Exa) instead of failing the whole search.
-        "start" if exa_ok && wants_deep(&i.query) => p("exa", "deep_intent", "continue", None, Some("after_deep")),
-        "after_deep" if i.failed => p("ceramic", "deep_failed", "continue", None, Some("after_fallback")),
-        "after_deep" => p("return", "deep_intent", "continue", Some("exa"), None),
-        "after_fallback" => p("return", "deep_failed", "continue", Some("ceramic"), None),
-        "start" => p("ceramic", "default", "continue", None, Some("after_ceramic")),
-        "after_ceramic" if !is_thin(&i.query, &i.items) => p("return", "default", "continue", Some("ceramic"), None),
-        "after_ceramic" if lite_ok => p("exa-lite", "ceramic_thin", "continue", None, Some("after_lite")),
-        "after_ceramic" if exa_ok => p("exa", "ceramic_thin", "continue", None, Some("after_exa")),
-        "after_lite" if !i.failed && !is_thin(&i.query, &i.items) => p("return", "lite_ok", "continue", Some("exa-lite"), None),
-        "after_lite" if exa_ok => p("exa", "lite_thin", "continue", None, Some("after_exa")),
-        _ => p("return", "best_so_far", "continue", None, None),
+/// Merge provider result lists: dedup by canonical URL, score by summed RRF, keep the first
+/// title and the longest description, record which providers returned each URL.
+pub fn fuse(lists: &[ProviderList], limit: usize) -> serde_json::Value {
+    struct Acc { item: Item, score: f64, providers: Vec<String>, first: usize }
+    let mut acc: Vec<(String, Acc)> = vec![];
+    let mut order = 0usize;
+    for l in lists {
+        let mut seen: Vec<String> = vec![];
+        for (rank, it) in l.items.iter().enumerate() {
+            if it.url.trim().is_empty() { continue; }
+            let key = canonical_url(&it.url);
+            if seen.contains(&key) { continue; }
+            seen.push(key.clone());
+            let add = 1.0 / (RRF_K + rank as f64 + 1.0);
+            match acc.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, a)) => {
+                    a.score += add;
+                    if !a.providers.contains(&l.provider) { a.providers.push(l.provider.clone()); }
+                    let d = it.description.clone().unwrap_or_default();
+                    if d.len() > a.item.description.as_deref().unwrap_or("").len() { a.item.description = Some(d); }
+                    if a.item.title.trim().is_empty() { a.item.title = it.title.clone(); }
+                }
+                None => {
+                    acc.push((key, Acc { item: it.clone(), score: add, providers: vec![l.provider.clone()], first: order }));
+                    order += 1;
+                }
+            }
+        }
     }
+    acc.sort_by(|a, b| b.1.score.partial_cmp(&a.1.score).unwrap().then(a.1.first.cmp(&b.1.first)));
+    let items: Vec<serde_json::Value> = acc
+        .iter()
+        .take(limit.clamp(1, 20))
+        .map(|(_, a)| serde_json::json!({ "title": a.item.title, "description": a.item.description, "url": a.item.url, "providers": a.providers, "score": (a.score * 1e6).round() / 1e6 }))
+        .collect();
+    serde_json::json!({ "items": items })
 }
 
-pub fn plan_json(s: &str) -> Result<String, String> {
-    let i: PlanIn = serde_json::from_str(s).map_err(|e| e.to_string())?;
-    Ok(serde_json::to_string(&plan(&i)).unwrap())
+#[derive(Deserialize)]
+struct FuseIn {
+    lists: Vec<ProviderList>,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+pub fn fuse_json(s: &str) -> Result<String, String> {
+    let i: FuseIn = serde_json::from_str(s).map_err(|e| e.to_string())?;
+    Ok(fuse(&i.lists, i.limit.unwrap_or(6)).to_string())
+}
+
+/// Default daily Exa searches for a kingdom that is not the default king (Hans's key and credits).
+pub const KINGDOM_EXA_DAILY_DEFAULT: u32 = 20;
+
+#[derive(Deserialize)]
+struct QuotaIn {
+    owner: bool,
+    used: u32,
+    #[serde(default)]
+    cap: Option<u32>,
+    has_exa: bool,
+}
+
+/// Per-kingdom Exa quota: the owner kingdom is unlimited; others get `cap` (default above) per
+/// UTC day, then Ceramic only.
+pub fn quota_json(s: &str) -> Result<String, String> {
+    let i: QuotaIn = serde_json::from_str(s).map_err(|e| e.to_string())?;
+    let cap = i.cap.unwrap_or(KINGDOM_EXA_DAILY_DEFAULT);
+    let (exa, reason) = if !i.has_exa {
+        (false, "no exa key configured")
+    } else if i.owner {
+        (true, "owner kingdom: unlimited")
+    } else if i.used < cap {
+        (true, "within kingdom cap")
+    } else {
+        (false, "kingdom over daily exa cap: ceramic only")
+    };
+    Ok(serde_json::json!({ "exa": exa, "reason": reason, "cap": if i.owner { serde_json::Value::Null } else { cap.into() }, "used": i.used }).to_string())
 }
 
 #[derive(Deserialize)]
@@ -255,91 +314,24 @@ pub fn lite_parse_json(s: &str) -> Result<String, String> {
     Ok(lite_parse(s)?.to_string())
 }
 
-#[derive(Deserialize)]
-struct BetterIn {
-    a: Vec<Item>,
-    b: Vec<Item>,
-}
-
-pub fn better_json(s: &str) -> Result<String, String> {
-    let i: BetterIn = serde_json::from_str(s).map_err(|e| e.to_string())?;
-    let pick = if pick_better(&i.a, &i.b).as_ptr() == i.b.as_ptr() || i.b.len() >= i.a.len() { "b" } else { "a" };
-    Ok(serde_json::json!({ "pick": pick }).to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     fn items(n: usize, text: &str) -> Vec<Item> {
         (0..n).map(|k| Item { title: format!("{text} {k}"), description: None, url: format!("https://x/{k}") }).collect()
     }
-    fn input(stage: &str, query: &str, its: Vec<Item>) -> PlanIn {
-        PlanIn { query: query.into(), stage: stage.into(), items: its, failed: false, has_lite: true, has_exa: true, under_cap: true }
-    }
     #[test]
     fn terms_drop_stopwords_and_dupes() {
         assert_eq!(query_terms("What is the Cloudflare Workers AI? workers"), vec!["cloudflare", "workers", "ai"]);
     }
     #[test]
-    fn deep_intent_goes_straight_to_exa() {
-        let d = plan(&input("start", "who founded Exa and their funding", vec![]));
-        assert_eq!(d.action, "exa");
-        assert_eq!(d.reason, "deep_intent");
-        assert_eq!(d.on_fail, "continue");
-        assert_eq!(d.next_stage, Some("after_deep"));
-        // Exa auto failed on a deep query: one Ceramic fallback, then return (no Exa loop).
-        let mut f = input("after_deep", "who founded Exa and their funding", vec![]);
-        f.failed = true;
-        let fb = plan(&f);
-        assert_eq!((fb.action, fb.next_stage), ("ceramic", Some("after_fallback")));
-        let done = plan(&input("after_fallback", "who founded Exa and their funding", items(1, "x")));
-        assert_eq!((done.action, done.served), ("return", Some("ceramic")));
-        let ok = plan(&input("after_deep", "who founded Exa and their funding", items(5, "exa")));
-        assert_eq!((ok.action, ok.served), ("return", Some("exa")));
-        let c = plan(&input("start", "weather manila", vec![]));
-        assert_eq!(c.action, "ceramic");
-        assert_eq!(c.on_fail, "continue");
-        assert_eq!(c.next_stage, Some("after_ceramic"));
-        assert!(!wants_deep("weather in manila"));
-        assert!(wants_deep("who founded anthropic and what is its valuation"));
-        assert!(wants_deep(r#"find "exact phrase here""#));
-        assert!(wants_deep("research the competitors of cloudflare"));
-    }
-    #[test]
-    fn thin_ceramic_escalates_lite_then_exa() {
+    fn thin_detection() {
         let q = "cloudflare workers pricing";
-        let ok = plan(&input("after_ceramic", q, items(5, "cloudflare workers pricing")));
-        assert_eq!(ok.action, "return");
-        assert_eq!(ok.served, Some("ceramic"));
-        assert_eq!(plan(&input("after_ceramic", q, items(1, "x"))).action, "exa-lite");
-        let mut i = input("after_ceramic", q, items(1, "x"));
-        i.has_lite = false;
-        assert_eq!(plan(&i).action, "exa");
-        assert_eq!(plan(&input("after_lite", q, items(1, "x"))).action, "exa");
-        let mut f = input("after_lite", q, items(5, "cloudflare workers pricing"));
-        f.failed = true;
-        assert_eq!(plan(&f).action, "exa");
         assert!(is_thin(q, &items(1, "x")));
         assert!(!is_thin(q, &items(5, "cloudflare workers pricing")));
         assert!(is_thin("tokio runtime scheduler", &items(5, "unrelated")));
-    }
-    #[test]
-    fn cap_reached_stays_on_ceramic() {
-        let mut i = input("after_ceramic", "x y z", items(0, ""));
-        i.under_cap = false;
-        assert_eq!(plan(&i).action, "return");
-        assert_eq!(plan(&i).reason, "best_so_far");
-    }
-    #[test]
-    fn no_exa_key_stays_ceramic_even_for_research() {
-        let mut i = input("start", "deep research on rust async", vec![]);
-        i.has_exa = false;
-        i.has_lite = false;
-        assert_eq!(plan(&i).action, "ceramic");
-        let mut after = input("after_ceramic", "deep research on rust async", items(1, "x"));
-        after.has_exa = false;
-        after.has_lite = false;
-        assert_eq!(plan(&after).action, "return");
+        assert!(!wants_deep("weather in manila"));
+        assert!(wants_deep("who founded anthropic and what is its valuation"));
     }
     #[test]
     fn lite_url_body_parse() {
@@ -353,11 +345,29 @@ mod tests {
         assert_eq!(parsed["items"][0]["description"], "hi");
     }
     #[test]
-    fn pick_denser_page() {
-        assert_eq!(pick_better(&items(1, "a"), &items(5, "b")).len(), 5);
-        assert_eq!(pick_better(&items(5, "a"), &items(5, "b")).len(), 5);
-        let a = items(3, "a");
-        let b = items(1, "b");
-        assert_eq!(pick_better(&a, &b).len(), 3);
+    fn rrf_dedups_and_merges() {
+        let it = |t: &str, u: &str| Item { title: t.into(), description: Some(t.into()), url: u.into() };
+        let lists = vec![
+            ProviderList { provider: "ceramic".into(), items: vec![it("a", "https://www.A.com/x/?utm_source=z"), it("b", "https://b.com/"), it("c", "https://c.com")] },
+            ProviderList { provider: "exa-lite".into(), items: vec![it("b longer", "http://b.com"), it("a", "https://a.com/x#frag"), it("d", "https://d.com")] },
+        ];
+        let r = fuse(&lists, 10);
+        let urls: Vec<&str> = r["items"].as_array().unwrap().iter().map(|i| i["url"].as_str().unwrap()).collect();
+        assert_eq!(urls.len(), 4, "a and b deduplicated across providers");
+        assert_eq!(r["items"][0]["providers"].as_array().unwrap().len(), 2);
+        assert!(urls[..2].iter().all(|u| { let u = u.to_lowercase(); u.contains("a.com") || u.contains("b.com") }));
+        assert_eq!(canonical_url("HTTP://www.Ex.com/p/?a=1&utm_medium=x"), "https://ex.com/p?a=1");
+        // One provider failed (empty list): the other's order is kept.
+        let one = fuse(&[ProviderList { provider: "ceramic".into(), items: vec![it("a", "https://a.com"), it("b", "https://b.com")] }], 10);
+        assert_eq!(one["items"][0]["url"], "https://a.com");
+    }
+    #[test]
+    fn kingdom_quota() {
+        let q = |s: &str| serde_json::from_str::<serde_json::Value>(&quota_json(s).unwrap()).unwrap();
+        assert_eq!(q(r#"{"owner":true,"used":9999,"has_exa":true}"#)["exa"], true);
+        assert_eq!(q(r#"{"owner":false,"used":19,"has_exa":true}"#)["exa"], true);
+        assert_eq!(q(r#"{"owner":false,"used":20,"has_exa":true}"#)["exa"], false);
+        assert_eq!(q(r#"{"owner":false,"used":3,"cap":3,"has_exa":true}"#)["exa"], false);
+        assert_eq!(q(r#"{"owner":true,"used":0,"has_exa":false}"#)["exa"], false);
     }
 }

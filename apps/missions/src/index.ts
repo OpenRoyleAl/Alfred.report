@@ -746,7 +746,6 @@ async function handleDurable(req: Request, env: Env, url: URL): Promise<Response
         delaySeconds: num(body.delaySeconds),
         debugStepDelayMs: num(body.debugStepDelayMs) ?? 0,
         requireEvidence: body.requireEvidence === true,
-        debugSearch: body.debugSearch === "force-exa" ? "force-exa" : null,
       });
       return Response.json(r, { status: r.duplicate ? 200 : 202 });
     }

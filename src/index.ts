@@ -576,7 +576,6 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
         delaySeconds?: number;
         runAt?: string | number;
         debugStepDelayMs?: number;
-        debugSearch?: string;
       };
       const objective = (body.objective || "").trim().slice(0, 4000);
       if (objective.length < 3) return Response.json({ error: "objective required" }, { status: 400 });
@@ -591,7 +590,6 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
           delaySeconds: typeof body.delaySeconds === "number" ? body.delaySeconds : null,
           runAt,
           debugStepDelayMs: typeof body.debugStepDelayMs === "number" ? body.debugStepDelayMs : 0,
-          debugSearch: body.debugSearch === "force-exa" ? "force-exa" : null,
         });
         if (!body.wait) return Response.json(r, { status: r.duplicate ? 200 : 202 });
         const until = Date.now() + 90_000;

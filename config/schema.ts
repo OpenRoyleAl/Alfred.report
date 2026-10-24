@@ -67,6 +67,8 @@ export const SCHEMA = {
   A2A_BEARER_TOKEN: { kind: "secret", apps: ["missions"], description: "Bearer for external field agents on /a2a/*." },
   OWNER_WAKE_URL: { kind: "secret", apps: ["missions"], description: "Optional webhook that wakes the owner (mission complete / needs owner)." },
   OWNER_WAKE_AUTH: { kind: "secret", apps: ["missions"], description: "Bearer sent to OWNER_WAKE_URL." },
+  ALFRED_SESSION_KEY: { kind: "secret", apps: ["web"], description: "Signs web session cookies (separate from the ops token). Rotate as \"new,old\": the first signs, all verify." },
+  ALFRED_RECEIPT_KEY: { kind: "secret", apps: ["missions"], description: "HMAC key for mission/board ids derived from client requestIds (keyed, unforgeable)." },
   JWT_SECRET: { kind: "secret", apps: ["web"], description: "Signs web session cookies." },
   GOOGLE_CLIENT_ID: { kind: "secret", apps: ["web"], description: "Google OAuth client id (Google sign-in)." },
   GOOGLE_CLIENT_SECRET: { kind: "secret", apps: ["web"], description: "Google OAuth client secret." },

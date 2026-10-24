@@ -51,6 +51,22 @@ fn fnv(parts: &[&str]) -> String {
     format!("{h:016x}")
 }
 
+/// Keyed MAC (HMAC-SHA256, first 64 bits as hex) for ids derived from client input: without the key
+/// (ALFRED_RECEIPT_KEY in the Secrets Store) nobody can predict or forge a mission or board id.
+fn mac(key: &str, parts: &[&str]) -> Result<String, String> {
+    use hmac::{Hmac, Mac};
+    if key.len() < 32 {
+        return Err("receipt key not configured".into());
+    }
+    let mut m = <Hmac<sha2::Sha256> as Mac>::new_from_slice(key.as_bytes()).map_err(|e| e.to_string())?;
+    for p in parts {
+        m.update(p.as_bytes());
+        m.update(&[0u8]);
+    }
+    let out = m.finalize().into_bytes();
+    Ok(out[..8].iter().map(|b| format!("{b:02x}")).collect())
+}
+
 fn valid_request_id(s: &str) -> bool {
     (8..=128).contains(&s.len()) && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.:".contains(c))
 }
@@ -75,6 +91,9 @@ pub struct CreateIn {
     #[serde(default)]
     pub delay_seconds: Option<f64>,
     pub now: f64,
+    /// HMAC key for derived ids (required).
+    #[serde(default)]
+    pub mac_key: String,
 }
 
 pub fn create(i: CreateIn) -> Result<Value, String> {
@@ -92,10 +111,11 @@ pub fn create(i: CreateIn) -> Result<Value, String> {
         Some(_) => return Err("invalid requestId (8-128 chars of A-Z a-z 0-9 - _ . :)".into()),
         None if !i.fallback.is_empty() => {
             let parts: Vec<&str> = std::iter::once(tenant).chain(i.fallback.iter().map(String::as_str)).collect();
-            (format!("auto:{}", fnv(&parts)), true)
+            (format!("auto:{}", mac(&i.mac_key, &parts)?), true)
         }
         None => return Err("requestId required".into()),
     };
+    let mission_mac = mac(&i.mac_key, &["mission", tenant, &request_id])?;
     let kind = match i.kind.as_deref().unwrap_or("mission") {
         "mission" => "mission",
         "history_search" => "history_search",
@@ -119,7 +139,7 @@ pub fn create(i: CreateIn) -> Result<Value, String> {
         "request_id": request_id,
         "auto_request_id": auto,
         "receipt_key": format!("{tenant}\u{1f}{request_id}"),
-        "mission_id": format!("dm-{}", fnv(&[tenant, &request_id])),
+        "mission_id": format!("dm-{mission_mac}"),
         "objective": objective,
         "kind": kind,
         "source": source,
@@ -130,19 +150,19 @@ pub fn create(i: CreateIn) -> Result<Value, String> {
 
 /// Board (D1) mission id for a client requestId: same `M-` + 8 Crockford chars shape as random ids,
 /// so a retried create lands on the same primary key (INSERT OR IGNORE = one mission).
-pub fn board_id(request_id: &str) -> Result<String, String> {
+pub fn board_id(request_id: &str, key: &str) -> Result<String, String> {
     let r = request_id.trim();
     if !valid_request_id(r) {
         return Err("invalid requestId (8-128 chars of A-Z a-z 0-9 - _ . :)".into());
     }
     const C: &[u8] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    let h = u64::from_str_radix(&fnv(&["board", r]), 16).unwrap_or(0);
+    let h = u64::from_str_radix(&mac(key, &["board", r])?, 16).unwrap_or(0);
     Ok(format!("M-{}", (0..8).map(|i| C[((h >> (i * 5)) & 31) as usize] as char).collect::<String>()))
 }
 
 pub fn board_id_json(s: &str) -> Result<String, String> {
     let v: Value = parse(s)?;
-    board_id(v["request_id"].as_str().unwrap_or("")).map(|id| json!({ "id": id }).to_string())
+    board_id(v["request_id"].as_str().unwrap_or(""), v["mac_key"].as_str().unwrap_or("")).map(|id| json!({ "id": id }).to_string())
 }
 
 // ─── Planner ──────────────────────────────────────────────────────
@@ -182,8 +202,10 @@ fn system_prompt(lessons: &[String]) -> String {
 To use a tool: {\"tool\":\"<name>\",\"args\":{...}}\n\
 To finish: {\"final\":\"<the complete answer for the user>\",\"evidence\":\"<URLs you opened with web_fetch and tool results you relied on>\"}\n\
 Use at most a few tools. Never invent tool results. If a tool was interrupted, its outcome is unknown: say so rather than assume it happened.\n\
-Sources: only cite a URL or name a source (\"according to ...\") if you opened it with web_fetch in this mission. Search snippets are leads, not sources. If you answer from general knowledge, say so and cite nothing.\nTools:\n",
+Sources: only cite a URL or name a source (\"according to ...\") if you opened it with web_fetch in this mission. Search snippets are leads, not sources. If you answer from general knowledge, say so and cite nothing.\n",
     );
+    s.push_str(crate::untrusted::RULE);
+    s.push_str("\nTools:\n");
     for t in TOOLS {
         s.push_str(&format!("- {}: {} args {}\n", t.name, t.description, t.args));
     }
@@ -616,8 +638,9 @@ mod tests {
     fn t(seq: i64, name: &str, status: &str, out: &str) -> Task {
         Task { id: format!("t{seq}"), seq, name: name.into(), input: json!({}), output: Some(out.into()), status: status.into(), attempts: 1 }
     }
+    const K: &str = "test-receipt-key-0123456789abcdef0123";
     fn ci(rid: Option<&str>) -> CreateIn {
-        CreateIn { tenant: "hans".into(), request_id: rid.map(Into::into), fallback: vec![], objective: "find x".into(), source: "web".into(), kind: None, run_at: None, delay_seconds: None, now: 1000.0 }
+        CreateIn { tenant: "hans".into(), request_id: rid.map(Into::into), fallback: vec![], objective: "find x".into(), source: "web".into(), kind: None, run_at: None, delay_seconds: None, now: 1000.0, mac_key: K.into() }
     }
 
     #[test]
@@ -685,11 +708,26 @@ mod tests {
 
     #[test]
     fn board_ids_are_stable() {
-        let a = board_id("board-abcdef12").unwrap();
-        assert_eq!(a, board_id("board-abcdef12").unwrap());
-        assert_ne!(a, board_id("board-abcdef13").unwrap());
+        let a = board_id("board-abcdef12", K).unwrap();
+        assert_eq!(a, board_id("board-abcdef12", K).unwrap());
+        assert_ne!(a, board_id("board-abcdef13", K).unwrap());
         assert!(a.starts_with("M-") && a.len() == 10);
-        assert!(board_id("x").is_err());
+        assert!(board_id("x", K).is_err());
+    }
+
+    #[test]
+    fn derived_ids_are_keyed() {
+        let other = "another-key-of-at-least-32-bytes-long!!";
+        assert_ne!(board_id("board-abcdef12", K).unwrap(), board_id("board-abcdef12", other).unwrap());
+        let a = create(ci(Some("req-12345678"))).unwrap();
+        let mut c = ci(Some("req-12345678"));
+        c.mac_key = other.into();
+        assert_ne!(a["mission_id"], create(c).unwrap()["mission_id"]);
+        // No key: fail closed, never an unkeyed id.
+        let mut c = ci(Some("req-12345678"));
+        c.mac_key = String::new();
+        assert!(create(c).is_err());
+        assert!(board_id("board-abcdef12", "").is_err());
     }
 
     #[test]

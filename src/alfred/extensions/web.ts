@@ -8,10 +8,43 @@ import type { ToolRegistration } from "@earendil-works/pi-durable";
 import { webSearchTool } from "agents/websearch/pi";
 import { webFetchTool } from "agents/webfetch/pi";
 import { createAIWebSearch } from "agents/websearch";
-import { gatewayId } from "../gateway";
-import { createRoutedSearch, memoryBudget, type ExaBudget } from "../search";
-import { createExaLiteSearch } from "../exa-lite";
+import { gatewayId } from "../gateway.ts";
+import { createRoutedSearch, memoryBudget, type ExaBudget } from "../search.ts";
+import { createExaLiteSearch } from "../exa-lite.ts";
 import type { SecretValue } from "../../lib/secret";
+import { durableFetchCheck, untrustedWrap } from "../core.ts";
+
+/**
+ * fetch for the Pi web_fetch tool: the library already follows redirects by hand (redirect: "manual")
+ * and calls this for every hop, so each hop passes the same Rust host allow-list as the durable engine.
+ */
+export function allowListedFetch(inner: typeof fetch = fetch): typeof fetch {
+  return ((input: RequestInfo | URL, init?: RequestInit) => {
+    const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const checked = durableFetchCheck(href);
+    return inner(checked, { ...init, redirect: "manual" });
+  }) as typeof fetch;
+}
+
+/** Pi web_fetch: allow-listed hops, and the result fenced as untrusted data (same Rust wrap as durable). */
+export function guardedWebFetchTool(env: { AI: Ai }, inner: typeof fetch = fetch): ToolRegistration {
+  const base = webFetchTool({ binding: env.AI, fetch: allowListedFetch(inner), maxRedirects: 4 } as never) as unknown as ToolRegistration;
+  return {
+    ...base,
+    async execute(input: never, api: never, context: never) {
+      const r = (await (base.execute as (...a: unknown[]) => Promise<{ content?: Array<{ type: string; text?: string }> }>)(input, api, context)) as {
+        content?: Array<{ type: string; text?: string }>;
+        isError?: boolean;
+      };
+      if (r?.isError || !Array.isArray(r?.content)) return r;
+      const url = String((input as { url?: string })?.url || "");
+      return {
+        ...r,
+        content: r.content.map((c) => (c.type === "text" && typeof c.text === "string" ? { ...c, text: untrustedWrap(url, 200, c.text, 20_000).text } : c)),
+      };
+    },
+  } as ToolRegistration;
+}
 
 export interface WebEnv {
   AI: Ai;
@@ -96,7 +129,7 @@ export function webTools(env: WebEnv, budget: ExaBudget = memoryBudget()): ToolR
   });
   return [
     webSearchTool({ source, limit: 6 }) as unknown as ToolRegistration,
-    webFetchTool({ binding: env.AI }) as unknown as ToolRegistration,
+    guardedWebFetchTool(env),
     cfDocsSearchTool as unknown as ToolRegistration,
   ];
 }

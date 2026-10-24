@@ -1,8 +1,9 @@
 import type { Env } from "./env";
+import { BRAND, brandContext } from "../brand";
 import { checkDomainAvailability, createCheckoutSession, handleStripeWebhook } from "./billing";
 import {
   chatTurn,
-  clearSessionCookie,
+  clearSessionCookies,
   createMission,
   dashboard,
   jsonAuthRequired,
@@ -13,6 +14,7 @@ import {
   readSession,
   setSessionCookie,
   signup,
+  verifySignup,
   storeByokFingerprint,
   wizardGet,
   wizardPatch,
@@ -94,14 +96,36 @@ export async function handleKissApi(req: Request, env: Env, url: URL): Promise<R
   }
 
   if (url.pathname === "/api/kiss/signup" && req.method === "POST") {
-    const body = (await req.json()) as { email?: string; password?: string; name?: string; handle?: string };
+    // Step 1: park the signup and email a one-time link. No session and no tenant until it is opened.
+    const body = (await req.json().catch(() => ({}))) as { email?: string; password?: string; name?: string; handle?: string };
+    if (!env.EMAIL?.send || !env.DOMAIN) return Response.json({ error: "Signup email is not available right now" }, { status: 503 });
     const result = await signup(env, body.email || "", body.password || "", body.name, body.handle);
     if ("error" in result) return Response.json({ error: result.error }, { status: result.status });
+    const brand = brandContext(env);
+    const link = `https://${env.DOMAIN}/api/kiss/verify?token=${result.pending.token}`;
+    try {
+      await env.EMAIL.send({
+        from: { name: brand.instanceBrand, email: `${BRAND.senderLocalPart}@${env.DOMAIN}` },
+        to: result.pending.email,
+        subject: `Confirm your ${brand.instanceBrand} account`,
+        text: `Open this link within 24 hours to confirm ${result.pending.email} and claim "${result.pending.tenant_id}":\n\n${link}\n\nIf you did not sign up, ignore this email.\n\n${brand.byline}`,
+      });
+    } catch (err) {
+      console.error("signup verify email failed", (err as Error)?.message);
+      return Response.json({ error: "Could not send the confirmation email" }, { status: 502 });
+    }
+    return Response.json({ ok: true, pending: true, email: result.pending.email }, { status: 202, headers: { "Cache-Control": "no-store" } });
+  }
+
+  if (url.pathname === "/api/kiss/verify" && req.method === "GET") {
+    const result = await verifySignup(env, url.searchParams.get("token") || "");
+    if ("error" in result) {
+      return new Response(null, { status: 302, headers: { Location: `/signup?error=${encodeURIComponent(result.error)}`, "Cache-Control": "no-store" } });
+    }
     const token = await mintSession(env, result.user);
-    return Response.json(
-      { ok: true, tenant_id: result.user.tenant_id, name: result.user.name, email: result.user.email },
-      { headers: cookieHeaders(token, { "Content-Type": "application/json" }) }
-    );
+    const h = cookieHeaders(token);
+    h.set("Location", "/home");
+    return new Response(null, { status: 302, headers: h });
   }
 
   if (url.pathname === "/api/kiss/login" && req.method === "POST") {
@@ -118,7 +142,7 @@ export async function handleKissApi(req: Request, env: Env, url: URL): Promise<R
   if (url.pathname === "/api/kiss/logout" && req.method === "POST") {
     return Response.json(
       { ok: true },
-      { headers: { "Set-Cookie": clearSessionCookie(), "Cache-Control": "no-store" } }
+      { headers: [...clearSessionCookies().map((c): [string, string] => ["Set-Cookie", c]), ["Cache-Control", "no-store"]] }
     );
   }
 

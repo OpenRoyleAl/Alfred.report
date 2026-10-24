@@ -8,7 +8,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { durableFetchCheck, durablePlan, mcpAllow, mcpParseScopes, navSafeNext, reviewCore, reportSpeak, reportBuild } from "../src/alfred/core.ts";
+import { durableBoardId, durableCreate, durableFetchCheck, durablePlan, mcpAllow, mcpParseScopes, navAppRedirect, navSafeNext, reviewCore, reportSpeak, reportBuild, untrustedWrap } from "../src/alfred/core.ts";
+import { googleRedirectUri } from "../src/lib/google-auth.ts";
+import { checkPassword, makePasswordHash } from "../src/lib/kiss.ts";
 import { nextBindState } from "../src/alfred/bind.ts";
 import { senderAuthenticated } from "../src/lib/mail-auth.ts";
 
@@ -35,7 +37,7 @@ function loadFixtures(): Fixture[] {
   return out;
 }
 
-function runCheck(f: Fixture): void {
+async function runCheck(f: Fixture): Promise<void> {
   const { check, input, expect } = f;
   switch (check) {
     case "fetch_url": {
@@ -126,6 +128,46 @@ function runCheck(f: Fixture): void {
       if (!threw) throw new Error("expected throw");
       return;
     }
+    case "untrusted_wrap": {
+      const w = untrustedWrap(String(input.url || "https://x.test/"), 200, String(input.text));
+      const want = (expect.flags as string[] | undefined) ?? [];
+      for (const fl of want) if (!w.flags.includes(fl)) throw new Error(`missing flag ${fl}: ${w.flags.join(",")}`);
+      if (expect.clean === true && w.flags.length) throw new Error(`false positive: ${w.flags.join(",")}`);
+      if (w.text.split("<<<END_UNTRUSTED_WEB_CONTENT>>>").length !== 2) throw new Error("fence closed early");
+      return;
+    }
+    case "keyed_ids": {
+      const k = "eval-receipt-key-0123456789abcdef0123456";
+      const a = durableCreate({ tenant: "t", request_id: "req-12345678", objective: "x y z", now: 1, mac_key: k }).mission_id;
+      const b = durableCreate({ tenant: "t", request_id: "req-12345678", objective: "x y z", now: 1, mac_key: k + "x" }).mission_id;
+      if (a === b) throw new Error("mission id not keyed");
+      if (durableBoardId("board-abcdef12", k) === durableBoardId("board-abcdef12", k + "x")) throw new Error("board id not keyed");
+      let threw = false;
+      try {
+        durableCreate({ tenant: "t", request_id: "req-12345678", objective: "x y z", now: 1, mac_key: "" });
+      } catch {
+        threw = true;
+      }
+      if (!threw) throw new Error("no key did not fail closed");
+      return;
+    }
+    case "oauth_redirect": {
+      const got = googleRedirectUri({ DOMAIN: String(input.domain) });
+      if (got !== expect.uri) throw new Error(`got ${got}`);
+      return;
+    }
+    case "pbkdf2": {
+      const h = await makePasswordHash("eval-password", "s");
+      if (!h.startsWith(`p2$${expect.iterations}$`)) throw new Error(`hash ${h.slice(0, 12)}`);
+      const r = await checkPassword("eval-password", "s", h);
+      if (!r.ok || r.upgrade) throw new Error("verify failed");
+      return;
+    }
+    case "nav_app": {
+      const r = navAppRedirect(String(input.path), String(input.search || ""), Boolean(input.signedIn), Boolean(input.owner));
+      if (r.location !== expect.location) throw new Error(`got ${r.location}`);
+      return;
+    }
     default:
       throw new Error(`unknown check ${check}`);
   }
@@ -136,7 +178,7 @@ let failed = 0;
 const results: Array<{ id: string; suite: string; ok: boolean; error?: string }> = [];
 for (const f of fixtures) {
   try {
-    runCheck(f);
+    await runCheck(f);
     results.push({ id: f.id, suite: f.suite, ok: true });
     console.log(`ok   ${f.suite.padEnd(16)} ${f.id}`);
   } catch (e) {

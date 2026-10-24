@@ -4,12 +4,20 @@
  */
 
 import type { Env } from "./env";
-import { secretGet } from "./secret";
-import { completeText } from "../alfred/models";
+import { secretGet } from "./secret.ts";
+import { completeText } from "../alfred/models.ts";
 import { isOwnerEmail, safeEqual } from "./access.ts";
-import { ownerTenant } from "./tenant.ts";
+import { invalidateOwnerCache, ownerTenant } from "./tenant.ts";
 
-export const KISS_COOKIE = "alfred_kiss";
+/** __Host- prefix: Secure, Path=/, no Domain (no subdomain or http overwrite). */
+export const KISS_COOKIE = "__Host-alfred_kiss";
+/** Pre-prefix cookie name; still read, re-issued under KISS_COOKIE and cleared (see sessionMigration). */
+export const LEGACY_KISS_COOKIE = "alfred_kiss";
+/** Sessions signed with the ops token (before ALFRED_SESSION_KEY) verify until here; cookies live 7 days. */
+export const LEGACY_SIGNER_UNTIL = Date.parse("2026-11-07T00:00:00Z");
+/** Workers caps PBKDF2 at 100k iterations. */
+export const PBKDF2_ITERATIONS = 100_000;
+const LEGACY_PBKDF2_ITERATIONS = 10_000;
 export const NEURON_CAP = 10_000;
 export const CHAT_NEURONS_MIN = 17;
 
@@ -26,11 +34,18 @@ function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function cookieSecret(env: Env): Promise<string> {
-  const ops = await secretGet(env.ALFRED_OPS_TOKEN as any);
-  if (ops) return ops;
-  const aig = await secretGet(env.CF_AIG_TOKEN as any);
-  return aig || "";
+/**
+ * Session signing keys. ALFRED_SESSION_KEY may hold "new,old": the first signs, every one verifies,
+ * so a rotation keeps users signed in. The ops token verifies (never signs) until LEGACY_SIGNER_UNTIL.
+ */
+export async function sessionKeys(env: Env, now = Date.now()): Promise<{ sign: string; verify: string[]; legacy: string[] }> {
+  const keys = (await secretGet(env.ALFRED_SESSION_KEY as any)).split(",").map((k) => k.trim()).filter((k) => k.length >= 32);
+  const legacy: string[] = [];
+  if (now < LEGACY_SIGNER_UNTIL) {
+    const ops = await secretGet(env.ALFRED_OPS_TOKEN as any);
+    if (ops) legacy.push(ops);
+  }
+  return { sign: keys[0] || "", verify: keys, legacy };
 }
 
 async function hmacHex(secret: string, msg: string): Promise<string> {
@@ -45,7 +60,7 @@ async function hmacHex(secret: string, msg: string): Promise<string> {
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function hashPassword(password: string, salt: string): Promise<string> {
+async function hashPassword(password: string, salt: string, iterations = LEGACY_PBKDF2_ITERATIONS): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(password),
@@ -58,12 +73,29 @@ async function hashPassword(password: string, salt: string): Promise<string> {
       name: "PBKDF2",
       hash: "SHA-256",
       salt: new TextEncoder().encode(salt),
-      iterations: 10_000,
+      iterations,
     },
     key,
     256
   );
   return [...new Uint8Array(bits)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Stored hash: "p2$<iterations>$<hex>"; a bare hex hash is the legacy 10k-iteration format. */
+export async function makePasswordHash(password: string, salt: string): Promise<string> {
+  return `p2$${PBKDF2_ITERATIONS}$${await hashPassword(password, salt, PBKDF2_ITERATIONS)}`;
+}
+
+export async function checkPassword(password: string, salt: string, stored: string): Promise<{ ok: boolean; upgrade: boolean }> {
+  const m = stored.match(/^p2\$(\d+)\$([0-9a-f]+)$/);
+  if (m) {
+    const it = Number(m[1]);
+    if (!(it >= LEGACY_PBKDF2_ITERATIONS && it <= PBKDF2_ITERATIONS)) return { ok: false, upgrade: false };
+    const ok = safeEqual(await hashPassword(password, salt, it), m[2]);
+    return { ok, upgrade: ok && it < PBKDF2_ITERATIONS };
+  }
+  const ok = safeEqual(await hashPassword(password, salt, LEGACY_PBKDF2_ITERATIONS), stored);
+  return { ok, upgrade: ok };
 }
 
 const RESERVED_NAMES = new Set([
@@ -157,6 +189,17 @@ export async function ensureKissSchema(db: D1Database): Promise<void> {
       updated_at INTEGER NOT NULL
     )`),
     db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS kiss_users_tenant_id ON kiss_users(tenant_id)`),
+    // Password signups wait here until the email link is opened; the tenant is claimed only then.
+    db.prepare(`CREATE TABLE IF NOT EXISTS kiss_pending (
+      token_hash TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      name TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      pass_salt TEXT NOT NULL,
+      pass_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    )`),
   ]);
 }
 
@@ -164,12 +207,27 @@ export function setSessionCookie(token: string): string {
   return `${KISS_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`;
 }
 
+/** Clears the legacy (unprefixed) cookie. */
+export function clearLegacyCookie(): string {
+  return `${LEGACY_KISS_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+}
+
 export function clearSessionCookie(): string {
   return `${KISS_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
+/** Both Set-Cookie headers for logout. */
+export function clearSessionCookies(): string[] {
+  return [clearSessionCookie(), clearLegacyCookie()];
+}
+
+function cookieValue(raw: string, name: string): string {
+  const esc = name.replace(/[-]/g, "\\-");
+  return raw.match(new RegExp(`(?:^|;\\s*)${esc}=([^;]+)`))?.[1] || "";
+}
+
 export async function mintSession(env: Env, user: KissUser): Promise<string> {
-  const secret = await cookieSecret(env);
+  const secret = (await sessionKeys(env)).sign;
   if (!secret) throw new Error("session secret not configured");
   const exp = Date.now() + 7 * 24 * 60 * 60 * 1000;
   const payload = `${user.email}|${user.tenant_id}|${exp}`;
@@ -177,11 +235,18 @@ export async function mintSession(env: Env, user: KissUser): Promise<string> {
   return btoa(`${payload}|${sig}`).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export async function readSession(req: Request, env: Env): Promise<KissUser | null> {
+type SessionRead = { user: KissUser; reissue: boolean };
+
+/**
+ * Verify a session token. `reissue` is true when it came from the legacy cookie name or a non-primary key,
+ * so the caller can re-mint it under the current cookie and key (no forced logout during migration/rotation).
+ */
+export async function readSessionEx(req: Request, env: Env): Promise<SessionRead | null> {
   const raw = req.headers.get("Cookie") || "";
-  const m = raw.match(new RegExp(`(?:^|;\\s*)${KISS_COOKIE}=([^;]+)`));
+  const current = cookieValue(raw, KISS_COOKIE);
+  const legacyCookie = current ? "" : cookieValue(raw, LEGACY_KISS_COOKIE);
   const bearer = req.headers.get("Authorization") || "";
-  const token = m?.[1] || (bearer.startsWith("Bearer ") ? bearer.slice(7).trim() : "");
+  const token = current || legacyCookie || (bearer.startsWith("Bearer ") ? bearer.slice(7).trim() : "");
   if (!token) return null;
   try {
     const pad = token.replace(/-/g, "+").replace(/_/g, "/");
@@ -189,10 +254,18 @@ export async function readSession(req: Request, env: Env): Promise<KissUser | nu
     const [email, tenant_id, expStr, sig] = atob(padded).split("|");
     if (!email || !tenant_id || !expStr || !sig) return null;
     if (Number(expStr) < Date.now()) return null;
-    const secret = await cookieSecret(env);
-    if (!secret) return null;
-    const expect = await hmacHex(secret, `${email}|${tenant_id}|${expStr}`);
-    if (!safeEqual(expect, sig)) return null;
+    const keys = await sessionKeys(env);
+    const msg = `${email}|${tenant_id}|${expStr}`;
+    let idx = -1;
+    const all = [...keys.verify, ...keys.legacy];
+    for (let i = 0; i < all.length; i++) {
+      if (safeEqual(await hmacHex(all[i], msg), sig)) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0) return null;
+    const reissue = Boolean(legacyCookie) || idx > 0;
     await ensureKissSchema(env.DB);
     const row = await env.DB.prepare(
       "SELECT email, name, tenant_id, billing_paid, pass_salt FROM kiss_users WHERE email = ?"
@@ -203,30 +276,57 @@ export async function readSession(req: Request, env: Env): Promise<KissUser | nu
     // Owner emails always land on the ONE owner tenant (existing data), never a new/paywalled one.
     // A row-less owner session can only come from Google sign-in (password signup creates a row).
     if (owner && (!row || row.pass_salt === "google")) {
-      return { email: email.toLowerCase(), name: row?.name || "", tenant_id: await ownerTenant(env), billing_paid: 1, google: true };
+      return { user: { email: email.toLowerCase(), name: row?.name || "", tenant_id: await ownerTenant(env), billing_paid: 1, google: true }, reissue };
     }
     if (!row) return null;
     return {
-      email: row.email,
-      name: row.name,
-      tenant_id: row.tenant_id,
-      billing_paid: row.billing_paid,
-      google: row.pass_salt === "google",
+      user: { email: row.email, name: row.name, tenant_id: row.tenant_id, billing_paid: row.billing_paid, google: row.pass_salt === "google" },
+      reissue,
     };
   } catch {
     return null;
   }
 }
 
+export async function readSession(req: Request, env: Env): Promise<KissUser | null> {
+  return (await readSessionEx(req, env))?.user ?? null;
+}
+
+/** Set-Cookie headers that move a legacy/old-key cookie session onto the current cookie and key. */
+export async function sessionMigration(req: Request, env: Env): Promise<string[] | null> {
+  const raw = req.headers.get("Cookie") || "";
+  if (!raw.includes(LEGACY_KISS_COOKIE)) return null;
+  const s = await readSessionEx(new Request(req.url, { headers: { Cookie: raw } }), env);
+  if (!s?.reissue) return null;
+  try {
+    const out = [setSessionCookie(await mintSession(env, s.user))];
+    if (cookieValue(raw, LEGACY_KISS_COOKIE)) out.push(clearLegacyCookie());
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function sha256Hex(s: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Password signup step 1: validate, hash, and park the request in kiss_pending. Nothing is claimed
+ * (no kiss_users row, no tenant) until verifySignup runs with the emailed token.
+ */
 export async function signup(
   env: Env,
   email: string,
   password: string,
   name?: string,
   handle?: string
-): Promise<{ user: KissUser } | { error: string; status: number }> {
+): Promise<{ pending: { email: string; tenant_id: string; token: string } } | { error: string; status: number }> {
   const e = email.trim().toLowerCase();
-  if (!e.includes("@") || password.length < 8) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 254 || password.length < 8 || password.length > 1024) {
     return { error: "Email and password (8+ chars) required", status: 400 };
   }
   await ensureKissSchema(env.DB);
@@ -241,15 +341,46 @@ export async function signup(
   if (!avail.ok) return { error: avail.error || "That name is taken.", status: 409 };
   tenant_id = avail.name;
   const salt = crypto.randomUUID();
-  const pass_hash = await hashPassword(password, salt);
+  const pass_hash = await makePasswordHash(password, salt);
   const display = (name || tenant_id || e.split("@")[0] || "Operator").slice(0, 80);
-  await env.DB.prepare(
-    `INSERT INTO kiss_users (email, name, tenant_id, pass_salt, pass_hash, lane, billing_paid, created_at)
-     VALUES (?, ?, ?, ?, ?, 'kiss', 0, ?)`
-  )
-    .bind(e, display, tenant_id, salt, pass_hash, Date.now())
-    .run();
-  return { user: { email: e, name: display, tenant_id, billing_paid: 0 } };
+  const token = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM kiss_pending WHERE expires_at < ? OR email = ?").bind(now, e),
+    env.DB.prepare(
+      `INSERT INTO kiss_pending (token_hash, email, name, tenant_id, pass_salt, pass_hash, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(await sha256Hex(token), e, display, tenant_id, salt, pass_hash, now + PENDING_TTL_MS, now),
+  ]);
+  return { pending: { email: e, tenant_id, token } };
+}
+
+/** Password signup step 2: the emailed token claims the tenant (re-checked: first verified wins). */
+export async function verifySignup(env: Env, token: string): Promise<{ user: KissUser } | { error: string; status: number }> {
+  if (!/^[0-9a-f]{64}$/.test(token)) return { error: "Invalid or expired link", status: 400 };
+  await ensureKissSchema(env.DB);
+  const th = await sha256Hex(token);
+  const p = await env.DB.prepare("SELECT * FROM kiss_pending WHERE token_hash = ?")
+    .bind(th)
+    .first<{ email: string; name: string; tenant_id: string; pass_salt: string; pass_hash: string; expires_at: number }>();
+  if (!p || p.expires_at < Date.now()) return { error: "Invalid or expired link", status: 400 };
+  if (isOwnerEmail(env, p.email)) return { error: "Account exists — sign in with Google", status: 409 };
+  const taken = await env.DB.prepare("SELECT email FROM kiss_users WHERE email = ? OR tenant_id = ?")
+    .bind(p.email, p.tenant_id)
+    .first();
+  if (taken) {
+    await env.DB.prepare("DELETE FROM kiss_pending WHERE token_hash = ?").bind(th).run();
+    return { error: "That account or name was claimed first — sign up again", status: 409 };
+  }
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO kiss_users (email, name, tenant_id, pass_salt, pass_hash, lane, billing_paid, created_at)
+       VALUES (?, ?, ?, ?, ?, 'kiss', 0, ?)`
+    ).bind(p.email, p.name, p.tenant_id, p.pass_salt, p.pass_hash, Date.now()),
+    env.DB.prepare("DELETE FROM kiss_pending WHERE email = ?").bind(p.email),
+  ]);
+  invalidateOwnerCache();
+  return { user: { email: p.email, name: p.name, tenant_id: p.tenant_id, billing_paid: 0 } };
 }
 
 export async function login(
@@ -273,8 +404,15 @@ export async function login(
     }>();
   if (!row) return { error: "Unknown account", status: 401 };
   if (row.pass_salt === "google") return { error: "Sign in with Google", status: 401 };
-  const h = await hashPassword(password, row.pass_salt);
-  if (!safeEqual(h, row.pass_hash)) return { error: "Bad password", status: 401 };
+  const chk = await checkPassword(password, row.pass_salt, row.pass_hash);
+  if (!chk.ok) return { error: "Bad password", status: 401 };
+  if (chk.upgrade) {
+    // Upgrade-on-login: rehash at the current iteration count with a fresh salt.
+    const salt = crypto.randomUUID();
+    await env.DB.prepare("UPDATE kiss_users SET pass_salt = ?, pass_hash = ? WHERE email = ? AND pass_hash = ?")
+      .bind(salt, await makePasswordHash(password, salt), row.email, row.pass_hash)
+      .run();
+  }
   return {
     user: {
       email: row.email,

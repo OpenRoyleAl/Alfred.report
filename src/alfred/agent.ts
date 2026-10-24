@@ -10,6 +10,7 @@
  * review against AI Gateway logs -> only passing runs become lessons (shown to future
  * sessions via the "lessons" prompt section; Harness²-style persistent improvement store).
  */
+import { untrustedRule } from "./core.ts";
 import { Agent } from "agents";
 import { createRegistry, Harness, type ToolRegistration } from "@earendil-works/pi-durable";
 import { PiHarness } from "agents/harness/pi";
@@ -85,6 +86,7 @@ export class Alfred extends Agent<Env, AlfredState> {
         name: "alfred",
         sections: [
           { key: "preamble", render: () => PREAMBLE, tag: false },
+          { key: "untrusted", render: () => untrustedRule() },
           { key: "today", render: () => new Date().toISOString().slice(0, 10) },
           { key: "lessons", render: () => this.lessonsText() },
         ],

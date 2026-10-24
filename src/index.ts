@@ -184,7 +184,14 @@ export default {
 
     // One web plane: the instance domain (routes in deploy/web/cloudflare.config.ts).
     if (hostname === env.DOMAIN || hostname === "localhost" || hostname === "127.0.0.1") {
-      return handleDashboard(req, env);
+      const res = await handleDashboard(req, env);
+      // __Host- cookie migration and session-key rotation: re-issue silently, never log anyone out.
+      const { sessionMigration } = await import("./lib/kiss");
+      const mig = await sessionMigration(req, env);
+      if (!mig || res.status === 101) return res;
+      const out = new Response(res.body, res);
+      for (const c of mig) out.headers.append("Set-Cookie", c);
+      return out;
     }
 
     return render404(req, url);
@@ -723,10 +730,16 @@ async function handleDashboard(req: Request, env: Env): Promise<Response> {
 
   // Chat
   if (url.pathname === "/api/chat" && req.method === "POST") {
-    const body = await req.json() as { message: string };
+    // Same daily ask quota as /api/alfred/ask (owner unmetered; sandbox tenants share the "ask" bucket).
+    const body = (await req.json().catch(() => ({}))) as { message?: unknown };
+    const message = typeof body.message === "string" ? body.message.trim().slice(0, 8000) : "";
+    if (!message) return Response.json({ error: "message required" }, { status: 400 });
+    await stub.bind(tenant_id, user.isOwner);
+    const q = await stub.consumeQuota("ask", sandboxLimit(env.SANDBOX_ASKS_PER_DAY, 30));
+    if (!q.ok) return Response.json({ error: "quota", used: q.used, limit: q.limit }, { status: 429 });
     return stub.fetch(new Request("https://internal/chat", {
       method: "POST",
-      body: JSON.stringify({ message: body.message }),
+      body: JSON.stringify({ message }),
     }));
   }
 

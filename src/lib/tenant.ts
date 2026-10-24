@@ -26,13 +26,22 @@ async function kissTenant(db: D1Database | undefined, emails: string[]): Promise
   }
 }
 
-/** The single owner tenant (cached 5 minutes per isolate). */
+/** Owner tenant cache TTL: short, and only a D1-backed answer is cached (a fallback is re-read). */
+export const OWNER_CACHE_MS = 30_000;
+
+/** Drop the cached owner tenant (call after writing kiss_users). */
+export function invalidateOwnerCache(): void {
+  ownerCache = null;
+}
+
+/** The single owner tenant (cached OWNER_CACHE_MS per isolate). */
 export async function ownerTenant(env: TenantEnv): Promise<string> {
   const owners = ownerEmails(env);
   const key = owners.join(",");
-  if (ownerCache && ownerCache.key === key && Date.now() - ownerCache.at < 300_000) return ownerCache.tenant;
-  const tenant = (await kissTenant(env.DB, owners)) || (owners[0] ? tenantFromEmail(owners[0]) : "default");
-  ownerCache = { key, tenant, at: Date.now() };
+  if (ownerCache && ownerCache.key === key && Date.now() - ownerCache.at < OWNER_CACHE_MS) return ownerCache.tenant;
+  const fromDb = await kissTenant(env.DB, owners);
+  const tenant = fromDb || (owners[0] ? tenantFromEmail(owners[0]) : "default");
+  ownerCache = fromDb ? { key, tenant, at: Date.now() } : null;
   return tenant;
 }
 

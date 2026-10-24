@@ -86,6 +86,8 @@ export interface Env {
 
   // Ops bearer (acts as the first owner)
   ALFRED_OPS_TOKEN?: SecretValue;
+  /** Session cookie signing key(s), "new,old" during rotation. */
+  ALFRED_SESSION_KEY?: SecretValue;
   ALFRED_AGENT_TOKEN?: SecretValue;
 
   /** Alfred.report Missions Worker (apps/missions) - missions board, knowledge graph, workflows. */

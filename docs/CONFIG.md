@@ -55,6 +55,8 @@ Apps: `web` = deploy/web (src/index.ts), `missions` = apps/missions, `oral` = ap
 | `A2A_BEARER_TOKEN` | missions |  |  | Bearer for external field agents on /a2a/*. |
 | `OWNER_WAKE_URL` | missions |  |  | Optional webhook that wakes the owner (mission complete / needs owner). |
 | `OWNER_WAKE_AUTH` | missions |  |  | Bearer sent to OWNER_WAKE_URL. |
+| `ALFRED_SESSION_KEY` | web |  |  | Signs web session cookies (separate from the ops token). Rotate as "new,old": the first signs, all verify. |
+| `ALFRED_RECEIPT_KEY` | missions |  |  | HMAC key for mission/board ids derived from client requestIds (keyed, unforgeable). |
 | `JWT_SECRET` | web |  |  | Signs web session cookies. |
 | `GOOGLE_CLIENT_ID` | web |  |  | Google OAuth client id (Google sign-in). |
 | `GOOGLE_CLIENT_SECRET` | web |  |  | Google OAuth client secret. |

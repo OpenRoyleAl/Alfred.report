@@ -4,8 +4,8 @@
  */
 import type { Env } from "./env";
 import { isOwnerEmail } from "./access.ts";
-import { ownerTenant, postLoginPath } from "./tenant.ts";
-import { secretGet } from "./secret";
+import { invalidateOwnerCache, ownerTenant, postLoginPath } from "./tenant.ts";
+import { secretGet } from "./secret.ts";
 import { navSafeNext } from "../alfred/core.ts";
 import { signOAuthState, verifyOAuthState } from "./oauth-state.ts";
 import {
@@ -15,7 +15,7 @@ import {
   normalizeHandle,
   setSessionCookie,
   type KissUser,
-} from "./kiss";
+} from "./kiss.ts";
 
 const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
@@ -99,6 +99,7 @@ async function upsertGoogleUser(
   )
     .bind(email, name, tenant_id, `google:${profile.sub}`, now)
     .run();
+  invalidateOwnerCache();
 
   try {
     await env.DB.prepare(`UPDATE kiss_users SET google_sub = ? WHERE email = ?`).bind(profile.sub, email).run();
@@ -107,6 +108,13 @@ async function upsertGoogleUser(
   }
 
   return { user: { email, name, tenant_id, billing_paid: 0, google: true }, created: true, owner: false };
+}
+
+/** https://<DOMAIN>/api/auth/google/callback, or "" when DOMAIN is not a plain hostname. */
+export function googleRedirectUri(env: { DOMAIN?: string }): string {
+  const d = (env.DOMAIN || "").trim().toLowerCase();
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d)) return "";
+  return `https://${d}/api/auth/google/callback`;
 }
 
 export async function handleGoogleAuth(req: Request, env: Env, url: URL): Promise<Response | null> {
@@ -128,8 +136,11 @@ export async function handleGoogleAuth(req: Request, env: Env, url: URL): Promis
     return Response.json({ error: "Google sign-in not configured on this deploy" }, { status: 503 });
   }
 
-  const origin = url.origin;
-  const redirectUri = `${origin}/api/auth/google/callback`;
+  // Fixed redirect_uri from config (DOMAIN), never the request's Host: a stray host cannot mint
+  // a Google code for itself, and the URI always matches the one registered with Google.
+  const redirectUri = googleRedirectUri(env);
+  if (!redirectUri) return Response.json({ error: "Google sign-in not configured on this deploy" }, { status: 503 });
+  const origin = new URL(redirectUri).origin;
 
   if (isStart && (req.method === "GET" || req.method === "POST")) {
     let callbackURL = "/home";

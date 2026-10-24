@@ -22,6 +22,7 @@ pub mod nav;
 pub mod report;
 pub mod review;
 pub mod search;
+pub mod untrusted;
 
 use std::alloc::{alloc as raw_alloc, dealloc as raw_dealloc, Layout};
 
@@ -241,4 +242,9 @@ pub extern "C" fn nav_app_redirect(ptr: *const u8, len: usize) -> u64 {
 #[no_mangle]
 pub extern "C" fn nav_safe_next(ptr: *const u8, len: usize) -> u64 {
     call(ptr, len, nav::safe_next_json)
+}
+
+#[no_mangle]
+pub extern "C" fn untrusted_wrap(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, untrusted::wrap_json)
 }

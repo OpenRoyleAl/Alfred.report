@@ -47,6 +47,7 @@ interface Exports {
   durable_board_id(ptr: number, len: number): bigint;
   nav_app_redirect(ptr: number, len: number): bigint;
   nav_safe_next(ptr: number, len: number): bigint;
+  untrusted_wrap(ptr: number, len: number): bigint;
   limiter_take(id: number, now: number): number;
   limiter_available(id: number, now: number): number;
   limiter_cooldown(id: number, until: number): void;
@@ -235,6 +236,8 @@ export function durableCreate(input: {
   run_at?: number | null;
   delay_seconds?: number | null;
   now: number;
+  /** ALFRED_RECEIPT_KEY: HMAC key for derived ids (required; create fails closed without it). */
+  mac_key: string;
 }): DurableCreate {
   return callJson("durable_create", input);
 }
@@ -271,8 +274,8 @@ export function reviewCore<T>(input: unknown): T {
 }
 
 /** Board (D1) mission id derived from a client requestId (idempotent create). */
-export function durableBoardId(requestId: string): string {
-  return callJson<{ id: string }>("durable_board_id", { request_id: requestId }).id;
+export function durableBoardId(requestId: string, macKey: string): string {
+  return callJson<{ id: string }>("durable_board_id", { request_id: requestId, mac_key: macKey }).id;
 }
 
 /** Where an app page goes: owner -> / (board), other signed-in -> /home, signed out -> /login/?next=<path> (decided in Rust). */
@@ -283,4 +286,14 @@ export function navAppRedirect(path: string, search: string, signedIn: boolean, 
 /** Same-origin return path or /home (Rust rejects //host, backslashes, absolute URLs). */
 export function navSafeNext(next: string | null | undefined): string {
   return callJson<{ next: string }>("nav_safe_next", { next: next ?? null }).next;
+}
+
+/** Fence a fetched page as untrusted data (Rust): fence markers neutralised, injection attempts flagged. */
+export function untrustedWrap(url: string, status: number, text: string, limit = 8000): { text: string; flags: string[]; rule: string } {
+  return callJson<{ text: string; flags: string[]; rule: string }>("untrusted_wrap", { url, status, text, limit });
+}
+
+/** The untrusted-content rule both engines put in their system prompt. */
+export function untrustedRule(): string {
+  return untrustedWrap("", 0, "", 0).rule;
 }

@@ -12,6 +12,7 @@
  * `durableWake` schedule at the Rust-computed time. durableWake is idempotent: a second fire
  * with nothing due is a no-op, and a mission already running in this isolate is skipped.
  */
+import { secretGet } from "../../../src/lib/secret.ts";
 import {
   durableCreate,
   durableNextAlarm,
@@ -19,6 +20,7 @@ import {
   durableRank,
   durableRecover,
   durableFetchCheck,
+  untrustedWrap,
   durableHtmlText,
   modelsText,
   type DurableTask,
@@ -51,6 +53,8 @@ export interface DurableEnv {
   EXA_CUSTOM_PROVIDER?: string;
   SEARCH_EXA_DAILY_LIMIT?: string;
   CF_AIG_TOKEN?: SecretValue;
+  /** HMAC key for derived mission ids (Secrets Store). */
+  ALFRED_RECEIPT_KEY?: SecretValue;
   /** Version metadata binding: the Worker version id this isolate runs (recorded on every task). */
   CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
   MEMORY?: { getProfile(name: string): Promise<{ ingest(m: Array<{ role: string; content: string }>, o?: { sessionId?: string }): Promise<unknown> }> };
@@ -231,7 +235,9 @@ export class DurableEngine {
   async create(a: CreateArgs): Promise<{ missionId: string; requestId: string; duplicate: boolean; status: string; runAt: number }> {
     this.ensure();
     const now = Date.now();
+    const macKey = await secretGet(this.h.env.ALFRED_RECEIPT_KEY);
     const c = durableCreate({
+      mac_key: macKey,
       tenant: a.tenant,
       request_id: a.requestId ?? null,
       fallback: a.fallback ?? [],
@@ -520,7 +526,9 @@ export class DurableEngine {
       }
       case "web_fetch": {
         const fetched = await fetchPublicPage(String(input.url || ""));
-        return `HTTP ${fetched.status} ${fetched.url}\n${durableHtmlText(fetched.body, 4000)}`;
+        // First line stays "HTTP <status> <url>" (the citation check reads it); the page is fenced as data.
+        const page = untrustedWrap(fetched.url, fetched.status, durableHtmlText(fetched.body, 4000), 4000);
+        return `HTTP ${fetched.status} ${fetched.url}\n${page.text}`;
       }
       case "note_save": {
         const text = String(input.text || "").trim().slice(0, 2000);

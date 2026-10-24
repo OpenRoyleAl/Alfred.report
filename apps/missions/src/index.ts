@@ -1,6 +1,7 @@
 /// <reference path="../../../src/wasm.d.ts" />
 import coreWasm from "../../../src/alfred/wasm/alfred_core.wasm";
 import { durableBoardId, initCore } from "../../../src/alfred/core.ts";
+import { secretGet } from "../../../src/lib/secret.ts";
 import { primeSecrets } from "./lib/secrets";
 import { BriefingWorkflow } from "./workflows/briefing";
 import { MaintenanceWorkflow } from "./workflows/maintenance";
@@ -32,6 +33,7 @@ export interface Env extends WorkerEnv {
   AUTO_ALLOWED_PROVIDERS?: string;
   WORKERS_AI_FLOOR?: string;
   ALFRED_OPS_TOKEN?: string;
+  ALFRED_RECEIPT_KEY?: import("../../../src/lib/secret.ts").SecretValue;
   A2A_BEARER_TOKEN?: string;
   OWNER_WAKE_URL?: string;
   OWNER_WAKE_AUTH?: string;
@@ -484,7 +486,7 @@ export default {
       let boardId = "";
       if (rid) {
         try {
-          boardId = durableBoardId(rid);
+          boardId = durableBoardId(rid, await secretGet(env.ALFRED_RECEIPT_KEY));
         } catch (err) {
           return Response.json({ error: (err as Error).message.replace(/^alfred-core \w+: /, "") }, { status: 400 });
         }

@@ -20,7 +20,7 @@
     "build:rust": "cargo build --release --target wasm32-unknown-unknown --manifest-path crates/alfred-core/Cargo.toml && cp crates/alfred-core/target/wasm32-unknown-unknown/release/alfred_core.wasm src/alfred/wasm/",
     "test": "node --test 'scripts/**/*.test.mjs' && npm run test:src && npm run eval",
     "eval": "node --experimental-strip-types --import ./scripts/test-core.ts evals/run.ts",
-    "test:src": "node --experimental-strip-types --import ./scripts/test-core.ts --test src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/access.test.ts src/alfred/guards.test.ts src/alfred/review.test.ts src/alfred/clef.test.ts src/alfred/clairic.test.ts src/alfred/search.test.ts src/alfred/exa-lite.test.ts src/alfred/report.test.ts src/alfred/models.test.ts apps/oral/src/wake.test.ts apps/oral/src/turn.test.ts apps/oral/src/identity.test.ts src/alfred/extensions/extensions.test.ts src/mcp/server.test.ts src/lib/tenant.test.ts src/alfred/bind.test.ts src/lib/mail.test.ts src/lib/google-auth.test.ts src/alfred/fetch-guard.test.ts",
+    "test:src": "node --experimental-strip-types --import ./scripts/test-core.ts --test src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/access.test.ts src/alfred/guards.test.ts src/alfred/review.test.ts src/alfred/clef.test.ts src/alfred/clairic.test.ts src/alfred/search.test.ts src/alfred/exa-lite.test.ts src/alfred/report.test.ts src/alfred/models.test.ts apps/oral/src/wake.test.ts apps/oral/src/turn.test.ts apps/oral/src/identity.test.ts src/alfred/extensions/extensions.test.ts src/mcp/server.test.ts src/lib/tenant.test.ts src/alfred/bind.test.ts src/lib/mail.test.ts src/lib/google-auth.test.ts src/alfred/fetch-guard.test.ts src/lib/kiss-security.test.ts src/alfred/untrusted.test.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "secret-scan": "node scripts/secret-scan.mjs",
@@ -89,7 +89,7 @@
     "tw-animate-css": "^1.3.4",
     "typebox": "^1.4.2",
     "vaul": "^1.1.2",
-    "zod": "^4.4.0",
+    "zod": "^4.6.7",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

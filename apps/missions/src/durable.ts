@@ -533,7 +533,7 @@ export class DurableEngine {
    * Weekly consolidation (Rust builds it from passing, stored missions of the last 7 days; no model).
    * One memory per ISO week, session weekly-<week>: a re-run replaces it. force = run now.
    */
-  async consolidate(tenant: string, force: boolean): Promise<{ week: string; status: string; id?: string; count?: number }> {
+  async consolidate(tenant: string, force: boolean): Promise<{ week: string; status: string; id?: string; count?: number; content?: string; version?: string }> {
     this.ensure();
     const now = Date.now();
     const last = this.rows(`SELECT v FROM dm_meta WHERE k = 'weekly_week'`)[0]?.v;
@@ -555,7 +555,7 @@ export class DurableEngine {
     }
     this.sql.exec(`INSERT OR REPLACE INTO dm_meta VALUES ('weekly_week', ?)`, plan.week);
     this.sql.exec(`INSERT OR REPLACE INTO dm_meta VALUES ('weekly_status', ?)`, `${new Date(now).toISOString()} ${status}`);
-    return { week: plan.week, status, id: memId, count: plan.count };
+    return { week: plan.week, status, id: memId, count: plan.count, content: plan.content, version: this.version() };
   }
 
   memoryHealth() {

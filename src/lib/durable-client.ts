@@ -84,7 +84,7 @@ export async function durableList(env: Env, tenant: string, limit = 20): Promise
 }
 
 export function durableConsolidate(env: Env, tenant: string) {
-  return call<{ week: string; status: string; id?: string; count?: number }>(env, "/durable/consolidate", { method: "POST", body: { tenant, force: true } });
+  return call<{ week: string; status: string; id?: string; count?: number; content?: string; version?: string }>(env, "/durable/consolidate", { method: "POST", body: { tenant, force: true } });
 }
 export function durableMemoryHealth(env: Env, tenant: string) {
   return call<{ confidence: Array<Record<string, unknown>>; weekly: Record<string, string> }>(env, "/durable/memory-health", { query: { tenant } });

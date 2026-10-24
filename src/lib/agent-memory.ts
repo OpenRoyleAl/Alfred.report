@@ -29,14 +29,15 @@ export class MemoryUnavailable extends Error {
   }
 }
 
-export async function kingdom(env: MemoryEnv, tenant: string): Promise<AMProfile> {
+/** `archive` selects the kingdom's archive profile (imported Hermes history), kept out of mission recall. */
+export async function kingdom(env: MemoryEnv, tenant: string, archive = false): Promise<AMProfile> {
   if (!env.MEMORY) throw new MemoryUnavailable();
-  return env.MEMORY.getProfile(memoryProfile(tenant));
+  return env.MEMORY.getProfile(memoryProfile(tenant, archive));
 }
 
-export async function recallFor(env: MemoryEnv, tenant: string, text: string, budgetTokens?: number | null, referenceDate?: Date): Promise<MemoryShape & { count: number }> {
+export async function recallFor(env: MemoryEnv, tenant: string, text: string, budgetTokens?: number | null, referenceDate?: Date, archive = false): Promise<MemoryShape & { count: number }> {
   const q = memoryQuery(text);
-  const r = await (await kingdom(env, tenant)).recall(q, { responseLength: "short", ...(referenceDate ? { referenceDate } : {}) });
+  const r = await (await kingdom(env, tenant, archive)).recall(q, { responseLength: "short", ...(referenceDate ? { referenceDate } : {}) });
   const shaped = memoryShape({ answer: r.answer || "", candidates: (r.candidates || []).map((c) => ({ id: c.id, summary: c.summary, score: c.score })), budget_tokens: budgetTokens ?? null });
   return { ...shaped, count: r.count };
 }
@@ -48,7 +49,7 @@ export async function rememberFor(env: MemoryEnv, tenant: string, args: unknown)
 
 export async function forgetFor(env: MemoryEnv, tenant: string, args: unknown): Promise<{ forgot: string; id?: string; sessionId?: string }> {
   const f = memoryOp<{ kind: "memory" | "session"; id?: string; sessionId?: string }>("forget", args);
-  const p = await kingdom(env, tenant);
+  const p = await kingdom(env, tenant, (args as { archive?: unknown })?.archive === true);
   if (f.kind === "memory") {
     await p.delete(f.id!);
     return { forgot: "memory", id: f.id };
@@ -57,9 +58,9 @@ export async function forgetFor(env: MemoryEnv, tenant: string, args: unknown): 
   return { forgot: "session", sessionId: f.sessionId };
 }
 
-export async function exportFor(env: MemoryEnv, tenant: string, args: { cursor?: unknown; limit?: unknown; sessionId?: unknown }): Promise<{ memories: AMMemory[]; cursor: string | null }> {
+export async function exportFor(env: MemoryEnv, tenant: string, args: { cursor?: unknown; limit?: unknown; sessionId?: unknown; archive?: unknown }): Promise<{ memories: AMMemory[]; cursor: string | null }> {
   const { limit } = memoryOp<{ limit: number }>("export", args);
-  const p = await kingdom(env, tenant);
+  const p = await kingdom(env, tenant, args.archive === true);
   const page = await p.list({
     limit,
     ...(typeof args.cursor === "string" && args.cursor ? { cursor: args.cursor } : {}),

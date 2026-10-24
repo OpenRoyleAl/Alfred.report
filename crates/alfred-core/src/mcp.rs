@@ -73,14 +73,14 @@ pub fn tools() -> Vec<Tool> {
             scope: "memory:read",
             owner_only: false,
             description: "Recall from this kingdom's Agent Memory: a grounded answer plus the memory ids it used (cite as mem:<id>).",
-            input_schema: json!({ "type": "object", "properties": { "query": { "type": "string", "minLength": 3, "maxLength": 1000 }, "budgetTokens": { "type": "number", "minimum": 50, "maximum": 8000 } }, "required": ["query"] }),
+            input_schema: json!({ "type": "object", "properties": { "query": { "type": "string", "minLength": 3, "maxLength": 1000 }, "budgetTokens": { "type": "number", "minimum": 50, "maximum": 8000 }, "archive": { "type": "boolean", "description": "Search the kingdom's archive (e.g. imported Hermes memory) instead of live memory." } }, "required": ["query"] }),
         },
         Tool {
             name: "memory_export",
             scope: "memory:read",
             owner_only: false,
             description: "Export this kingdom's memories with full content, a page at a time (pass the returned cursor).",
-            input_schema: json!({ "type": "object", "properties": { "cursor": { "type": "string" }, "limit": { "type": "number", "minimum": 1, "maximum": 100 }, "sessionId": { "type": "string", "maxLength": 64 } } }),
+            input_schema: json!({ "type": "object", "properties": { "cursor": { "type": "string" }, "limit": { "type": "number", "minimum": 1, "maximum": 100 }, "sessionId": { "type": "string", "maxLength": 64 }, "archive": { "type": "boolean" } } }),
         },
         Tool {
             name: "memory_remember",
@@ -94,7 +94,7 @@ pub fn tools() -> Vec<Tool> {
             scope: "memory:write",
             owner_only: false,
             description: "Forget one memory (id) or every memory from one mission/session (sessionId) in this kingdom.",
-            input_schema: json!({ "type": "object", "properties": { "id": { "type": "string" }, "sessionId": { "type": "string", "maxLength": 64 } } }),
+            input_schema: json!({ "type": "object", "properties": { "id": { "type": "string" }, "sessionId": { "type": "string", "maxLength": 64 }, "archive": { "type": "boolean" } } }),
         },
         Tool {
             name: "history_search",

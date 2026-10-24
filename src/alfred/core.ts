@@ -306,8 +306,8 @@ export function untrustedRule(): string {
 // ─── Agent Memory policy (Rust: crates/alfred-core/src/memory.rs) ───
 export interface MemoryStorePlan { store: boolean; reason: string; session_id: string; messages: Array<{ role: "user" | "assistant"; content: string }> }
 export interface MemoryShape { answer: string; items: Array<{ id: string; summary: string; score: number }>; ids: string[]; tokens: number; budget: number }
-export function memoryProfile(tenant: string): string {
-  return callJson<{ profile: string }>("memory_profile", { tenant }).profile;
+export function memoryProfile(tenant: string, archive = false): string {
+  return callJson<{ profile: string }>("memory_profile", { tenant, archive }).profile;
 }
 export function memoryQuery(text: string): string {
   return callJson<{ query: string }>("memory_query", { text }).query;

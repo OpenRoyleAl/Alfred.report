@@ -98,18 +98,18 @@ export async function executeMCPTool(name: string, args: Record<string, unknown>
     case "memory_recall": {
       const query = String(args.query || "").trim();
       if (query.length < 3) throw new Error("query required");
-      const r = await recallFor(env, who.tenant_id, query, typeof args.budgetTokens === "number" ? args.budgetTokens : null);
+      const r = await recallFor(env, who.tenant_id, query, typeof args.budgetTokens === "number" ? args.budgetTokens : null, undefined, args.archive === true);
       return { answer: r.answer, memories: r.items, ids: r.ids, count: r.count, tokens: r.tokens };
     }
     case "memory_export": {
-      return exportFor(env, who.tenant_id, { cursor: args.cursor, limit: args.limit, sessionId: args.sessionId });
+      return exportFor(env, who.tenant_id, { cursor: args.cursor, limit: args.limit, sessionId: args.sessionId, archive: args.archive });
     }
     case "memory_remember": {
       const m = await rememberFor(env, who.tenant_id, { content: args.content, sessionId: args.sessionId });
       return { id: m.id, type: m.type, summary: m.summary };
     }
     case "memory_forget": {
-      return forgetFor(env, who.tenant_id, { id: args.id, sessionId: args.sessionId });
+      return forgetFor(env, who.tenant_id, { id: args.id, sessionId: args.sessionId, archive: args.archive });
     }
   }
   throw new Error(`Unknown tool: ${name}`);

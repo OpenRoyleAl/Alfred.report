@@ -31,17 +31,44 @@ fn cut_bytes(s: &str, max: usize) -> String {
     s[..end].to_string()
 }
 
-/// Profile name for a tenant: the tenant id itself, validated (KISS, matches existing `hans`).
+/// Agent Memory profile names accept only `[a-z0-9-]` (tested live: `_`, `.`, `~`, `:` -> 1101).
+/// Tenant ids use `[a-z0-9_]` (encoded emails, e.g. `martin_40example_2ecom`) or handles with `-`.
+/// Injective mapping: `-` -> `--`, `_` -> `-x`, anything else -> `-u<hex>`. A single `-` followed by
+/// `a` (archive) or `h` (hashed long name) is therefore never produced by a tenant id.
 pub fn profile(tenant: &str) -> Result<String, String> {
+    profile_of(tenant, false)
+}
+
+/// The kingdom's archive profile (e.g. imported Hermes memory): `<profile>-archive`. Kept apart so
+/// bulk history does not crowd mission recall; read it with `archive: true`.
+pub fn archive_profile(tenant: &str) -> Result<String, String> {
+    profile_of(tenant, true)
+}
+
+fn profile_of(tenant: &str, archive: bool) -> Result<String, String> {
     let t = tenant.trim();
-    let ok = !t.is_empty()
-        && t.len() <= MAX_PROFILE_LEN
-        && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~');
-    if ok {
-        Ok(t.to_string())
-    } else {
-        Err("invalid tenant for memory profile".into())
+    if t.is_empty() || t.len() > 200 || t.chars().any(|c| c.is_control() || c.is_whitespace() || c == '/') {
+        return Err("invalid tenant for memory profile".into());
     }
+    let mut out = String::new();
+    for c in t.chars() {
+        match c {
+            'a'..='z' | '0'..='9' => out.push(c),
+            'A'..='Z' => return Err("invalid tenant for memory profile".into()),
+            '-' => out.push_str("--"),
+            '_' => out.push_str("-x"),
+            c => out.push_str(&format!("-u{:x}", c as u32)),
+        }
+    }
+    let suffix = if archive { "-archive" } else { "" };
+    if out.len() + suffix.len() > MAX_PROFILE_LEN {
+        use sha2::{Digest, Sha256};
+        let h = Sha256::digest(t.as_bytes());
+        let hex: String = h.iter().take(8).map(|b| format!("{b:02x}")).collect();
+        let keep: String = out.chars().take(60).collect::<String>().trim_end_matches('-').to_string();
+        out = format!("{keep}-h{hex}");
+    }
+    Ok(format!("{out}{suffix}"))
 }
 
 pub fn valid_memory_id(id: &str) -> bool {
@@ -230,7 +257,9 @@ pub fn export_limit(v: &Value) -> usize {
 
 pub fn profile_json(input: &str) -> Result<String, String> {
     let v: Value = serde_json::from_str(input).map_err(|e| e.to_string())?;
-    Ok(json!({ "profile": profile(v["tenant"].as_str().unwrap_or(""))? }).to_string())
+    let t = v["tenant"].as_str().unwrap_or("");
+    let p = if v["archive"].as_bool().unwrap_or(false) { archive_profile(t)? } else { profile(t)? };
+    Ok(json!({ "profile": p }).to_string())
 }
 pub fn query_json(input: &str) -> Result<String, String> {
     let v: Value = serde_json::from_str(input).map_err(|e| e.to_string())?;
@@ -265,11 +294,20 @@ mod tests {
     const ID: &str = "01M0RWH2SGDZJRBQ6S82RH823B";
 
     #[test]
-    fn profile_is_tenant_and_rejects_injection() {
+    fn profile_is_tenant_safe_and_injective() {
         assert_eq!(profile("hans").unwrap(), "hans");
+        assert_eq!(archive_profile("hans").unwrap(), "hans-archive");
+        assert_eq!(profile("martin_40example_2ecom").unwrap(), "martin-x40example-x2ecom");
+        assert_eq!(profile("qa-kingdom-b").unwrap(), "qa--kingdom--b");
+        assert_ne!(profile("a_b").unwrap(), profile("a-b").unwrap());
+        assert_ne!(profile("hans-archive").unwrap(), archive_profile("hans").unwrap());
         assert!(profile("../martin").is_err());
         assert!(profile("").is_err());
-        assert!(profile(&"a".repeat(101)).is_err());
+        let long = profile(&"a".repeat(150)).unwrap();
+        assert!(long.len() <= MAX_PROFILE_LEN && long.contains("-h"));
+        for p in [profile("x_y.z").unwrap(), archive_profile(&"b_".repeat(80)).unwrap()] {
+            assert!(p.len() <= MAX_PROFILE_LEN && p.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'), "{p}");
+        }
     }
 
     #[test]

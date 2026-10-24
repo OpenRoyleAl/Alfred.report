@@ -6,7 +6,7 @@
 import type { Env } from "./env";
 import { secretGet } from "./secret";
 import { completeText } from "../alfred/models";
-import { isOwnerEmail } from "./access.ts";
+import { isOwnerEmail, safeEqual } from "./access.ts";
 import { ownerTenant } from "./tenant.ts";
 
 export const KISS_COOKIE = "alfred_kiss";
@@ -30,7 +30,7 @@ async function cookieSecret(env: Env): Promise<string> {
   const ops = await secretGet(env.ALFRED_OPS_TOKEN as any);
   if (ops) return ops;
   const aig = await secretGet(env.CF_AIG_TOKEN as any);
-  return aig || "kiss-dev-unconfigured";
+  return aig || "";
 }
 
 async function hmacHex(secret: string, msg: string): Promise<string> {
@@ -169,9 +169,11 @@ export function clearSessionCookie(): string {
 }
 
 export async function mintSession(env: Env, user: KissUser): Promise<string> {
+  const secret = await cookieSecret(env);
+  if (!secret) throw new Error("session secret not configured");
   const exp = Date.now() + 7 * 24 * 60 * 60 * 1000;
   const payload = `${user.email}|${user.tenant_id}|${exp}`;
-  const sig = await hmacHex(await cookieSecret(env), payload);
+  const sig = await hmacHex(secret, payload);
   return btoa(`${payload}|${sig}`).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
@@ -187,8 +189,10 @@ export async function readSession(req: Request, env: Env): Promise<KissUser | nu
     const [email, tenant_id, expStr, sig] = atob(padded).split("|");
     if (!email || !tenant_id || !expStr || !sig) return null;
     if (Number(expStr) < Date.now()) return null;
-    const expect = await hmacHex(await cookieSecret(env), `${email}|${tenant_id}|${expStr}`);
-    if (expect !== sig) return null;
+    const secret = await cookieSecret(env);
+    if (!secret) return null;
+    const expect = await hmacHex(secret, `${email}|${tenant_id}|${expStr}`);
+    if (!safeEqual(expect, sig)) return null;
     await ensureKissSchema(env.DB);
     const row = await env.DB.prepare(
       "SELECT email, name, tenant_id, billing_paid, pass_salt FROM kiss_users WHERE email = ?"
@@ -268,8 +272,9 @@ export async function login(
       billing_paid: number;
     }>();
   if (!row) return { error: "Unknown account", status: 401 };
+  if (row.pass_salt === "google") return { error: "Sign in with Google", status: 401 };
   const h = await hashPassword(password, row.pass_salt);
-  if (h !== row.pass_hash) return { error: "Bad password", status: 401 };
+  if (!safeEqual(h, row.pass_hash)) return { error: "Bad password", status: 401 };
   return {
     user: {
       email: row.email,

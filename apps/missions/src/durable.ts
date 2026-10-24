@@ -94,6 +94,35 @@ export interface MissionView {
   tasks?: Array<Record<string, unknown>>;
 }
 
+const FETCH_MAX_HOPS = 4;
+const FETCH_MAX_BYTES = 400_000;
+
+/** Fetch a public page: every hop (including redirects) must pass the Rust host allow-list. */
+export async function fetchPublicPage(
+  url: string,
+  hopFetch: typeof fetch = fetch
+): Promise<{ status: number; url: string; body: string }> {
+  let current = durableFetchCheck(url);
+  for (let hop = 0; hop < FETCH_MAX_HOPS; hop++) {
+    const r = await hopFetch(current, {
+      headers: { "User-Agent": "AlfredReport/1.0 (+durable)" },
+      signal: AbortSignal.timeout(10_000),
+      redirect: "manual",
+    });
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get("Location");
+      if (!loc) throw new Error("redirect without location");
+      current = durableFetchCheck(new URL(loc, current).href);
+      continue;
+    }
+    const declared = Number(r.headers.get("content-length") || 0);
+    if (declared > FETCH_MAX_BYTES) throw new Error("response too large");
+    const body = (await r.text()).slice(0, FETCH_MAX_BYTES);
+    return { status: r.status, url: current, body };
+  }
+  throw new Error("too many redirects");
+}
+
 const MAX_RUN_LOOP = 24;
 /** Build stamp in /durable/stats (shows which code a live instance runs after a deploy). */
 const ENGINE_BUILD = "durable-2026-10-23c";
@@ -490,10 +519,8 @@ export class DurableEngine {
         return `Search results via ${route.join(" -> ") || "router"} (leads only: open with web_fetch before citing):\n${items.join("\n") || "(no results)"}`;
       }
       case "web_fetch": {
-        const url = durableFetchCheck(String(input.url || ""));
-        const r = await fetch(url, { headers: { "User-Agent": "AlfredReport/1.0 (+durable)" }, signal: AbortSignal.timeout(10_000), redirect: "follow" });
-        const body = await r.text();
-        return `HTTP ${r.status} ${url}\n${durableHtmlText(body.slice(0, 400_000), 4000)}`;
+        const fetched = await fetchPublicPage(String(input.url || ""));
+        return `HTTP ${fetched.status} ${fetched.url}\n${durableHtmlText(fetched.body, 4000)}`;
       }
       case "note_save": {
         const text = String(input.text || "").trim().slice(0, 2000);

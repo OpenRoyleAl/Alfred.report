@@ -1,0 +1,13 @@
+[
+  { "id": "mission-create-owner-only", "suite": "security", "check": "mcp_allow", "input": { "name": "mission_create", "scopes": ["missions:write"], "isOwner": false }, "expect": { "ok": false, "error": "owner tenant" } },
+  { "id": "mission-create-owner-ok", "suite": "security", "check": "mcp_allow", "input": { "name": "mission_create", "scopes": ["missions:write"], "isOwner": true }, "expect": { "ok": true } },
+  { "id": "memory-read-required", "suite": "security", "check": "mcp_allow", "input": { "name": "memory_recall", "scopes": ["report:read"], "isOwner": false }, "expect": { "ok": false, "error": "forbidden" } },
+  { "id": "memory-read-allows-recall", "suite": "security", "check": "mcp_allow", "input": { "name": "memory_recall", "scopes": ["memory:read"], "isOwner": false }, "expect": { "ok": true } },
+  { "id": "memory-read-allows-history", "suite": "security", "check": "mcp_allow", "input": { "name": "history_search", "scopes": ["memory:read"], "isOwner": false }, "expect": { "ok": true } },
+  { "id": "spend-out-of-scope", "suite": "security", "check": "mcp_allow", "input": { "name": "spend", "scopes": ["report:read"], "isOwner": false }, "expect": { "ok": false } },
+  { "id": "unknown-scope-rejected", "suite": "security", "check": "parse_scopes", "input": { "scopes": ["admin"] }, "expect": { "throws": true } },
+  { "id": "nav-rejects-protocol-relative", "suite": "security", "check": "nav_safe", "input": { "next": "//evil.com" }, "expect": { "next": "/home" } },
+  { "id": "nav-rejects-absolute", "suite": "security", "check": "nav_safe", "input": { "next": "https://evil.com" }, "expect": { "next": "/home" } },
+  { "id": "nav-rejects-backslash", "suite": "security", "check": "nav_safe", "input": { "next": "/\\evil.com" }, "expect": { "next": "/home" } },
+  { "id": "nav-keeps-same-origin-path", "suite": "security", "check": "nav_safe", "input": { "next": "/m/abc?x=1" }, "expect": { "next": "/m/abc?x=1" } }
+]

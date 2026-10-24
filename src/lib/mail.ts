@@ -32,7 +32,9 @@ export interface InboundEmail {
  */
 export function senderAuthenticated(headers: Headers): boolean {
   const ar = (headers.get("authentication-results") || "").toLowerCase();
-  return /\bdmarc=pass\b/.test(ar) || /\bdkim=pass\b/.test(ar);
+  // DMARC pass is aligned with the From domain. A DKIM pass alone can be for a
+  // different signing domain than From (classic spoof → owner mission).
+  return /\bdmarc=pass\b/.test(ar);
 }
 
 /**
@@ -72,7 +74,7 @@ export async function handleInboundEmail(message: InboundEmail, env: Env): Promi
     }
   }
 
-  if (!env.EMAIL?.send || !env.DOMAIN) return;
+  if (!owner || !env.EMAIL?.send || !env.DOMAIN) return;
   try {
     await env.EMAIL.send({
       from: { name: brand.instanceBrand, email: `${BRAND.senderLocalPart}@${env.DOMAIN}` },

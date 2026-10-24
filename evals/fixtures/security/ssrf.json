@@ -1,0 +1,11 @@
+[
+  { "id": "block-localhost", "suite": "security", "check": "fetch_url", "input": { "url": "http://localhost/x" }, "expect": { "ok": false } },
+  { "id": "block-rfc1918", "suite": "security", "check": "fetch_url", "input": { "url": "https://10.0.0.1/" }, "expect": { "ok": false } },
+  { "id": "block-loopback", "suite": "security", "check": "fetch_url", "input": { "url": "http://127.0.0.1/" }, "expect": { "ok": false } },
+  { "id": "block-ipv6-loopback", "suite": "security", "check": "fetch_url", "input": { "url": "http://[::1]/secret" }, "expect": { "ok": false } },
+  { "id": "block-userinfo", "suite": "security", "check": "fetch_url", "input": { "url": "https://evil@127.0.0.1/" }, "expect": { "ok": false } },
+  { "id": "block-decimal-ip", "suite": "security", "check": "fetch_url", "input": { "url": "http://2130706433/" }, "expect": { "ok": false } },
+  { "id": "block-star-localhost", "suite": "security", "check": "fetch_url", "input": { "url": "http://foo.localhost/" }, "expect": { "ok": false } },
+  { "id": "block-internal", "suite": "security", "check": "fetch_url", "input": { "url": "http://metadata.google.internal/" }, "expect": { "ok": false } },
+  { "id": "allow-public-https", "suite": "security", "check": "fetch_url", "input": { "url": "https://example.com/a" }, "expect": { "ok": true } }
+]

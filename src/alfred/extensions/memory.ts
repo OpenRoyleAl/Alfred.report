@@ -6,6 +6,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { ToolRegistration } from "@earendil-works/pi-durable";
 import type { Env } from "../../lib/env";
 import { recallMemory, remember } from "../../lib/kiss";
+import { kingdom } from "../../lib/agent-memory.ts";
 
 const RememberParams = Type.Object({ content: Type.String({ minLength: 1, maxLength: 4000 }) });
 const RecallParams = Type.Object({ query: Type.String({ minLength: 1, maxLength: 1000 }) });
@@ -18,7 +19,7 @@ export function memoryTools(env: Env, tenantId: string, sessionId: () => string)
     replay: "unsafe",
     async execute({ content }) {
       if (env.MEMORY) {
-        const profile = await env.MEMORY.getProfile(tenantId);
+        const profile = await kingdom(env, tenantId);
         const m = await profile.remember({ content, sessionId: sessionId() });
         return { output: [{ type: "text", text: `remembered ${m.id}: ${m.summary}` }] };
       }
@@ -33,7 +34,7 @@ export function memoryTools(env: Env, tenantId: string, sessionId: () => string)
     replay: "safe",
     async execute({ query }) {
       if (env.MEMORY) {
-        const profile = await env.MEMORY.getProfile(tenantId);
+        const profile = await kingdom(env, tenantId);
         const r = await profile.recall(query, { responseLength: "short" });
         return { output: [{ type: "text", text: r.count ? r.answer : "No matching memories." }] };
       }

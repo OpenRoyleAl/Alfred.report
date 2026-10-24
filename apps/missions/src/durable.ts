@@ -13,10 +13,12 @@
  * with nothing due is a no-op, and a mission already running in this isolate is skipped.
  */
 import { secretGet } from "../../../src/lib/secret.ts";
+import { kingdom, recallFor, type AMNamespace } from "../../../src/lib/agent-memory.ts";
 import {
   durableCreate,
   durableNextAlarm,
   durablePlan,
+  memoryStorePlan,
   durableRank,
   durableRecover,
   durableFetchCheck,
@@ -57,7 +59,7 @@ export interface DurableEnv {
   ALFRED_RECEIPT_KEY?: SecretValue;
   /** Version metadata binding: the Worker version id this isolate runs (recorded on every task). */
   CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
-  MEMORY?: { getProfile(name: string): Promise<{ ingest(m: Array<{ role: string; content: string }>, o?: { sessionId?: string }): Promise<unknown> }> };
+  MEMORY?: AMNamespace;
 }
 
 export interface CreateArgs {
@@ -175,6 +177,8 @@ export class DurableEngine {
       ["uncited", "TEXT"],
       ["require_evidence", "INTEGER NOT NULL DEFAULT 0"],
       ["debug_search", "TEXT"],
+      ["memory", "TEXT"],
+      ["memory_status", "TEXT"],
     ] as const)
       if (!m.has(c)) this.sql.exec(`ALTER TABLE dm_missions ADD COLUMN ${c} ${ddl}`);
     const t = cols("dm_tasks");
@@ -354,7 +358,8 @@ export class DurableEngine {
         if (delay > 0) await new Promise((r) => setTimeout(r, delay));
         const tasks = this.tasksOf(id);
         const lessons = String(m.kind) === "mission" ? this.rows(`SELECT lesson FROM dm_lessons ORDER BY at DESC LIMIT 5`).map((r) => String(r.lesson)) : [];
-        const plan = durablePlan({ goal: String(m.objective), kind: String(m.kind), tasks, tenant_label: String(m.tenant), lessons });
+        const memory = String(m.kind) === "mission" ? await this.recallOnce(id, m) : [];
+        const plan = durablePlan({ goal: String(m.objective), kind: String(m.kind), tasks, tenant_label: String(m.tenant), lessons, memory });
         if (plan.action === "finish") {
           this.sql.exec(
             `UPDATE dm_missions SET status = 'done', answer = ?, evidence = ?, uncited = ?, finished_at = ? WHERE id = ?`,
@@ -386,6 +391,26 @@ export class DurableEngine {
     } finally {
       this.inflight.delete(id);
     }
+  }
+
+  /**
+   * Agent Memory recall, once per mission and persisted (a replay or resume re-uses the same
+   * memory, so the plan stays deterministic). Rust shapes it to a token budget; only those ids
+   * may be cited (mem:<id>). A missing binding or a failed recall is recorded, never silent.
+   */
+  private async recallOnce(id: string, m: Row): Promise<Array<{ id: string; summary: string }>> {
+    if (m.memory != null) return JSON.parse(String(m.memory)) as Array<{ id: string; summary: string }>;
+    let items: Array<{ id: string; summary: string }> = [];
+    let status: string;
+    try {
+      const r = await recallFor(this.h.env, String(m.tenant), String(m.objective), 600, new Date());
+      items = r.items.map((x) => ({ id: x.id, summary: x.summary }));
+      status = `recalled ${items.length}/${r.count} (${r.tokens} tokens)`;
+    } catch (err) {
+      status = `recall unavailable: ${(err as Error).message}`.slice(0, 300);
+    }
+    this.sql.exec(`UPDATE dm_missions SET memory = ?, memory_status = ? WHERE id = ?`, JSON.stringify(items), status, id);
+    return items;
   }
 
   private tasksOf(missionId: string): DurableTask[] {
@@ -455,21 +480,30 @@ export class DurableEngine {
         `${String(m.objective).slice(0, 160)} → done in ${review.totals.requests} model call(s), ` +
         `${review.totals.tool_calls} tool call(s) (${tools.map((t) => t.name).join(", ") || "no tools"}) via ${review.models.join("/") || DEEPSEEK_FLASH}.`;
       this.sql.exec(`INSERT OR REPLACE INTO dm_lessons VALUES (?, ?, ?, ?)`, `lesson:${id}`, id, lesson, Date.now());
-      if (this.h.env.MEMORY) {
-        try {
-          const profile = await this.h.env.MEMORY.getProfile(String(m.tenant));
-          await profile.ingest(
-            [
-              { role: "user", content: `Mission: ${String(m.objective).slice(0, 2000)}` },
-              { role: "assistant", content: answer.slice(0, 8000) },
-            ],
-            { sessionId: id.slice(0, 64) }
-          );
-        } catch {
-          /* memory is best-effort; the lesson row is stored */
-        }
+    }
+    // Store gate + what to remember are Rust (memory.rs): only pass + evidence + nothing interrupted.
+    const plan = memoryStorePlan({
+      mission_id: id,
+      objective: String(m.objective),
+      answer,
+      evidence,
+      lesson_ok: Boolean(review.lessonOk),
+      verdict: String(review.verdict),
+      interrupted,
+      tools: tools.map((t) => String(t.name)),
+    });
+    let memStatus = `not stored: ${plan.reason}`;
+    if (plan.store) {
+      try {
+        await (await kingdom(this.h.env, String(m.tenant))).ingest(plan.messages, { sessionId: plan.session_id });
+        memStatus = `stored (session ${plan.session_id})`;
+      } catch (err) {
+        memStatus = `store failed: ${(err as Error).message}`.slice(0, 300);
+        console.error(`durable memory store failed for ${id}: ${memStatus}`);
       }
     }
+    const prev = this.rows(`SELECT memory_status FROM dm_missions WHERE id = ?`, id)[0]?.memory_status;
+    this.sql.exec(`UPDATE dm_missions SET memory_status = ? WHERE id = ?`, `${prev ? `${String(prev)}; ` : ""}${memStatus}`, id);
     return review;
   }
 

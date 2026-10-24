@@ -327,68 +327,7 @@ export default {
       return Response.json(health, { status: health.ok ? 200 : 503 });
     }
 
-    if (url.pathname === "/ops/memory/remember" && req.method === "POST") {
-      const denied = requireOpsAuth(req, env);
-      if (denied) return denied;
-      let body: { content?: string; sessionId?: string | null } = {};
-      try {
-        body = (await req.json()) as { content?: string; sessionId?: string | null };
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      if (!body?.content || typeof body.content !== "string") {
-        return Response.json({ error: "content required" }, { status: 400 });
-      }
-      try {
-        const stored = await memory.rememberFact(env, body.content, body.sessionId ?? null);
-        return Response.json({ ok: true, provider: "cloudflare-agent-memory", memory: stored }, { status: 201 });
-      } catch (e) {
-        const status = e instanceof memory.MemoryUnavailableError ? 503 : 500;
-        return Response.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status });
-      }
-    }
-
-    if (url.pathname === "/ops/memory/recall" && req.method === "POST") {
-      const denied = requireOpsAuth(req, env);
-      if (denied) return denied;
-      let body: {
-        query?: string;
-        thinkingLevel?: "low" | "medium" | "high";
-        responseLength?: "short" | "medium" | "long";
-      } = {};
-      try {
-        body = (await req.json()) as typeof body;
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      if (!body?.query || typeof body.query !== "string") {
-        return Response.json({ error: "query required" }, { status: 400 });
-      }
-      try {
-        const result = await memory.recallFacts(env, body.query, {
-          thinkingLevel: body.thinkingLevel,
-          responseLength: body.responseLength,
-        });
-        return Response.json({ ok: true, provider: "cloudflare-agent-memory", result });
-      } catch (e) {
-        const status = e instanceof memory.MemoryUnavailableError ? 503 : 500;
-        return Response.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status });
-      }
-    }
-
-    if (url.pathname === "/ops/memory/list" && req.method === "GET") {
-      const denied = requireOpsAuth(req, env);
-      if (denied) return denied;
-      const limit = Number(url.searchParams.get("limit") || "20");
-      const sessionId = url.searchParams.get("sessionId") || undefined;
-      try {
-        const result = await memory.listFacts(env, { limit, sessionId });
-        return Response.json({ ok: true, provider: "cloudflare-agent-memory", ...result });
-      } catch (e) {
-        const status = e instanceof memory.MemoryUnavailableError ? 503 : 500;
-        return Response.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status });
-      }
-    }
+    // Memory reads/writes go through the caller's own kingdom (MCP memory:read / memory:write); no ops-wide memory routes.
 
 
     // ─── Ops: forwarded email → Mission ingest ────────────────────

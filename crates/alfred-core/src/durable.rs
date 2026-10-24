@@ -194,9 +194,19 @@ pub struct PlanIn {
     /// Short lessons from earlier passing, evidenced missions (newest first).
     #[serde(default)]
     pub lessons: Vec<String>,
+    /// Recalled Agent Memory for this mission (already budget-trimmed in memory::shape_recall).
+    #[serde(default)]
+    pub memory: Vec<MemItem>,
 }
 
-fn system_prompt(lessons: &[String]) -> String {
+#[derive(Deserialize, Clone)]
+pub struct MemItem {
+    pub id: String,
+    #[serde(default)]
+    pub summary: String,
+}
+
+fn system_prompt(lessons: &[String], memory: &[MemItem]) -> String {
     let mut s = String::from(
         "You are Alfred, running a durable mission step by step. Each reply must be exactly one JSON object and nothing else.\n\
 To use a tool: {\"tool\":\"<name>\",\"args\":{...}}\n\
@@ -215,7 +225,17 @@ Sources: only cite a URL or name a source (\"according to ...\") if you opened i
             s.push_str(&format!("- {}\n", l.chars().take(240).collect::<String>()));
         }
     }
+    if !memory.is_empty() {
+        s.push_str("Recalled memory from this tenant's earlier missions (cite as mem:<id>; never cite any other mem: id):\n");
+        for m in memory {
+            s.push_str(&format!("- mem:{} {}\n", m.id, m.summary.chars().take(400).collect::<String>()));
+        }
+    }
     s
+}
+
+fn mem_ids(memory: &[MemItem]) -> Vec<String> {
+    memory.iter().map(|m| m.id.clone()).collect()
 }
 
 fn norm_url(u: &str) -> String {
@@ -343,7 +363,7 @@ pub fn plan(p: PlanIn) -> Result<Value, String> {
         }
     }
     let mut messages = vec![
-        json!({ "role": "system", "content": system_prompt(&p.lessons) }),
+        json!({ "role": "system", "content": system_prompt(&p.lessons, &p.memory) }),
         json!({ "role": "user", "content": format!("Mission{}:\n{}", if p.tenant_label.is_empty() { String::new() } else { format!(" for {}", p.tenant_label) }, p.goal) }),
     ];
     let mut tool_calls = 0usize;
@@ -356,7 +376,8 @@ pub fn plan(p: PlanIn) -> Result<Value, String> {
             if idx + 1 < usable.len() || t.status != "done" {
                 let r = parse_reply(t.output.as_deref().unwrap_or(""));
                 if r["type"] == "final" {
-                    let bad = uncited(r["answer"].as_str().unwrap_or(""), r["evidence"].as_str().unwrap_or(""), &tasks[..tasks.iter().position(|x| x.id == t.id).unwrap_or(0)]);
+                    let mut bad = uncited(r["answer"].as_str().unwrap_or(""), r["evidence"].as_str().unwrap_or(""), &tasks[..tasks.iter().position(|x| x.id == t.id).unwrap_or(0)]);
+                    bad.extend(crate::memory::uncited_ids(&format!("{} {}", r["answer"].as_str().unwrap_or(""), r["evidence"].as_str().unwrap_or("")), &mem_ids(&p.memory)));
                     if !bad.is_empty() {
                         corrections += 1;
                         messages.push(json!({ "role": "user", "content": correction(&bad) }));
@@ -375,7 +396,8 @@ pub fn plan(p: PlanIn) -> Result<Value, String> {
             Some("final") => {
                 let answer = reply["answer"].as_str().unwrap_or("");
                 let evidence = reply["evidence"].as_str().unwrap_or("");
-                let bad = uncited(answer, evidence, &tasks);
+                let mut bad = uncited(answer, evidence, &tasks);
+                bad.extend(crate::memory::uncited_ids(&format!("{answer} {evidence}"), &mem_ids(&p.memory)));
                 if bad.is_empty() || corrections >= 1 {
                     return Ok(json!({ "action": "finish", "answer": answer, "evidence": evidence, "uncited": bad }));
                 }
@@ -664,7 +686,7 @@ mod tests {
 
     #[test]
     fn planner_walks_model_tool_final() {
-        let p = |tasks| plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks, tenant_label: String::new(), lessons: vec![] }).unwrap();
+        let p = |tasks| plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks, tenant_label: String::new(), lessons: vec![], memory: vec![] }).unwrap();
         assert_eq!(p(vec![])["action"], "call_model");
         let r = p(vec![t(1, "model", "done", r#"{"tool":"web_fetch","args":{"url":"https://a.b"}}"#)]);
         assert_eq!(r["action"], "run_tool");
@@ -689,7 +711,7 @@ mod tests {
 
     #[test]
     fn unread_sources_are_sent_back_once_then_flagged() {
-        let p = |tasks| plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks, tenant_label: String::new(), lessons: vec![] }).unwrap();
+        let p = |tasks| plan(PlanIn { goal: "g".into(), kind: "mission".into(), tasks, tenant_label: String::new(), lessons: vec![], memory: vec![] }).unwrap();
         let cite = r#"{"final":"Lima has 10M people (https://en.wikipedia.org/wiki/Lima).","evidence":""}"#;
         let r = p(vec![t(1, "model", "done", cite)]);
         assert_eq!(r["action"], "call_model");

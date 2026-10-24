@@ -9,6 +9,7 @@ import { mcpAllow, mcpProtocol, mcpScopes, mcpTools } from "../alfred/core.ts";
 import type { Env } from "../lib/env";
 import type { VerifiedIdentity } from "../lib/access";
 import type { AgentScope } from "../lib/agent-tokens.ts";
+import { exportFor, forgetFor, recallFor, rememberFor } from "../lib/agent-memory.ts";
 
 export interface MCPIdentity extends VerifiedIdentity {
   scopes: readonly AgentScope[];
@@ -49,7 +50,7 @@ export async function executeMCPTool(name: string, args: Record<string, unknown>
     await s.bind(who.tenant_id, who.isOwner);
     return s;
   };
-  const { actMission, getSpendToday, listMissions, NEURON_CAP, recallMemory } = await import("../lib/kiss");
+  const { actMission, getSpendToday, listMissions, NEURON_CAP } = await import("../lib/kiss");
   switch (name) {
     case "mission_list":
       return { missions: await listMissions(env, who.tenant_id), alfred: (await (await bound()).report(20)).items };
@@ -93,8 +94,23 @@ export async function executeMCPTool(name: string, args: Record<string, unknown>
       return (await bound()).report();
     case "spend":
       return { neurons_today: await getSpendToday(env, who.tenant_id), daily_cap: NEURON_CAP, gateway: env.CLOUDFLARE_GATEWAY_ID };
-    case "memory_recall":
-      return { rows: await recallMemory(env, who.tenant_id, Math.min(50, Math.max(1, Number(args.limit) || 10))) };
+    // Agent Memory: the profile is always the caller's own kingdom (who.tenant_id), never an argument.
+    case "memory_recall": {
+      const query = String(args.query || "").trim();
+      if (query.length < 3) throw new Error("query required");
+      const r = await recallFor(env, who.tenant_id, query, typeof args.budgetTokens === "number" ? args.budgetTokens : null);
+      return { answer: r.answer, memories: r.items, ids: r.ids, count: r.count, tokens: r.tokens };
+    }
+    case "memory_export": {
+      return exportFor(env, who.tenant_id, { cursor: args.cursor, limit: args.limit, sessionId: args.sessionId });
+    }
+    case "memory_remember": {
+      const m = await rememberFor(env, who.tenant_id, { content: args.content, sessionId: args.sessionId });
+      return { id: m.id, type: m.type, summary: m.summary };
+    }
+    case "memory_forget": {
+      return forgetFor(env, who.tenant_id, { id: args.id, sessionId: args.sessionId });
+    }
   }
   throw new Error(`Unknown tool: ${name}`);
 }

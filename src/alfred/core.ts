@@ -45,6 +45,11 @@ interface Exports {
   durable_html_text(ptr: number, len: number): bigint;
   review_mission(ptr: number, len: number): bigint;
   durable_board_id(ptr: number, len: number): bigint;
+  memory_profile(ptr: number, len: number): bigint;
+  memory_query(ptr: number, len: number): bigint;
+  memory_store(ptr: number, len: number): bigint;
+  memory_shape(ptr: number, len: number): bigint;
+  memory_op(ptr: number, len: number): bigint;
   nav_app_redirect(ptr: number, len: number): bigint;
   nav_safe_next(ptr: number, len: number): bigint;
   untrusted_wrap(ptr: number, len: number): bigint;
@@ -241,7 +246,7 @@ export function durableCreate(input: {
 }): DurableCreate {
   return callJson("durable_create", input);
 }
-export function durablePlan(input: { goal: string; kind: string; tasks: DurableTask[]; tenant_label?: string; lessons?: string[] }): DurablePlan {
+export function durablePlan(input: { goal: string; kind: string; tasks: DurableTask[]; tenant_label?: string; lessons?: string[]; memory?: Array<{ id: string; summary: string }> }): DurablePlan {
   return callJson("durable_plan", input);
 }
 export function durableRecover(tasks: DurableTask[]): { retry: string[]; interrupt: string[]; fail: string[] } {
@@ -296,4 +301,23 @@ export function untrustedWrap(url: string, status: number, text: string, limit =
 /** The untrusted-content rule both engines put in their system prompt. */
 export function untrustedRule(): string {
   return untrustedWrap("", 0, "", 0).rule;
+}
+
+// ─── Agent Memory policy (Rust: crates/alfred-core/src/memory.rs) ───
+export interface MemoryStorePlan { store: boolean; reason: string; session_id: string; messages: Array<{ role: "user" | "assistant"; content: string }> }
+export interface MemoryShape { answer: string; items: Array<{ id: string; summary: string; score: number }>; ids: string[]; tokens: number; budget: number }
+export function memoryProfile(tenant: string): string {
+  return callJson<{ profile: string }>("memory_profile", { tenant }).profile;
+}
+export function memoryQuery(text: string): string {
+  return callJson<{ query: string }>("memory_query", { text }).query;
+}
+export function memoryStorePlan(input: { mission_id: string; objective: string; answer: string; evidence: string | null; lesson_ok: boolean; verdict: string; interrupted: number; tools: string[] }): MemoryStorePlan {
+  return callJson("memory_store", input);
+}
+export function memoryShape(input: { answer: string; candidates: Array<{ id: string; summary: string; score: number }>; budget_tokens?: number | null }): MemoryShape {
+  return callJson("memory_shape", input);
+}
+export function memoryOp<T>(op: "forget" | "remember" | "export" | "uncited", args: unknown): T {
+  return callJson<T>("memory_op", { op, args });
 }

@@ -14,6 +14,7 @@ export const AGENT_SCOPES = [
   "report:read",
   "spend:read",
   "memory:read",
+  "memory:write",
   "voice", // ORAL (oral.<DOMAIN>): devices/agents/Siri Shortcuts; not accepted by MCP tools
 ] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];

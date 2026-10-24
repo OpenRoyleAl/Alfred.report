@@ -4,7 +4,7 @@ use serde_json::json;
 
 pub const TOKEN_PREFIX: &str = "art_";
 pub const TOKEN_MIN_LEN: usize = 40;
-pub const AGENT_SCOPES: &[&str] = &["missions:read", "missions:write", "ask", "report:read", "spend:read", "memory:read", "voice"];
+pub const AGENT_SCOPES: &[&str] = &["missions:read", "missions:write", "ask", "report:read", "spend:read", "memory:read", "memory:write", "voice"];
 pub const SUPPORTED_PROTOCOL: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 
 #[derive(Clone, Serialize)]
@@ -72,8 +72,29 @@ pub fn tools() -> Vec<Tool> {
             name: "memory_recall",
             scope: "memory:read",
             owner_only: false,
-            description: "Recall this tenant's memory rows.",
-            input_schema: json!({ "type": "object", "properties": { "limit": { "type": "number", "minimum": 1, "maximum": 50 } } }),
+            description: "Recall from this kingdom's Agent Memory: a grounded answer plus the memory ids it used (cite as mem:<id>).",
+            input_schema: json!({ "type": "object", "properties": { "query": { "type": "string", "minLength": 3, "maxLength": 1000 }, "budgetTokens": { "type": "number", "minimum": 50, "maximum": 8000 } }, "required": ["query"] }),
+        },
+        Tool {
+            name: "memory_export",
+            scope: "memory:read",
+            owner_only: false,
+            description: "Export this kingdom's memories with full content, a page at a time (pass the returned cursor).",
+            input_schema: json!({ "type": "object", "properties": { "cursor": { "type": "string" }, "limit": { "type": "number", "minimum": 1, "maximum": 100 }, "sessionId": { "type": "string", "maxLength": 64 } } }),
+        },
+        Tool {
+            name: "memory_remember",
+            scope: "memory:write",
+            owner_only: false,
+            description: "Store one memory in this kingdom's Agent Memory (secrets are redacted).",
+            input_schema: json!({ "type": "object", "properties": { "content": { "type": "string", "minLength": 3, "maxLength": 32000 }, "sessionId": { "type": "string", "maxLength": 64 } }, "required": ["content"] }),
+        },
+        Tool {
+            name: "memory_forget",
+            scope: "memory:write",
+            owner_only: false,
+            description: "Forget one memory (id) or every memory from one mission/session (sessionId) in this kingdom.",
+            input_schema: json!({ "type": "object", "properties": { "id": { "type": "string" }, "sessionId": { "type": "string", "maxLength": 64 } } }),
         },
         Tool {
             name: "history_search",
@@ -223,7 +244,8 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(names(&["report:read"], false), vec!["report"]);
-        assert_eq!(names(&["memory:read"], false), vec!["memory_recall", "history_search"]);
+        assert_eq!(names(&["memory:read"], false), vec!["memory_recall", "memory_export", "history_search"]);
+        assert_eq!(names(&["memory:write"], false), vec!["memory_remember", "memory_forget"]);
         assert!(!names(&["missions:write", "missions:read"], false).contains(&"mission_create".into()));
         assert!(names(&["missions:write"], true).contains(&"mission_create".into()));
     }

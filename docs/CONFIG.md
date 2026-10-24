@@ -72,7 +72,7 @@ Apps: `web` = deploy/web (src/index.ts), `missions` = apps/missions, `oral` = ap
 | `WEB_WORKER_NAME` | web, oral |  | `alfred-report` | Web Worker name (ORAL binds its Alfred Durable Object). |
 | `MISSIONS_WORKER_NAME` | web, missions |  | `alfred-report-missions` | Missions Worker name (bound into web as MISSIONS). |
 | `ORAL_WORKER_NAME` | oral |  | `alfred-report-oral` | ORAL (voice) Worker name. |
-| `AGENT_MEMORY_NAMESPACE` | web, missions |  | `alfred-report` | Agent Memory namespace (owner seed: scripts/seed-memory.mjs). |
+| `AGENT_MEMORY_NAMESPACE` | web, missions |  | `alfred` | Agent Memory namespace (owner seed: scripts/seed-memory.mjs). |
 | `WEB_D1_NAME` | web, oral |  | `alfred-report` | Web D1 database name. |
 | `WEB_D1_ID` | web, oral |  |  | Web D1 database id (pin after the first deploy). |
 | `MISSIONS_D1_NAME` | missions |  | `alfred-report-command` | Missions D1 database name. |

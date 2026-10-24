@@ -25,7 +25,7 @@
   "WEB_WORKER_NAME": "alfred-report",
   "MISSIONS_WORKER_NAME": "alfred-report-missions",
   "ORAL_WORKER_NAME": "alfred-report-oral",
-  "AGENT_MEMORY_NAMESPACE": "alfred-report",
+  "AGENT_MEMORY_NAMESPACE": "alfred",
   "WEB_D1_NAME": "alfred-report",
   "WEB_D1_ID": "",
   "MISSIONS_D1_NAME": "alfred-report-command",

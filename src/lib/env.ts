@@ -1,20 +1,9 @@
 import type { SecretValue } from "./secret";
 
-/** Minimal shape of the Agent Memory binding we use (see agent-memory/api/workers-api). */
-export interface AgentMemoryProfileLike {
-  remember(m: { content: string; sessionId?: string | null }): Promise<{ id: string; summary: string }>;
-  recall(
-    q: string,
-    o?: { thinkingLevel?: "low" | "medium" | "high"; responseLength?: "short" | "medium" | "long" }
-  ): Promise<{ count: number; answer: string; candidates: Array<{ id: string; summary: string; score: number }> }>;
-  ingest(
-    messages: Iterable<{ role: "system" | "user" | "assistant"; content: string; timestamp?: Date }>,
-    o?: { sessionId?: string | null }
-  ): Promise<void>;
-}
-export interface AgentMemoryNamespaceLike {
-  getProfile(name: string): Promise<AgentMemoryProfileLike>;
-}
+import type { AMNamespace } from "./agent-memory.ts";
+
+/** Agent Memory binding (src/lib/agent-memory.ts; policy in Rust memory.rs). */
+export type AgentMemoryNamespaceLike = AMNamespace;
 
 export interface Env {
   // Bindings

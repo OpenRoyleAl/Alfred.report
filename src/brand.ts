@@ -59,7 +59,7 @@ export const DURABLE_OBJECTS = {
 /** Default per-account resource names (override any of them in config, see docs/CONFIG.md). */
 export const RESOURCES = {
   gateway: "alfred-report",
-  memoryNamespace: "alfred-report",
+  memoryNamespace: "alfred",
   webD1: "alfred-report",
   webR2: "alfred-report-vault",
   webVectorize: "alfred-report-memory",

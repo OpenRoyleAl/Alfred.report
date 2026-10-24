@@ -17,6 +17,7 @@
 pub mod durable;
 pub mod limiter;
 pub mod mcp;
+pub mod memory;
 pub mod models;
 pub mod nav;
 pub mod report;
@@ -247,4 +248,29 @@ pub extern "C" fn nav_safe_next(ptr: *const u8, len: usize) -> u64 {
 #[no_mangle]
 pub extern "C" fn untrusted_wrap(ptr: *const u8, len: usize) -> u64 {
     call(ptr, len, untrusted::wrap_json)
+}
+
+#[no_mangle]
+pub extern "C" fn memory_profile(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, memory::profile_json)
+}
+
+#[no_mangle]
+pub extern "C" fn memory_query(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, memory::query_json)
+}
+
+#[no_mangle]
+pub extern "C" fn memory_store(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, memory::store_json)
+}
+
+#[no_mangle]
+pub extern "C" fn memory_shape(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, memory::shape_json)
+}
+
+#[no_mangle]
+pub extern "C" fn memory_op(ptr: *const u8, len: usize) -> u64 {
+    call(ptr, len, memory::op_json)
 }

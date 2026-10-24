@@ -3,10 +3,11 @@
  * No API-key hell: session cookie after Google; CF account linking is later in /start.
  */
 import type { Env } from "./env";
-import { isOwnerEmail, safeEqual } from "./access.ts";
+import { isOwnerEmail } from "./access.ts";
 import { ownerTenant, postLoginPath } from "./tenant.ts";
 import { secretGet } from "./secret";
 import { navSafeNext } from "../alfred/core.ts";
+import { signOAuthState, verifyOAuthState } from "./oauth-state.ts";
 import {
   ensureKissSchema,
   mintSession,
@@ -25,71 +26,6 @@ async function clientId(env: Env): Promise<string> {
 }
 async function clientSecret(env: Env): Promise<string> {
   return await secretGet(env.GOOGLE_CLIENT_SECRET);
-}
-
-function b64url(buf: ArrayBuffer | Uint8Array | string): string {
-  let bytes: Uint8Array;
-  if (typeof buf === "string") bytes = new TextEncoder().encode(buf);
-  else if (buf instanceof ArrayBuffer) bytes = new Uint8Array(buf);
-  else bytes = buf;
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-export const OAUTH_STATE_MAX_AGE_MS = 15 * 60 * 1000;
-const STATE_MAX_AGE_MS = OAUTH_STATE_MAX_AGE_MS;
-
-async function stateSecret(env: Env): Promise<string> {
-  return (await secretGet(env.JWT_SECRET)) || (await clientSecret(env)) || "";
-}
-
-async function signState(env: Env, payload: object): Promise<string> {
-  const secret = await stateSecret(env);
-  if (!secret) throw new Error("oauth state secret not configured");
-  const body = b64url(JSON.stringify(payload));
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
-  return `${body}.${b64url(sig)}`;
-}
-
-export async function signOAuthState(env: Env, payload: object): Promise<string> {
-  return signState(env, payload);
-}
-
-export async function verifyOAuthState(env: Env, state: string): Promise<Record<string, unknown> | null> {
-  return verifyState(env, state);
-}
-
-async function verifyState(env: Env, state: string): Promise<Record<string, unknown> | null> {
-  const [body, sig] = state.split(".");
-  if (!body || !sig) return null;
-  const secret = await stateSecret(env);
-  if (!secret) return null;
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const expect = b64url(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
-  if (!safeEqual(expect, sig)) return null;
-  try {
-    const json = atob(body.replace(/-/g, "+").replace(/_/g, "/"));
-    const parsed = JSON.parse(json) as Record<string, unknown>;
-    const t = typeof parsed.t === "number" ? parsed.t : 0;
-    if (!t || Date.now() - t > STATE_MAX_AGE_MS || t > Date.now() + 60_000) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
 }
 
 async function upsertGoogleUser(
@@ -210,7 +146,7 @@ export async function handleGoogleAuth(req: Request, env: Env, url: URL): Promis
       callbackURL = navSafeNext(url.searchParams.get("callbackURL"));
       handle = url.searchParams.get("handle") || "";
     }
-    const state = await signState(env, {
+    const state = await signOAuthState(env, {
       cb: callbackURL,
       handle,
       t: Date.now(),
@@ -240,7 +176,7 @@ export async function handleGoogleAuth(req: Request, env: Env, url: URL): Promis
     }
     const code = url.searchParams.get("code");
     const stateRaw = url.searchParams.get("state") || "";
-    const state = await verifyState(env, stateRaw);
+    const state = await verifyOAuthState(env, stateRaw);
     if (!code || !state) {
       return Response.redirect(new URL("/login?error=bad_state", origin).toString(), 302);
     }

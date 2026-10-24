@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { senderAuthenticated } from "./mail.ts";
+import { senderAuthenticated } from "./mail-auth.ts";
 
 test("sender auth requires aligned DMARC pass, not a foreign DKIM pass", () => {
   assert.equal(senderAuthenticated(new Headers({ "authentication-results": "mx.google.com; dmarc=pass" })), true);

@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { durableFetchCheck, durablePlan, mcpAllow, mcpParseScopes, navSafeNext, reviewCore, reportSpeak, reportBuild } from "../src/alfred/core.ts";
 import { nextBindState } from "../src/alfred/bind.ts";
-import { senderAuthenticated } from "../src/lib/mail.ts";
+import { senderAuthenticated } from "../src/lib/mail-auth.ts";
 
 type Fixture = {
   id: string;

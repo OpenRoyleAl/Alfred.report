@@ -45,8 +45,8 @@ test("password signup is pending until the emailed token is used; tenant claimed
 
 test("first verified signup wins a contested name", async () => {
   const e = env();
-  const a = (await signup(e, "a@x.org", "password1", "", "shared")) as { pending: { token: string } };
-  const b = (await signup(e, "b@x.org", "password2", "", "shared")) as { pending: { token: string } };
+  const a = (await signup(e, "a@example.org", "password1", "", "shared")) as { pending: { token: string } };
+  const b = (await signup(e, "b@example.org", "password2", "", "shared")) as { pending: { token: string } };
   assert.ok("user" in (await verifySignup(e, b.pending.token)));
   const late = await verifySignup(e, a.pending.token);
   assert.ok("error" in late && late.status === 409);
@@ -58,19 +58,19 @@ test("owner emails cannot password-signup", async () => {
 });
 
 test("session key is separate from the ops token; rotation and legacy grace keep users signed in", async () => {
-  const user = { email: "u@x.org", name: "U", tenant_id: "u", billing_paid: 0 };
+  const user = { email: "u@example.org", name: "U", tenant_id: "u", billing_paid: 0 };
   const e1 = env();
   await (e1 as { DB: D1Database }).DB.prepare(
     "CREATE TABLE IF NOT EXISTS kiss_users (email TEXT PRIMARY KEY, name TEXT NOT NULL, tenant_id TEXT NOT NULL, pass_salt TEXT NOT NULL, pass_hash TEXT NOT NULL, lane TEXT NOT NULL DEFAULT 'kiss', billing_paid INTEGER NOT NULL DEFAULT 0, byok_fp TEXT, created_at INTEGER NOT NULL)"
   ).run();
-  await (e1 as { DB: D1Database }).DB.prepare("INSERT INTO kiss_users (email, name, tenant_id, pass_salt, pass_hash, created_at) VALUES ('u@x.org','U','u','s','h',1)").run();
+  await (e1 as { DB: D1Database }).DB.prepare("INSERT INTO kiss_users (email, name, tenant_id, pass_salt, pass_hash, created_at) VALUES ('u@example.org','U','u','s','h',1)").run();
   const t1 = await mintSession(e1, user);
   // Current cookie + primary key: valid, no reissue.
   assert.deepEqual((await readSessionEx(req(`${KISS_COOKIE}=${t1}`), e1))?.reissue, false);
   // Rotated to "K2,K1": old cookie still verifies and is re-issued under K2.
   const e2 = { ...(e1 as object), ALFRED_SESSION_KEY: `${K2},${K1}` } as never;
   const s = await readSessionEx(req(`${KISS_COOKIE}=${t1}`), e2);
-  assert.equal(s?.user.email, "u@x.org");
+  assert.equal(s?.user.email, "u@example.org");
   assert.equal(s?.reissue, true);
   // Without K1 the old token is dead.
   assert.equal(await readSessionEx(req(`${KISS_COOKIE}=${t1}`), { ...(e1 as object), ALFRED_SESSION_KEY: K2 } as never), null);
@@ -94,7 +94,7 @@ test("PBKDF2: new hashes use 100k iterations; legacy 10k hashes upgrade on login
   assert.deepEqual(await checkPassword("pw-123456", "salt", h), { ok: true, upgrade: false });
   assert.deepEqual(await checkPassword("wrong-pass", "salt", h), { ok: false, upgrade: false });
   const e = env();
-  const r = (await signup(e, "old@x.org", "pw-123456")) as { pending: { token: string } };
+  const r = (await signup(e, "old@example.org", "pw-123456")) as { pending: { token: string } };
   await verifySignup(e, r.pending.token);
   // Simulate a pre-upgrade row: bare 10k hex hash.
   const { webcrypto } = await import("node:crypto");
@@ -102,12 +102,12 @@ test("PBKDF2: new hashes use 100k iterations; legacy 10k hashes upgrade on login
   const bits = await webcrypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode("legacysalt"), iterations: 10_000 }, key, 256);
   const hex = [...new Uint8Array(bits)].map((b) => b.toString(16).padStart(2, "0")).join("");
   const db = (e as { DB: D1Database }).DB;
-  await db.prepare("UPDATE kiss_users SET pass_salt = ?, pass_hash = ? WHERE email = ?").bind("legacysalt", hex, "old@x.org").run();
-  assert.ok("user" in (await login(e, "old@x.org", "pw-123456")));
-  const row = await db.prepare("SELECT pass_salt, pass_hash FROM kiss_users WHERE email = ?").bind("old@x.org").first<{ pass_salt: string; pass_hash: string }>();
+  await db.prepare("UPDATE kiss_users SET pass_salt = ?, pass_hash = ? WHERE email = ?").bind("legacysalt", hex, "old@example.org").run();
+  assert.ok("user" in (await login(e, "old@example.org", "pw-123456")));
+  const row = await db.prepare("SELECT pass_salt, pass_hash FROM kiss_users WHERE email = ?").bind("old@example.org").first<{ pass_salt: string; pass_hash: string }>();
   assert.match(row!.pass_hash, /^p2\$100000\$/);
   assert.notEqual(row!.pass_salt, "legacysalt");
-  assert.ok("user" in (await login(e, "old@x.org", "pw-123456")));
+  assert.ok("user" in (await login(e, "old@example.org", "pw-123456")));
 });
 
 test("OAuth redirect_uri comes from DOMAIN config, never the request host", () => {
